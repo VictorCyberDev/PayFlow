@@ -72,6 +72,8 @@ run("PostgreSQL durable foundation", () => {
   };
   beforeAll(async () => {
     repo = PostgresTrustRepository.connect(url!);
+    await repo.sql`drop schema public cascade`;
+    await repo.sql`create schema public`;
     const migration = await readFile(
       "db/migrations/001_milestone_2a_durable_foundation.sql",
       "utf8",
