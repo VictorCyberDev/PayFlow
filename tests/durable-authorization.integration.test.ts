@@ -2,7 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { readFile } from "node:fs/promises";
 import { mandateFingerprint } from "../src/canonical.js";
 import { DurableAuthorizationService } from "../src/durable-service.js";
-import type { AgentPassport, Mandate, Principal, TransactionProposal } from "../src/domain.js";
+import type {
+  AgentPassport,
+  Mandate,
+  Principal,
+  TransactionProposal,
+} from "../src/domain.js";
 import { PostgresTrustRepository } from "../src/persistence.js";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -42,7 +47,12 @@ run("Milestone 2B durable authorization", () => {
     nonce: "mandate-nonce-0001",
   };
 
-  function proposal(id: string, amountMinor: number, nonce = `proposal-nonce-${id.padEnd(8, "0")}`, mandate = baseMandate): TransactionProposal {
+  function proposal(
+    id: string,
+    amountMinor: number,
+    nonce = `proposal-nonce-${id.padEnd(8, "0")}`,
+    mandate = baseMandate,
+  ): TransactionProposal {
     return {
       id,
       agentId: "a1",
@@ -67,7 +77,12 @@ run("Milestone 2B durable authorization", () => {
     repo = PostgresTrustRepository.connect(url!);
     await repo.sql`drop schema public cascade`;
     await repo.sql`create schema public`;
-    await repo.migrate(await readFile("db/migrations/001_milestone_2a_durable_foundation.sql", "utf8"));
+    await repo.migrate(
+      await readFile(
+        "db/migrations/001_milestone_2a_durable_foundation.sql",
+        "utf8",
+      ),
+    );
   });
 
   afterAll(async () => repo.close());
@@ -85,7 +100,9 @@ run("Milestone 2B durable authorization", () => {
     const result = await service.authorizeProposal("allow", "LOW", now);
     expect(result.receipt.decision).toBe("ALLOW");
     expect(result.reservation?.status).toBe("AUTHORIZED");
-    expect((await repo.authorityAccounting("m1", 10000)).activeReservedMinor).toBe(7000);
+    expect(
+      (await repo.authorityAccounting("m1", 10000)).activeReservedMinor,
+    ).toBe(7000);
   });
 
   it("durably DENYs without creating a reservation", async () => {
@@ -97,17 +114,32 @@ run("Milestone 2B durable authorization", () => {
   });
 
   it("persists ESCALATE without executable authority until principal approval", async () => {
-    const escalating = { ...baseMandate, id: "m2", autonomousPurchaseThresholdMinor: 7500, nonce: "mandate-nonce-0002" } satisfies Mandate;
+    const escalating = {
+      ...baseMandate,
+      id: "m2",
+      autonomousPurchaseThresholdMinor: 7500,
+      nonce: "mandate-nonce-0002",
+    } satisfies Mandate;
     await repo.saveMandate(escalating);
-    await saveProposal(proposal("escalate", 8000, "proposal-nonce-escalate", escalating));
+    await saveProposal(
+      proposal("escalate", 8000, "proposal-nonce-escalate", escalating),
+    );
     const result = await service.authorizeProposal("escalate", "LOW", now);
     expect(result.receipt.decision).toBe("ESCALATE");
     expect(result.reservation).toBeNull();
-    await expect(service.approveEscalation(result.receipt.receiptId, "wrong", now)).rejects.toThrow("APPROVAL_PRINCIPAL_MISMATCH");
-    const approved = await service.approveEscalation(result.receipt.receiptId, "p1", now);
+    await expect(
+      service.approveEscalation(result.receipt.receiptId, "wrong", now),
+    ).rejects.toThrow("APPROVAL_PRINCIPAL_MISMATCH");
+    const approved = await service.approveEscalation(
+      result.receipt.receiptId,
+      "p1",
+      now,
+    );
     expect(approved.approval.proposalId).toBe("escalate");
     expect(approved.reservation.status).toBe("AUTHORIZED");
-    expect((await repo.getReceipt(result.receipt.receiptId))?.decision).toBe("ESCALATE");
+    expect((await repo.getReceipt(result.receipt.receiptId))?.decision).toBe(
+      "ESCALATE",
+    );
   });
 
   it("rejects duplicate proposal IDs, nonces and repeated authorization", async () => {
@@ -115,27 +147,51 @@ run("Milestone 2B durable authorization", () => {
     await saveProposal(first);
     await expect(saveProposal({ ...first, id: "dup2" })).rejects.toThrow();
     await service.authorizeProposal("dup", "LOW", now);
-    await expect(service.authorizeProposal("dup", "LOW", now)).rejects.toThrow("AUTHORIZATION_ALREADY_EVALUATED");
+    await expect(service.authorizeProposal("dup", "LOW", now)).rejects.toThrow(
+      "AUTHORIZATION_ALREADY_EVALUATED",
+    );
   });
 
   it("enforces cumulative authority using active reservations", async () => {
     await saveProposal(proposal("a", 6000));
     await saveProposal(proposal("b", 5000));
-    expect((await service.authorizeProposal("a", "LOW", now)).receipt.decision).toBe("ALLOW");
-    expect((await service.authorizeProposal("b", "LOW", now)).receipt.decision).toBe("DENY");
+    expect(
+      (await service.authorizeProposal("a", "LOW", now)).receipt.decision,
+    ).toBe("ALLOW");
+    expect(
+      (await service.authorizeProposal("b", "LOW", now)).receipt.decision,
+    ).toBe("DENY");
   });
 
   it("releases capacity for RELEASED, EXPIRED and FAILED but not COMMITTED", async () => {
-    for (const [id, terminal] of [["released", "RELEASED"], ["expired", "EXPIRED"], ["failed", "FAILED"]] as const) {
+    for (const [id, terminal] of [
+      ["released", "RELEASED"],
+      ["expired", "EXPIRED"],
+      ["failed", "FAILED"],
+    ] as const) {
       await saveProposal(proposal(id, 7000));
       const result = await service.authorizeProposal(id, "LOW", now);
-      await service.transitionReservation(result.reservation!.id, terminal, now);
-      expect((await repo.authorityAccounting("m1", 10000)).consumedMinor).toBe(0);
+      await service.transitionReservation(
+        result.reservation!.id,
+        terminal,
+        now,
+      );
+      expect((await repo.authorityAccounting("m1", 10000)).consumedMinor).toBe(
+        0,
+      );
     }
     await saveProposal(proposal("committed", 7000));
     const committed = await service.authorizeProposal("committed", "LOW", now);
-    await service.transitionReservation(committed.reservation!.id, "EXECUTING", now);
-    await service.transitionReservation(committed.reservation!.id, "COMMITTED", now);
+    await service.transitionReservation(
+      committed.reservation!.id,
+      "EXECUTING",
+      now,
+    );
+    await service.transitionReservation(
+      committed.reservation!.id,
+      "COMMITTED",
+      now,
+    );
     const accounting = await repo.authorityAccounting("m1", 10000);
     expect(accounting.committedMinor).toBe(7000);
     expect(accounting.activeReservedMinor).toBe(0);
@@ -145,10 +201,15 @@ run("Milestone 2B durable authorization", () => {
   it("rejects illegal reservation transitions", async () => {
     await saveProposal(proposal("state", 1000));
     const result = await service.authorizeProposal("state", "LOW", now);
-    await service.transitionReservation(result.reservation!.id, "COMMITTED", now).then(
-      () => { throw new Error("unexpected transition success"); },
-      (error: unknown) => expect(String(error)).toContain("INVALID_RESERVATION_TRANSITION"),
-    );
+    await service
+      .transitionReservation(result.reservation!.id, "COMMITTED", now)
+      .then(
+        () => {
+          throw new Error("unexpected transition success");
+        },
+        (error: unknown) =>
+          expect(String(error)).toContain("INVALID_RESERVATION_TRANSITION"),
+      );
   });
 
   it("fails closed on malformed persisted receipts and reservations", async () => {
@@ -167,12 +228,25 @@ run("Milestone 2B durable authorization", () => {
       service.authorizeProposal("race-a", "LOW", now),
       service.authorizeProposal("race-b", "LOW", now),
     ]);
-    const results = settled.filter((x): x is PromiseFulfilledResult<Awaited<ReturnType<DurableAuthorizationService["authorizeProposal"]>>> => x.status === "fulfilled").map((x) => x.value);
-    expect(results.filter((x) => x.receipt.decision === "ALLOW")).toHaveLength(1);
-    expect(results.filter((x) => x.receipt.decision === "DENY")).toHaveLength(1);
+    const results = settled
+      .filter(
+        (
+          x,
+        ): x is PromiseFulfilledResult<
+          Awaited<ReturnType<DurableAuthorizationService["authorizeProposal"]>>
+        > => x.status === "fulfilled",
+      )
+      .map((x) => x.value);
+    expect(results.filter((x) => x.receipt.decision === "ALLOW")).toHaveLength(
+      1,
+    );
+    expect(results.filter((x) => x.receipt.decision === "DENY")).toHaveLength(
+      1,
+    );
     const accounting = await repo.authorityAccounting("m1", 10000);
     expect(accounting.consumedMinor).toBe(8000);
-    const reservations = await repo.sql`select count(*)::int count from authorization_reservations`;
+    const reservations =
+      await repo.sql`select count(*)::int count from authorization_reservations`;
     expect(Number(reservations[0]?.count)).toBe(1);
   });
 
@@ -183,7 +257,9 @@ run("Milestone 2B durable authorization", () => {
       service.authorizeProposal("same", "LOW", now),
     ]);
     expect(settled.filter((x) => x.status === "fulfilled")).toHaveLength(1);
-    expect((await repo.authorityAccounting("m1", 10000)).consumedMinor).toBe(4000);
+    expect((await repo.authorityAccounting("m1", 10000)).consumedMinor).toBe(
+      4000,
+    );
   });
 
   it("preserves authoritative state across service/repository recreation", async () => {
@@ -191,19 +267,35 @@ run("Milestone 2B durable authorization", () => {
     await service.authorizeProposal("restart", "LOW", now);
     const second = PostgresTrustRepository.connect(url!);
     const recreated = new DurableAuthorizationService(second);
-    expect((await second.authorityAccounting("m1", 10000)).consumedMinor).toBe(4000);
-    await expect(recreated.authorizeProposal("restart", "LOW", now)).rejects.toThrow("AUTHORIZATION_ALREADY_EVALUATED");
+    expect((await second.authorityAccounting("m1", 10000)).consumedMinor).toBe(
+      4000,
+    );
+    await expect(
+      recreated.authorizeProposal("restart", "LOW", now),
+    ).rejects.toThrow("AUTHORIZATION_ALREADY_EVALUATED");
     await second.close();
   });
 
   it("rolls back receipt, replay, reservation and evidence when reservation persistence fails", async () => {
     await saveProposal(proposal("rollback", 3000));
-    await repo.sql.unsafe(`create function reject_rollback_reservation() returns trigger language plpgsql as $$ begin if NEW.proposal_id='rollback' then raise exception 'forced rollback'; end if; return NEW; end $$; create trigger reject_rollback before insert on authorization_reservations for each row execute function reject_rollback_reservation();`);
+    await repo.sql.unsafe(
+      `create function reject_rollback_reservation() returns trigger language plpgsql as $$ begin if NEW.proposal_id='rollback' then raise exception 'forced rollback'; end if; return NEW; end $$; create trigger reject_rollback before insert on authorization_reservations for each row execute function reject_rollback_reservation();`,
+    );
     const before = (await repo.evidence()).length;
-    await expect(service.authorizeProposal("rollback", "LOW", now)).rejects.toThrow();
+    await expect(
+      service.authorizeProposal("rollback", "LOW", now),
+    ).rejects.toThrow();
     expect(await repo.getReservationByProposal("rollback")).toBeNull();
-    expect((await repo.sql`select count(*)::int count from decision_receipts where proposal_id='rollback'`)[0]?.count).toBe(0);
-    expect((await repo.sql`select count(*)::int count from replay_keys where replay_key in ('rollback','proposal-nonce-rollback')`)[0]?.count).toBe(0);
+    expect(
+      (
+        await repo.sql`select count(*)::int count from decision_receipts where proposal_id='rollback'`
+      )[0]?.count,
+    ).toBe(0);
+    expect(
+      (
+        await repo.sql`select count(*)::int count from replay_keys where replay_key in ('rollback','proposal-nonce-rollback')`
+      )[0]?.count,
+    ).toBe(0);
     expect((await repo.evidence()).length).toBe(before);
     await repo.sql`drop trigger reject_rollback on authorization_reservations; drop function reject_rollback_reservation()`;
   });
@@ -211,8 +303,14 @@ run("Milestone 2B durable authorization", () => {
   it("expires stale reservations idempotently and restores capacity", async () => {
     await saveProposal(proposal("stale", 7000));
     await service.authorizeProposal("stale", "LOW", now);
-    expect(await service.expireStaleReservations("2026-10-09T12:02:00.000Z")).toBe(1);
-    expect(await service.expireStaleReservations("2026-10-09T12:02:00.000Z")).toBe(0);
-    expect((await repo.authorityAccounting("m1", 10000)).availableMinor).toBe(10000);
+    expect(
+      await service.expireStaleReservations("2026-10-09T12:02:00.000Z"),
+    ).toBe(1);
+    expect(
+      await service.expireStaleReservations("2026-10-09T12:02:00.000Z"),
+    ).toBe(0);
+    expect((await repo.authorityAccounting("m1", 10000)).availableMinor).toBe(
+      10000,
+    );
   });
 });
