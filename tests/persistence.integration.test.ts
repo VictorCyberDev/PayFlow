@@ -123,7 +123,7 @@ run("PostgreSQL durable foundation", () => {
         status: "APPROVED",
         approvedAt: "2026-10-09T12:01:00.000Z",
       }),
-    ).rejects.toThrow("APPROVAL_PRINCIPAL_MISMATCH");
+    ).rejects.toThrow("APPROVAL_BINDING_MISMATCH");
     await expect(
       repo.saveApproval({
         id: "ap2",
