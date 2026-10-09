@@ -1,49 +1,51 @@
-# PayFlow Threat Model — Milestone 2B
+# PayFlow Threat Model — Milestone 2C
 
-Milestone 1's fail-closed authorization, mandate fingerprint, capability intersection and explicit `ALLOW | DENY | ESCALATE` semantics remain required. Milestone 2B moves security-critical authorization authority onto PostgreSQL-backed orchestration.
+Milestone 1 fail-closed policy semantics and the durable/concurrency controls from 2A/2B remain required. 2C protects the authorization-to-execution handoff.
+
+## Authorization substitution
+
+Threat: a caller obtains authority for one transaction and changes amount, currency, merchant, agent, mandate, proposal, capability or reservation before execution.
+
+Control: a short-lived Ed25519 signature covers exact execution claims, including a deterministic SHA-256 proposal digest. The execution boundary also reloads the authoritative proposal and compares digest and explicit financial bindings. Modified signed payloads fail signature verification; modified persisted state fails revalidation.
+
+## Forged or confused grants
+
+Control: verification is hard-coded to Ed25519 through Node `crypto`; there is no caller-selectable algorithm and no `alg=none` path. Version and audience are explicit. `kid` must resolve to a known public key. Wrong keys, malformed grants, unsupported versions, wrong audiences and bad signatures fail before provider invocation.
+
+Residual risk: production secret-manager/KMS/HSM custody and automated key rotation are not implemented. Compromise of the active private key permits grant forgery until that key is removed from trust.
+
+## Stale authority
+
+Threat: a correctly signed grant is used after the agent/mandate/approval/reservation changes.
+
+Control: signature validity alone is insufficient. Immediately before claiming execution authority PayFlow locks durable state and revalidates mandate fingerprint/expiry/agent/capability, agent status/expiry/principal/capability, exact receipt/proposal/reservation bindings, reservation status/expiry, and approval for ESCALATE.
+
+## Grant replay
+
+Control: each JTI is a durable primary key. Execution locks its grant row and accepts only `ISSUED`. The same transaction moves grant to `CLAIMED` and reservation to `EXECUTING`. Concurrent requests for the same grant serialize on that row; only one can reach the sink. Successful use becomes `CONSUMED`; deterministic sink failure becomes `FAILED`. Duplicate calls are rejected, not replayed idempotently.
 
 ## Concurrent overspend
 
-Control: every authority-acquiring transaction locks the mandate row before deriving committed plus active-reserved authority. Reservation creation occurs before that transaction commits. A real PostgreSQL concurrent test races two 8000-minor-unit proposals against a 10000-minor-unit mandate and requires only one to acquire executable authority.
+The 2B per-mandate lock remains authoritative for reservation acquisition. `AUTHORIZED` and `EXECUTING` reservations consume capacity. The existing real PostgreSQL 8000 + 8000 against 10000 concurrency test remains required.
 
-Residual risk: the guarantee is per PostgreSQL database and per mandate serialization point. Cross-database replication, sharding and distributed transaction semantics are not implemented.
+## Escalation bypass
 
-## Replay and duplicate submissions
+An ESCALATE receipt alone is not executable. Grant issuance requires the reservation created by the 2B approval flow, and execution rechecks an `APPROVED` record bound to the same principal/proposal/receipt. The original receipt remains ESCALATE.
 
-Control: proposal primary keys, mandate-scoped nonce uniqueness, one Decision Receipt per proposal, one reservation per proposal and transactional replay-key claims prevent concurrent duplicates from both acquiring authority. Repeated evaluation of an already evaluated proposal fails closed.
+## Corrupt persisted state
 
-Residual risk: API-level idempotent response caching is not implemented; callers receive rejection rather than replaying a previous success result.
+Runtime schemas and redundant signed/persisted bindings fail closed on malformed critical state. A privileged database writer remains a trusted-system threat: with sufficient access it can alter related rows/evidence consistently. The evidence chain is tamper-evident, not immutable.
 
-## Corrupt persisted security state
+## Evidence exposure
 
-Control: mandates, passports, proposals, Decision Receipts, approvals and reservations are runtime-validated before security-sensitive use. Redundant proposal money/currency and mandate fingerprint checks detect selected row/document inconsistencies. Malformed critical state throws and fails closed.
+Execution evidence records grant IDs/digests, outcomes and safe reason codes. It does not intentionally record private signing keys, secrets or complete grant tokens.
 
-Residual risk: a privileged database writer can consistently alter multiple related rows. Database access control, external attestations and immutable storage are outside 2B.
+## External provider TOCTOU
 
-## Approval substitution
+2C atomically claims local execution authority before provider I/O, then commits the transaction. It intentionally does not hold PostgreSQL locks across a fake network operation. A real provider can succeed while PayFlow loses the response, so `EXECUTING` cannot by itself prove provider outcome.
 
-Control: approval remains separate from the ESCALATE receipt and is bound to the mandate principal, exact receipt and exact proposal. Capacity and policy are revalidated while the mandate is locked before an approved escalation receives a reservation.
-
-Residual risk: PayFlow does not yet authenticate a human principal session. Principal-ID binding is not a claim of verified real-world identity.
-
-## Reservation leakage after crashes
-
-Control: reservations have durable expirations. A deterministic idempotent recovery operation expires stale `PENDING`/`AUTHORIZED` rows; terminal/committed rows are not released. Expiry and evidence are transactional.
-
-Residual risk: no background worker or production scheduler is implemented, so an operator/runtime must invoke recovery.
-
-## Evidence inconsistency
-
-Control: authorization evidence is written inside the same database transaction as receipts, replay claims and reservations. Rollback removes those events. A transaction-scoped advisory lock serializes hash-chain appends.
-
-Residual risk: the chain is tamper-evident rather than immutable. A privileged database writer can rewrite, re-hash or delete the complete chain.
-
-## Execution TOCTOU
-
-Control in 2B: none beyond durable reservation eligibility and proposal/receipt persistence.
-
-Residual risk: a later payment boundary still needs a cryptographically bound execution grant and immediate revalidation so a stale or substituted authorization artifact cannot authorize a provider side effect. This is explicitly deferred; 2B does not implement or claim cryptographic execution grants or PayPal execution.
+Milestone 2D must persist payment attempts before network I/O, use provider idempotency keys and implement reconciliation/webhook semantics for ambiguous outcomes. PostgreSQL + PayPal atomicity is not claimed.
 
 ## Explicit non-claims
 
-Milestone 2B does not implement PayPal, cryptographic execution grants, production principal authentication, immutable audit storage, distributed/multi-region transaction guarantees, LLM functionality, product discovery or UI.
+2C does not implement PayPal, hardware-backed keys, non-repudiation, immutable audit storage, distributed consensus, production principal authentication, atomic external payment execution, LLM mandate parsing, product discovery or UI.
