@@ -6,10 +6,14 @@ import {
   type KeyObject,
 } from "node:crypto";
 import { z } from "zod";
-import { ExecutionQuarantinedError } from "./execution-outcome.js";
+import {
+  ExecutionQuarantinedError,
+  ExecutionRejectedError,
+} from "./execution-outcome.js";
 import { mandateFingerprint, proposalDigest } from "./canonical.js";
 import { CapabilitySchema } from "./domain.js";
 import {
+  persistedDate,
   DurableApprovalSchema,
   ReservationSchema,
   type PostgresTrustRepository,
@@ -34,7 +38,7 @@ export const ExecutionGrantClaimsSchema = z
     receiptId: z.string().min(1),
     reservationId: z.string().min(1),
     capability: CapabilitySchema,
-    amountMinor: z.number().int().positive(),
+    amountMinor: z.number().int().safe().positive(),
     currency: z.string().regex(/^[A-Z]{3}$/),
     merchantId: z.string().min(1),
     issuedAt: z.string().datetime(),
@@ -84,7 +88,7 @@ function reservationFromRow(value: unknown): Reservation {
     amountMinor: Number(r.amount_minor),
     currency: r.currency,
     status: r.status,
-    expiresAt: new Date(String(r.expires_at)).toISOString(),
+    expiresAt: persistedDate(r.expires_at).toISOString(),
   });
 }
 
@@ -98,6 +102,7 @@ export class StaticPublicKeyRing implements PublicKeyResolver {
   }
 }
 export interface ExecutionSink {
+  readonly finalizesAuthority?: boolean;
   execute(
     claims: ExecutionGrantClaims,
   ): Promise<{ readonly executionId: string }>;
@@ -110,7 +115,7 @@ export class FakeExecutionSink implements ExecutionSink {
   ): Promise<{ readonly executionId: string }> {
     this.calls += 1;
     return this.fail
-      ? Promise.reject(new Error("FAKE_PROVIDER_FAILURE"))
+      ? Promise.reject(new ExecutionRejectedError("FAKE_PROVIDER_FAILURE"))
       : Promise.resolve({ executionId: `fake:${claims.jti}` });
   }
 }
@@ -146,15 +151,25 @@ export class ExecutionGrantIssuer {
         tx,
         true,
       );
-      const proposal = await this.repo.getProposal(reservation.proposalId, tx);
+      await this.repo.assertMandateActive(reservation.mandateId, tx);
+      const proposal = await this.repo.getProposal(
+        reservation.proposalId,
+        tx,
+        true,
+      );
       const receipt = await this.repo.getReceipt(reservation.receiptId, tx);
       if (!mandate || !proposal || !receipt)
         throw new Error("AUTHORITY_STATE_MISSING");
+      await this.repo.assertReceiptProposal(receipt.receiptId, proposal, tx);
       const agent = await this.repo.getAgent(proposal.agentId, tx);
       if (!agent) throw new Error("AGENT_NOT_FOUND");
-      if (Date.parse(mandate.expiresAt) <= Date.parse(now))
+      if (
+        Date.parse(mandate.createdAt) > Date.parse(now) ||
+        Date.parse(mandate.expiresAt) <= Date.parse(now)
+      )
         throw new Error("MANDATE_NOT_EXECUTABLE");
       if (
+        Date.parse(agent.issuedAt) > Date.parse(now) ||
         agent.status !== "ACTIVE" ||
         Date.parse(agent.expiresAt) <= Date.parse(now)
       )
@@ -178,6 +193,8 @@ export class ExecutionGrantIssuer {
         receipt.proposalId !== proposal.id ||
         receipt.mandateId !== mandate.id ||
         receipt.agentId !== agent.id ||
+        receipt.amount.minor !== proposal.amount.minor ||
+        receipt.amount.currency !== proposal.amount.currency ||
         receipt.mandateFingerprint !== mandateFingerprint(mandate)
       )
         throw new Error("RECEIPT_BINDING_MISMATCH");
@@ -223,6 +240,9 @@ export class ExecutionGrantIssuer {
       const payload = stable(claims);
       const token = `${b64url(payload)}.${b64url(sign(null, Buffer.from(payload), this.privateKey))}`;
       await tx`insert into execution_grants(id,kid,version,audience,principal_id,agent_id,mandate_id,proposal_id,receipt_id,reservation_id,proposal_digest,mandate_fingerprint,capability,amount_minor,currency,merchant_id,issued_at,expires_at) values(${claims.jti},${claims.kid},${claims.version},${claims.audience},${claims.principalId},${claims.agentId},${claims.mandateId},${claims.proposalId},${claims.receiptId},${claims.reservationId},${claims.proposalDigest},${claims.mandateFingerprint},${claims.capability},${claims.amountMinor},${claims.currency},${claims.merchantId},${claims.issuedAt},${claims.expiresAt})`;
+      const frozen =
+        await tx`update execution_grants g set authority_snapshot=to_jsonb(g)-ARRAY['status','claimed_at','consumed_at','failed_at','authority_snapshot'] where id=${claims.jti} returning id`;
+      if (frozen.length !== 1) throw new Error("GRANT_PERSISTENCE_FAILED");
       await this.repo.appendEvidenceInTransaction(
         tx,
         "EXECUTION_GRANT_ISSUED",
@@ -280,7 +300,10 @@ export class ExecutionBoundary {
     }
     if (claims.audience !== this.audience)
       return this.verificationFailure(token, "WRONG_GRANT_AUDIENCE", now);
-    if (Date.parse(claims.expiresAt) <= Date.parse(now))
+    if (
+      Date.parse(claims.issuedAt) > Date.parse(now) ||
+      Date.parse(claims.expiresAt) <= Date.parse(now)
+    )
       return this.verificationFailure(token, "EXECUTION_GRANT_EXPIRED", now);
     const publicKey = this.keys.resolve(claims.kid);
     if (!publicKey)
@@ -312,14 +335,14 @@ export class ExecutionBoundary {
           amountMinor: Number(grant.amount_minor),
           currency: grant.currency,
           merchantId: grant.merchant_id,
+          issuedAt: persistedDate(grant.issued_at).toISOString(),
+          expiresAt: persistedDate(grant.expires_at).toISOString(),
         };
         for (const [name, value] of Object.entries(persisted))
           if (value !== claims[name as keyof ExecutionGrantClaims])
             throw new Error("MALFORMED_PERSISTED_GRANT");
 
-        const mandateRows =
-          await tx`select id from mandates where id=${claims.mandateId} for update`;
-        if (!mandateRows[0]) throw new Error("MANDATE_NOT_FOUND");
+        await this.repo.assertGrantSnapshot(claims.jti, tx);
         const reservationRows =
           await tx`select * from authorization_reservations where id=${claims.reservationId} for update`;
         if (!reservationRows[0]) throw new Error("RESERVATION_NOT_FOUND");
@@ -338,8 +361,16 @@ export class ExecutionBoundary {
         )
           throw new Error("RESERVATION_BINDING_MISMATCH");
 
+        const mandateRows =
+          await tx`select id from mandates where id=${claims.mandateId} for update`;
+        if (!mandateRows[0]) throw new Error("MANDATE_NOT_FOUND");
+        await this.repo.assertMandateActive(claims.mandateId, tx);
         const mandate = await this.repo.getMandate(claims.mandateId, tx);
-        const proposal = await this.repo.getProposal(claims.proposalId, tx);
+        const proposal = await this.repo.getProposal(
+          claims.proposalId,
+          tx,
+          true,
+        );
         const agent = await this.repo.getAgent(claims.agentId, tx);
         const receipt = await this.repo.getReceipt(claims.receiptId, tx);
         if (!mandate || !proposal || !agent || !receipt)
@@ -352,12 +383,14 @@ export class ExecutionBoundary {
         if (
           mandate.principalId !== claims.principalId ||
           mandate.authorizedAgentId !== claims.agentId ||
+          Date.parse(mandate.createdAt) > Date.parse(now) ||
           Date.parse(mandate.expiresAt) <= Date.parse(now) ||
           !mandate.allowedCapabilities.includes(claims.capability)
         )
           throw new Error("MANDATE_REVALIDATION_FAILED");
         if (
           agent.principalId !== claims.principalId ||
+          Date.parse(agent.issuedAt) > Date.parse(now) ||
           agent.status !== "ACTIVE" ||
           Date.parse(agent.expiresAt) <= Date.parse(now) ||
           !agent.capabilities.includes(claims.capability)
@@ -376,15 +409,20 @@ export class ExecutionBoundary {
           receipt.proposalId !== claims.proposalId ||
           receipt.mandateId !== claims.mandateId ||
           receipt.agentId !== claims.agentId ||
+          receipt.amount.minor !== claims.amountMinor ||
+          receipt.amount.currency !== claims.currency ||
           receipt.receiptId !== claims.receiptId ||
+          receipt.authorizationEngineVersion !==
+            claims.authorizationEngineVersion ||
           receipt.mandateFingerprint !== claims.mandateFingerprint
         )
           throw new Error("RECEIPT_BINDING_MISMATCH");
+        await this.repo.assertReceiptProposal(claims.receiptId, proposal, tx);
         if (receipt.decision === "DENY")
           throw new Error("DENIED_RECEIPT_NOT_EXECUTABLE");
         if (receipt.decision === "ESCALATE") {
           const approvalRows =
-            await tx`select * from approvals where receipt_id=${claims.receiptId}`;
+            await tx`select * from approvals where receipt_id=${claims.receiptId} for update`;
           if (!approvalRows[0]) throw new Error("VALID_APPROVAL_REQUIRED");
           const approvalRow = dbRow(approvalRows[0]);
           const approval = DurableApprovalSchema.parse({
@@ -393,7 +431,7 @@ export class ExecutionBoundary {
             proposalId: approvalRow.proposal_id,
             principalId: approvalRow.principal_id,
             status: approvalRow.status,
-            approvedAt: new Date(String(approvalRow.approved_at)).toISOString(),
+            approvedAt: persistedDate(approvalRow.approved_at).toISOString(),
           });
           if (
             approval.status !== "APPROVED" ||
@@ -405,8 +443,12 @@ export class ExecutionBoundary {
           throw new Error("RECEIPT_NOT_EXECUTABLE");
         }
 
-        await tx`update authorization_reservations set status='EXECUTING',updated_at=${now} where id=${claims.reservationId}`;
-        await tx`update execution_grants set status='CLAIMED',claimed_at=${now} where id=${claims.jti}`;
+        const executing =
+          await tx`update authorization_reservations set status='EXECUTING',updated_at=${now} where id=${claims.reservationId} and status='AUTHORIZED' returning id`;
+        const claimed =
+          await tx`update execution_grants set status='CLAIMED',claimed_at=${now} where id=${claims.jti} and status='ISSUED' returning id`;
+        if (executing.length !== 1 || claimed.length !== 1)
+          throw new Error("EXECUTION_CLAIM_STATE_INVALID");
         await this.repo.appendEvidenceInTransaction(
           tx,
           "EXECUTION_AUTHORITY_CLAIMED",
@@ -425,21 +467,63 @@ export class ExecutionBoundary {
         "EXECUTION_REVALIDATION_FAILED",
         {
           grantId: claims.jti,
-          reason: error instanceof Error ? error.message : "UNKNOWN",
+          reason: "EXECUTION_REVALIDATION_FAILED",
         },
         now,
       );
       throw error;
     }
 
+    let providerReturned = false;
     try {
       const result = await this.sink.execute(claims);
+      providerReturned = true;
+      if (this.sink.finalizesAuthority) {
+        const rows = await this.repo
+          .sql`select g.status grant_status,r.status reservation_status,p.status attempt_status,p.provider_capture_id from execution_grants g join authorization_reservations r on r.id=g.reservation_id join payment_attempts p on p.grant_id=g.id and p.reservation_id=r.id where g.id=${claims.jti}`;
+        if (
+          rows.length !== 1 ||
+          rows[0]?.grant_status !== "CONSUMED" ||
+          rows[0]?.reservation_status !== "COMMITTED" ||
+          rows[0]?.attempt_status !== "CAPTURED" ||
+          rows[0]?.provider_capture_id !== result.executionId
+        )
+          throw new Error("PAYMENT_FINALIZATION_STATE_INVALID");
+        return result;
+      }
       await this.repo.sql.begin(async (tx) => {
         const rows =
-          await tx`select status from execution_grants where id=${claims.jti} for update`;
+          await tx`select * from execution_grants where id=${claims.jti} for update`;
         if (!rows[0] || dbRow(rows[0]).status !== "CLAIMED")
           throw new Error("GRANT_FINALIZATION_STATE_INVALID");
-        await tx`update execution_grants set status='CONSUMED',consumed_at=${now} where id=${claims.jti}`;
+        const reservationRows =
+          await tx`select * from authorization_reservations where id=${claims.reservationId} for update`;
+        const g = dbRow(rows[0]),
+          r = reservationRows[0]
+            ? reservationFromRow(reservationRows[0])
+            : null;
+        if (
+          !r ||
+          r.status !== "EXECUTING" ||
+          g.reservation_id !== r.id ||
+          g.proposal_id !== claims.proposalId ||
+          r.proposalId !== claims.proposalId ||
+          g.receipt_id !== claims.receiptId ||
+          r.receiptId !== claims.receiptId ||
+          g.mandate_id !== claims.mandateId ||
+          r.mandateId !== claims.mandateId ||
+          g.principal_id !== claims.principalId ||
+          Number(g.amount_minor) !== claims.amountMinor ||
+          r.amountMinor !== claims.amountMinor ||
+          g.currency !== claims.currency ||
+          r.currency !== claims.currency ||
+          g.merchant_id !== claims.merchantId
+        )
+          throw new Error("EXECUTION_FINALIZATION_BINDING_MISMATCH");
+        const consumed =
+          await tx`update execution_grants set status='CONSUMED',consumed_at=${now} where id=${claims.jti} and status='CLAIMED' returning id`;
+        if (consumed.length !== 1)
+          throw new Error("GRANT_FINALIZATION_STATE_INVALID");
         const updated =
           await tx`update authorization_reservations set status='COMMITTED',updated_at=${now} where id=${claims.reservationId} and status='EXECUTING' returning id`;
         if (updated.length !== 1)
@@ -453,13 +537,15 @@ export class ExecutionBoundary {
       });
       return result;
     } catch (error) {
-      if (error instanceof ExecutionQuarantinedError) {
+      if (providerReturned || !(error instanceof ExecutionRejectedError)) {
         await this.repo.appendEvidence(
           "PAYMENT_EXECUTION_QUARANTINED",
-          { grantId: claims.jti, reason: error.message },
+          { grantId: claims.jti, reason: "EXTERNAL_OUTCOME_UNPROVEN" },
           now,
         );
-        throw error;
+        throw error instanceof ExecutionQuarantinedError
+          ? error
+          : new ExecutionQuarantinedError("EXECUTION_OUTCOME_UNPROVEN");
       }
       await this.repo.sql.begin(async (tx) => {
         await tx`update execution_grants set status='FAILED',failed_at=${now} where id=${claims.jti} and status='CLAIMED'`;

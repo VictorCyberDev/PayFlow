@@ -14,7 +14,7 @@ export type Capability = z.infer<typeof CapabilitySchema>;
 export const MoneySchema = z
   .object({
     currency: z.string().regex(/^[A-Z]{3}$/),
-    minor: z.number().int().nonnegative(),
+    minor: z.number().int().safe().nonnegative(),
   })
   .strict();
 export type Money = Readonly<z.infer<typeof MoneySchema>>;
@@ -53,16 +53,16 @@ export const MandateSchema = z
     purpose: z.string().min(1),
     category: z.string().min(1),
     currency: z.string().regex(/^[A-Z]{3}$/),
-    maxSingleTransactionMinor: z.number().int().positive(),
-    cumulativeLimitMinor: z.number().int().positive().optional(),
+    maxSingleTransactionMinor: z.number().int().safe().positive(),
+    cumulativeLimitMinor: z.number().int().safe().positive().optional(),
     allowedConditions: z.array(ProductConditionSchema).min(1),
     merchantRiskCeiling: MerchantRiskSchema,
-    autonomousPurchaseThresholdMinor: z.number().int().nonnegative(),
-    humanApprovalThresholdMinor: z.number().int().positive(),
+    autonomousPurchaseThresholdMinor: z.number().int().safe().nonnegative(),
+    humanApprovalThresholdMinor: z.number().int().safe().positive(),
     allowedCapabilities: z.array(CapabilitySchema).min(1),
     expiresAt: z.string().datetime(),
     createdAt: z.string().datetime(),
-    version: z.number().int().positive(),
+    version: z.number().int().safe().positive(),
     nonce: z.string().min(16),
   })
   .strict()

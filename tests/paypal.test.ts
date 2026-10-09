@@ -4,6 +4,7 @@ import {
   PayPalPaymentProvider,
   PayPalProviderError,
   paypalMoney,
+  withinPayPalRetryWindow,
 } from "../src/paypal.js";
 
 describe("Milestone 2D PayPal provider", () => {
@@ -266,4 +267,72 @@ describe("Milestone 2D PayPal provider", () => {
       provider.captureOrder("ORDER-1", "persisted-capture-key"),
     ).rejects.toMatchObject({ classification: "AMBIGUOUS" });
   });
+});
+
+describe("2E provider uncertainty, retention and redaction", () => {
+  it.each([
+    [-1, false],
+    [0, true],
+    [21599999, true],
+    [21600000, false],
+    [21600001, false],
+  ])("retry window offset %i is safe=%s", (offset, safe) => {
+    const origin = new Date("2026-10-09T12:00:00.123Z");
+    expect(
+      withinPayPalRetryWindow(
+        origin,
+        new Date(origin.getTime() + offset).toISOString(),
+      ),
+    ).toBe(safe);
+  });
+  it.each(["invalid", "infinity", null])(
+    "invalid persisted retry origin %s cannot authorize a retry",
+    (origin) => {
+      expect(withinPayPalRetryWindow(origin, "2026-10-09T12:00:00.000Z")).toBe(
+        false,
+      );
+    },
+  );
+  it("malformed reconciliation clock cannot authorize a retry", () => {
+    expect(withinPayPalRetryWindow(new Date(), "invalid")).toBe(false);
+  });
+  it.each(["network", "malformed JSON", "5xx", "401"])(
+    "capture %s never exposes credentials or provider bodies",
+    async (failure) => {
+      const sentinel = "SECRET_SENTINEL_DO_NOT_PERSIST";
+      const fetcher = vi.fn(async (input: string | URL | Request) => {
+        await Promise.resolve();
+        const path =
+          input instanceof Request
+            ? input.url
+            : input instanceof URL
+              ? input.toString()
+              : input;
+        if (path.includes("oauth2"))
+          return new Response(
+            JSON.stringify({ access_token: sentinel, expires_in: 60 }),
+          );
+        if (failure === "network") throw new Error(sentinel);
+        if (failure === "malformed JSON")
+          return new Response(sentinel, { status: 200 });
+        return new Response(sentinel, {
+          status: failure === "5xx" ? 503 : 401,
+        });
+      });
+      const provider = new PayPalPaymentProvider(
+        new PayPalOAuthClient("client", sentinel, fetcher),
+        fetcher,
+      );
+      const result = await provider
+        .captureOrder("order", "persisted-key")
+        .catch((error) => error as PayPalProviderError);
+      expect(result).toBeInstanceOf(PayPalProviderError);
+      if (!(result instanceof PayPalProviderError))
+        throw new Error("EXPECTED_PROVIDER_ERROR");
+      expect(JSON.stringify(result) + result.message).not.toContain(sentinel);
+      expect(result.classification).toBe(
+        failure === "401" ? "AUTHENTICATION" : "AMBIGUOUS",
+      );
+    },
+  );
 });

@@ -2,8 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Sql } from "postgres";
 import type { ExecutionGrantClaims, ExecutionSink } from "./execution-grant.js";
+import { mandateFingerprint, proposalDigest } from "./canonical.js";
 import { ExecutionQuarantinedError } from "./execution-outcome.js";
-import type { PostgresTrustRepository } from "./persistence.js";
+import { persistedDate, type PostgresTrustRepository } from "./persistence.js";
 
 const BASE = "https://api-m.sandbox.paypal.com";
 const PRECISION: Readonly<Record<string, number>> = {
@@ -306,93 +307,52 @@ function asRow(v: unknown): Record<string, unknown> {
   return v as Record<string, unknown>;
 }
 
+export function withinPayPalRetryWindow(
+  createdAt: unknown,
+  now: string,
+): boolean {
+  const origin =
+    createdAt instanceof Date
+      ? createdAt.getTime()
+      : Date.parse(String(createdAt));
+  const age = Date.parse(now) - origin;
+  return Number.isFinite(age) && age >= 0 && age < 6 * 60 * 60 * 1000;
+}
+
 export class PayPalExecutionRail implements ExecutionSink {
   constructor(
     private readonly repo: PostgresTrustRepository,
     private readonly provider: PaymentProvider,
+    private readonly clock = () => new Date().toISOString(),
   ) {}
+  readonly finalizesAuthority = true;
   async execute(
     c: ExecutionGrantClaims,
   ): Promise<{ readonly executionId: string }> {
     const a = await this.ensureAttempt(c);
-    let orderId = a.provider_order_id
-      ? requiredString(a.provider_order_id, "PROVIDER_ORDER_ID")
-      : undefined;
-    if (!orderId) {
-      await this.state(
-        String(a.id),
-        "ORDER_CREATING",
-        "PAYPAL_ORDER_CREATE_STARTED",
-      );
-      try {
-        const order = await this.provider.createOrder({
-          amountValue: paypalMoney(c.amountMinor, c.currency),
-          currency: c.currency,
-          merchantReference: c.proposalId,
-          requestId: String(a.create_order_request_id),
-        });
-        orderId = order.id;
-        await this.repo
-          .sql`update payment_attempts set provider_order_id=${order.id},provider_status=${order.status},status='ORDER_CREATED',payer_action_url=${order.payerActionUrl ?? null},updated_at=now() where id=${String(a.id)}`;
-        await this.repo.appendEvidence(
-          "PAYPAL_ORDER_CREATED",
-          { paymentAttemptId: String(a.id), paypalOrderId: order.id },
-          new Date().toISOString(),
-        );
-        if (
-          order.payerActionUrl ||
-          !["APPROVED", "COMPLETED"].includes(order.status)
-        ) {
-          await this.state(
-            String(a.id),
-            "PAYER_ACTION_REQUIRED",
-            "PAYPAL_PAYER_ACTION_REQUIRED",
-          );
-          throw new ExecutionQuarantinedError("PAYER_ACTION_REQUIRED");
-        }
-      } catch (e) {
-        if (e instanceof ExecutionQuarantinedError) throw e;
-        if (
-          e instanceof PayPalProviderError &&
-          e.classification === "AMBIGUOUS"
-        ) {
-          await this.state(
-            String(a.id),
-            "ORDER_CREATE_UNKNOWN",
-            "PAYPAL_ORDER_CREATE_UNKNOWN",
-          );
-          throw new ExecutionQuarantinedError("PAYPAL_ORDER_CREATE_UNKNOWN");
-        }
-        await this.fail(String(a.id), e);
-        throw e;
-      }
-    }
-    await this.state(
-      String(a.id),
-      "CAPTURE_IN_FLIGHT",
-      "PAYPAL_CAPTURE_STARTED",
-    );
     try {
-      return await this.capture(
-        c,
-        String(a.id),
-        await this.provider.captureOrder(orderId, String(a.capture_request_id)),
-      );
-    } catch (e) {
-      if (e instanceof ExecutionQuarantinedError) throw e;
-      if (
-        e instanceof PayPalProviderError &&
-        e.classification === "AMBIGUOUS"
-      ) {
-        await this.state(
-          String(a.id),
-          "CAPTURE_UNKNOWN",
-          "PAYPAL_CAPTURE_UNKNOWN",
+      const status = await this.reconcile(String(a.id), this.clock());
+      if (status !== "CAPTURED")
+        throw new ExecutionQuarantinedError(
+          status === "ORDER_CREATE_UNKNOWN"
+            ? "PAYPAL_ORDER_CREATE_UNKNOWN"
+            : status === "CAPTURE_UNKNOWN"
+              ? "PAYPAL_CAPTURE_UNKNOWN"
+              : status,
         );
-        throw new ExecutionQuarantinedError("PAYPAL_CAPTURE_UNKNOWN");
-      }
-      await this.fail(String(a.id), e);
-      throw e;
+      const rows = await this.repo
+        .sql`select provider_capture_id from payment_attempts where id=${String(a.id)}`;
+      return {
+        executionId: requiredString(
+          rows[0]?.provider_capture_id,
+          "PROVIDER_CAPTURE_ID",
+        ),
+      };
+    } catch (error) {
+      if (error instanceof ExecutionQuarantinedError) throw error;
+      // Once authority is claimed, an infrastructure/validation error is not
+      // evidence that the provider did not act. Never release its reservation.
+      throw new ExecutionQuarantinedError("PAYMENT_REQUIRES_INVESTIGATION");
     }
   }
   async reconcile(
@@ -412,7 +372,7 @@ export class PayPalExecutionRail implements ExecutionSink {
         await db`select * from payment_attempts where id=${attemptId}`;
       if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
       let a = asRow(rows[0]);
-      if (["FAILED", "CANCELLED", "NOT_STARTED"].includes(String(a.status)))
+      if (["FAILED", "CANCELLED"].includes(String(a.status)))
         return String(a.status);
       await this.reconciliationTransaction(db, async (tx) => {
         const attempts =
@@ -439,10 +399,14 @@ export class PayPalExecutionRail implements ExecutionSink {
 
       if (!a.provider_order_id) {
         if (
-          !["ORDER_CREATE_UNKNOWN", "ORDER_CREATING"].includes(String(a.status))
+          !["NOT_STARTED", "ORDER_CREATE_UNKNOWN", "ORDER_CREATING"].includes(
+            String(a.status),
+          )
         )
           throw new Error("PAYMENT_ATTEMPT_ORDER_MISSING");
         if (!this.retryWindow(a, now)) return String(a.status);
+        await this.dispatch(db, a, "ORDER_CREATING", now);
+        a = { ...a, status: "ORDER_CREATING" };
         let created: PayPalOrderView;
         try {
           created = await this.provider.createOrder({
@@ -462,7 +426,12 @@ export class PayPalExecutionRail implements ExecutionSink {
           await this.reconciliationState(db, a, "ORDER_CREATE_UNKNOWN", now);
           return "ORDER_CREATE_UNKNOWN";
         }
-        this.assertOrder(a, created, true);
+        try {
+          this.assertOrder(a, created, true);
+        } catch (error) {
+          await this.reconciliationState(db, a, "ORDER_CREATE_UNKNOWN", now);
+          throw error;
+        }
         const status =
           created.payerActionUrl ||
           ["CREATED", "SAVED", "PAYER_ACTION_REQUIRED"].includes(created.status)
@@ -528,6 +497,8 @@ export class PayPalExecutionRail implements ExecutionSink {
           ].includes(String(a.status))
         )
           return String(a.status);
+        await this.dispatch(db, a, "CAPTURE_IN_FLIGHT", now);
+        a = { ...a, status: "CAPTURE_IN_FLIGHT" };
         try {
           order = await this.provider.captureOrder(
             requiredString(a.provider_order_id, "PROVIDER_ORDER_ID"),
@@ -537,7 +508,12 @@ export class PayPalExecutionRail implements ExecutionSink {
           await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", now);
           return "CAPTURE_UNKNOWN";
         }
-        this.assertOrder(a, order, false);
+        try {
+          this.assertOrder(a, order, false);
+        } catch (error) {
+          await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", now);
+          throw error;
+        }
       }
       const cap = order.captures[0];
       if (!cap || !["COMPLETED", "PENDING"].includes(cap.status)) {
@@ -555,8 +531,10 @@ export class PayPalExecutionRail implements ExecutionSink {
         );
         return "CAPTURE_PENDING_PROVIDER";
       }
-      if (order.status !== "COMPLETED")
+      if (order.status !== "COMPLETED") {
+        await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", now);
         throw new Error("PAYPAL_ORDER_STATUS_MISMATCH");
+      }
       await this.reconciliationTransaction(db, async (tx) => {
         const rows =
           await tx`select * from payment_attempts where id=${attemptId} for update`;
@@ -621,6 +599,87 @@ export class PayPalExecutionRail implements ExecutionSink {
       }
     }
   }
+  private async dispatch(
+    db: Sql,
+    a: Record<string, unknown>,
+    status: string,
+    now: string,
+  ): Promise<void> {
+    await this.reconciliationTransaction(db, async (tx) => {
+      const rows =
+        await tx`select * from payment_attempts where id=${String(a.id)} for update`;
+      if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
+      const current = asRow(rows[0]);
+      this.assertUnchanged(a, current);
+      await this.assertAuthority(tx, current);
+      const grants =
+        await tx`select * from execution_grants where id=${String(a.grant_id)}`;
+      const g = asRow(grants[0]);
+      const mandate = await this.repo.getMandate(
+        String(a.mandate_id),
+        tx,
+        true,
+      );
+      const agent = await this.repo.getAgent(String(g.agent_id), tx);
+      await this.repo.assertMandateActive(String(a.mandate_id), tx);
+      if (
+        !mandate ||
+        !agent ||
+        agent.status !== "ACTIVE" ||
+        agent.principalId !== a.principal_id ||
+        Date.parse(now) < Date.parse(agent.issuedAt) ||
+        Date.parse(now) >= Date.parse(agent.expiresAt) ||
+        Date.parse(now) < Date.parse(mandate.createdAt) ||
+        Date.parse(now) >= Date.parse(mandate.expiresAt) ||
+        Date.parse(now) < persistedDate(g.issued_at).getTime() ||
+        Date.parse(now) >= persistedDate(g.expires_at).getTime() ||
+        Date.parse(now) >=
+          persistedDate(
+            (
+              await tx`select expires_at from authorization_reservations where id=${String(a.reservation_id)}`
+            )[0]?.expires_at,
+          ).getTime() ||
+        !agent.capabilities.includes(g.capability as never) ||
+        !mandate.allowedCapabilities.includes(g.capability as never) ||
+        mandateFingerprint(mandate) !== g.mandate_fingerprint
+      )
+        throw new Error("PAYMENT_AUTHORITY_NOT_CURRENT");
+      const receipt = await this.repo.getReceipt(String(g.receipt_id), tx);
+      if (receipt?.decision === "ESCALATE") {
+        const approval = await this.repo.getApprovalByReceipt(
+          String(g.receipt_id),
+          tx,
+        );
+        if (
+          !approval ||
+          approval.status !== "APPROVED" ||
+          approval.principalId !== a.principal_id ||
+          approval.proposalId !== a.proposal_id
+        )
+          throw new Error("VALID_APPROVAL_REQUIRED");
+      }
+      const changed =
+        await tx`update payment_attempts set status=${status},updated_at=${now} where id=${String(a.id)} and status=${String(a.status)} returning id`;
+      if (changed.length !== 1)
+        throw new Error("PAYMENT_DISPATCH_STATE_INVALID");
+      await this.repo.appendEvidenceInTransaction(
+        tx,
+        "PAYPAL_OPERATION_DISPATCHED",
+        { paymentAttemptId: String(a.id), status },
+        now,
+      );
+    });
+  }
+  async claimedGrantsWithoutAttempts(): Promise<readonly string[]> {
+    const rows = await this.repo
+      .sql`select g.id from execution_grants g left join payment_attempts p on p.grant_id=g.id where g.status='CLAIMED' and p.id is null order by g.claimed_at,g.id`;
+    return rows.map((row) => requiredString(row.id, "GRANT_ID"));
+  }
+  async reconciliationCandidates(): Promise<readonly string[]> {
+    const rows = await this.repo
+      .sql`select id from payment_attempts where provider='PAYPAL' and status not in ('CAPTURED','FAILED','CANCELLED') order by created_at,id`;
+    return rows.map((row) => requiredString(row.id, "ID"));
+  }
   private async reconciliationTransaction<T>(
     db: Sql,
     action: (tx: Sql) => Promise<T>,
@@ -640,8 +699,7 @@ export class PayPalExecutionRail implements ExecutionSink {
   private retryWindow(a: Record<string, unknown>, now: string): boolean {
     // Conservative six-hour Orders idempotency retention, measured from the
     // original attempt, never extended by a retry or an UNKNOWN update.
-    const age = Date.parse(now) - new Date(String(a.created_at)).getTime();
-    return Number.isFinite(age) && age >= 0 && age < 6 * 60 * 60 * 1000;
+    return withinPayPalRetryWindow(a.created_at, now);
   }
   private assertUnchanged(
     a: Record<string, unknown>,
@@ -660,6 +718,7 @@ export class PayPalExecutionRail implements ExecutionSink {
       "merchant_reference",
       "provider",
       "operation",
+      "idempotency_key",
       "create_order_request_id",
       "capture_request_id",
       "provider_order_id",
@@ -682,6 +741,32 @@ export class PayPalExecutionRail implements ExecutionSink {
       throw new Error("PAYMENT_AUTHORITY_MISSING");
     const g = asRow(grants[0]),
       r = asRow(reservations[0]);
+    for (const value of [
+      g.issued_at,
+      g.expires_at,
+      r.expires_at,
+      a.created_at,
+    ]) {
+      if (!Number.isFinite(persistedDate(value).getTime()))
+        throw new Error("MALFORMED_PAYMENT_AUTHORITY_TIME");
+    }
+    if (
+      ![
+        "NOT_STARTED",
+        "ORDER_CREATING",
+        "ORDER_CREATE_UNKNOWN",
+        "ORDER_CREATED",
+        "PAYER_ACTION_REQUIRED",
+        "CAPTURE_PENDING",
+        "CAPTURE_IN_FLIGHT",
+        "CAPTURE_UNKNOWN",
+        "CAPTURE_PENDING_PROVIDER",
+        "CAPTURED",
+        "FAILED",
+        "CANCELLED",
+      ].includes(String(a.status))
+    )
+      throw new Error("MALFORMED_PAYMENT_ATTEMPT_STATUS");
     if (g.status !== (finalized ? "CONSUMED" : "CLAIMED"))
       throw new Error("GRANT_FINALIZATION_STATE_INVALID");
     if (r.status !== (finalized ? "COMMITTED" : "EXECUTING"))
@@ -705,9 +790,48 @@ export class PayPalExecutionRail implements ExecutionSink {
       r.currency !== a.currency
     )
       throw new Error("PAYMENT_AUTHORITY_BINDING_MISMATCH");
+    const mandate = await this.repo.getMandate(String(a.mandate_id), tx, true);
+    const proposal = await this.repo.getProposal(
+      String(a.proposal_id),
+      tx,
+      true,
+    );
+    const receipt = await this.repo.getReceipt(String(g.receipt_id), tx);
+    if (
+      !mandate ||
+      !proposal ||
+      !receipt ||
+      mandate.principalId !== a.principal_id ||
+      mandate.authorizedAgentId !== g.agent_id ||
+      proposal.agentId !== g.agent_id ||
+      proposal.mandateId !== a.mandate_id ||
+      proposal.amount.minor !== Number(a.amount_minor) ||
+      proposal.amount.currency !== a.currency ||
+      proposal.merchant.id !== a.merchant_reference ||
+      proposal.requestedCapability !== g.capability ||
+      proposalDigest(proposal) !== g.proposal_digest ||
+      receipt.proposalId !== a.proposal_id ||
+      receipt.mandateId !== a.mandate_id ||
+      receipt.agentId !== g.agent_id ||
+      receipt.amount.minor !== Number(a.amount_minor) ||
+      receipt.amount.currency !== a.currency ||
+      receipt.mandateFingerprint !== g.mandate_fingerprint ||
+      !["ALLOW", "ESCALATE"].includes(receipt.decision) ||
+      !["CREATE_ORDER", "CAPTURE_PAYMENT"].includes(String(g.capability))
+    )
+      throw new Error("PAYMENT_AUTHORITY_BINDING_MISMATCH");
+    await this.repo.assertReceiptProposal(String(g.receipt_id), proposal, tx);
+    await this.repo.assertGrantSnapshot(String(g.id), tx);
+    const claim =
+      await tx`select id from evidence_events where type='EXECUTION_AUTHORITY_CLAIMED' and data->>'grantId'=${String(g.id)} and data->>'reservationId'=${String(r.id)}`;
+    if (claim.length !== 1) throw new Error("PAYMENT_AUTHORITY_CLAIM_UNPROVEN");
     paypalMoney(Number(a.amount_minor), requiredString(a.currency, "CURRENCY"));
-    requiredString(a.create_order_request_id, "CREATE_REQUEST_ID");
-    requiredString(a.capture_request_id, "CAPTURE_REQUEST_ID");
+    if (
+      a.create_order_request_id !== requestId("create", String(a.id)) ||
+      a.capture_request_id !== requestId("capture", String(a.id)) ||
+      a.idempotency_key !== a.create_order_request_id
+    )
+      throw new Error("PAYMENT_REQUEST_KEY_BINDING_MISMATCH");
   }
   private assertOrder(
     a: Record<string, unknown>,
@@ -785,102 +909,68 @@ export class PayPalExecutionRail implements ExecutionSink {
   private async ensureAttempt(
     c: ExecutionGrantClaims,
   ): Promise<Record<string, unknown>> {
-    const id = randomUUID(),
-      create = requestId("create", id),
-      capture = requestId("capture", id);
-    await this.repo
-      .sql`insert into payment_attempts(id,reservation_id,grant_id,proposal_id,mandate_id,principal_id,provider,operation,amount_minor,currency,merchant_reference,idempotency_key,create_order_request_id,capture_request_id,status) values(${id},${c.reservationId},${c.jti},${c.proposalId},${c.mandateId},${c.principalId},'PAYPAL','CAPTURE',${c.amountMinor},${c.currency},${c.merchantId},${create},${create},${capture},'NOT_STARTED') on conflict(reservation_id) do nothing`;
-    const rows = await this.repo
-      .sql`select * from payment_attempts where reservation_id=${c.reservationId}`;
-    if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_PERSISTENCE_FAILED");
-    const a = asRow(rows[0]);
-    if (
-      a.grant_id !== c.jti ||
-      a.proposal_id !== c.proposalId ||
-      a.mandate_id !== c.mandateId ||
-      a.principal_id !== c.principalId ||
-      Number(a.amount_minor) !== c.amountMinor ||
-      a.currency !== c.currency
-    )
-      throw new Error("PAYMENT_ATTEMPT_BINDING_MISMATCH");
-    await this.repo.appendEvidence(
-      "PAYMENT_ATTEMPT_CREATED",
-      {
-        paymentAttemptId: String(a.id),
-        grantId: c.jti,
-        reservationId: c.reservationId,
-        amountMinor: c.amountMinor,
+    return this.repo.sql.begin(async (tx) => {
+      const grants =
+        await tx`select * from execution_grants where id=${c.jti} for update`;
+      const g = grants[0];
+      if (!g || !["CLAIMED", "CONSUMED"].includes(String(g.status)))
+        throw new Error("PAYMENT_GRANT_NOT_CLAIMED");
+      for (const [column, value] of Object.entries({
+        principal_id: c.principalId,
+        agent_id: c.agentId,
+        mandate_id: c.mandateId,
+        proposal_id: c.proposalId,
+        receipt_id: c.receiptId,
+        reservation_id: c.reservationId,
+        proposal_digest: c.proposalDigest,
+        mandate_fingerprint: c.mandateFingerprint,
+        capability: c.capability,
         currency: c.currency,
-      },
-      new Date().toISOString(),
-    );
-    return a;
-  }
-  private async capture(
-    c: ExecutionGrantClaims,
-    id: string,
-    order: PayPalOrderView,
-  ): Promise<{ readonly executionId: string }> {
-    const cap = order.captures[0];
-    if (!cap) {
-      await this.state(id, "CAPTURE_UNKNOWN", "PAYPAL_CAPTURE_UNKNOWN");
-      throw new ExecutionQuarantinedError("PAYPAL_CAPTURE_UNKNOWN");
-    }
-    if (
-      cap.amountValue !== paypalMoney(c.amountMinor, c.currency) ||
-      cap.currency !== c.currency
-    ) {
-      await this.fail(
-        id,
-        new PayPalProviderError(
-          "STATE_MISMATCH",
-          "PAYPAL_CAPTURE_BINDING_MISMATCH",
-        ),
-      );
-      throw new PayPalProviderError(
-        "STATE_MISMATCH",
-        "PAYPAL_CAPTURE_BINDING_MISMATCH",
-      );
-    }
-    if (cap.status === "COMPLETED") {
-      await this.repo
-        .sql`update payment_attempts set status='CAPTURED',provider_order_id=${order.id},provider_status=${order.status},provider_capture_id=${cap.id},provider_capture_status=${cap.status},captured_at=now(),updated_at=now() where id=${id}`;
-      await this.repo.appendEvidence(
-        "PAYPAL_CAPTURE_CONFIRMED",
+        merchant_id: c.merchantId,
+        kid: c.kid,
+        version: c.version,
+        audience: c.audience,
+      })) {
+        if (g[column] !== value)
+          throw new Error("PAYMENT_GRANT_BINDING_MISMATCH");
+      }
+      if (
+        Number(g.amount_minor) !== c.amountMinor ||
+        persistedDate(g.issued_at).toISOString() !== c.issuedAt ||
+        persistedDate(g.expires_at).toISOString() !== c.expiresAt
+      )
+        throw new Error("PAYMENT_GRANT_BINDING_MISMATCH");
+      const existing =
+        await tx`select * from payment_attempts where reservation_id=${c.reservationId}`;
+      if (existing[0]) {
+        const a = asRow(existing[0]);
+        if (a.grant_id !== c.jti)
+          throw new Error("PAYMENT_ATTEMPT_BINDING_MISMATCH");
+        return a;
+      }
+      if (g.status !== "CLAIMED") throw new Error("PAYMENT_AUTHORITY_MISSING");
+      const id = randomUUID(),
+        create = requestId("create", id),
+        capture = requestId("capture", id);
+      const now = this.clock();
+      const rows =
+        await tx`insert into payment_attempts(id,reservation_id,grant_id,proposal_id,mandate_id,principal_id,provider,operation,amount_minor,currency,merchant_reference,idempotency_key,create_order_request_id,capture_request_id,status,created_at,updated_at) values(${id},${c.reservationId},${c.jti},${c.proposalId},${c.mandateId},${c.principalId},'PAYPAL','CAPTURE',${c.amountMinor},${c.currency},${c.merchantId},${create},${create},${capture},'NOT_STARTED',${now},${now}) returning *`;
+      const a = asRow(rows[0]);
+      await this.assertAuthority(tx, a);
+      await this.repo.appendEvidenceInTransaction(
+        tx,
+        "PAYMENT_ATTEMPT_CREATED",
         {
           paymentAttemptId: id,
-          paypalOrderId: order.id,
-          paypalCaptureId: cap.id,
+          grantId: c.jti,
+          reservationId: c.reservationId,
           amountMinor: c.amountMinor,
           currency: c.currency,
         },
-        new Date().toISOString(),
+        now,
       );
-      return { executionId: cap.id };
-    }
-    if (cap.status === "PENDING") {
-      await this.state(
-        id,
-        "CAPTURE_PENDING_PROVIDER",
-        "PAYPAL_CAPTURE_PENDING",
-      );
-      throw new ExecutionQuarantinedError("PAYPAL_CAPTURE_PENDING");
-    }
-    if (["DECLINED", "DENIED", "REFUNDED", "REVERSED"].includes(cap.status)) {
-      await this.fail(
-        id,
-        new PayPalProviderError(
-          "DEFINITIVE_REJECTION",
-          "PAYPAL_CAPTURE_DECLINED",
-        ),
-      );
-      throw new PayPalProviderError(
-        "DEFINITIVE_REJECTION",
-        "PAYPAL_CAPTURE_DECLINED",
-      );
-    }
-    await this.state(id, "CAPTURE_UNKNOWN", "PAYPAL_CAPTURE_UNKNOWN");
-    throw new ExecutionQuarantinedError("PAYPAL_CAPTURE_UNKNOWN");
+      return a;
+    });
   }
   private assertBinding(
     a: Record<string, unknown>,
@@ -895,30 +985,6 @@ export class PayPalExecutionRail implements ExecutionSink {
         "STATE_MISMATCH",
         "PAYPAL_CAPTURE_BINDING_MISMATCH",
       );
-  }
-  private async state(
-    id: string,
-    status: string,
-    event: string,
-  ): Promise<void> {
-    await this.repo
-      .sql`update payment_attempts set status=${status},updated_at=now() where id=${id}`;
-    await this.repo.appendEvidence(
-      event,
-      { paymentAttemptId: id },
-      new Date().toISOString(),
-    );
-  }
-  private async fail(id: string, e: unknown): Promise<void> {
-    const classification =
-      e instanceof PayPalProviderError ? e.classification : "STATE_MISMATCH";
-    await this.repo
-      .sql`update payment_attempts set status='FAILED',failure_classification=${classification},updated_at=now() where id=${id}`;
-    await this.repo.appendEvidence(
-      "PAYMENT_FAILED",
-      { paymentAttemptId: id, classification },
-      new Date().toISOString(),
-    );
   }
 }
 

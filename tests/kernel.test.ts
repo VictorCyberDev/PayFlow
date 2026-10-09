@@ -196,3 +196,59 @@ describe("fingerprint security fields", () => {
       expect(mandateFingerprint(changed)).not.toBe(fp));
   }
 });
+
+describe("2E integer and lifetime boundaries", () => {
+  it.each(["agent", "mandate"])(
+    "%s expires exactly at the boundary",
+    (field) => {
+      const m = field === "mandate" ? { ...mandate, expiresAt: now } : mandate;
+      const a = field === "agent" ? { ...agent, expiresAt: now } : agent;
+      expect(
+        auth(m, a, { ...proposal(), mandateFingerprint: mandateFingerprint(m) })
+          .decision,
+      ).toBe("DENY");
+    },
+  );
+  it.each(["agent", "mandate"])(
+    "future-issued %s cannot authorize",
+    (field) => {
+      const future = "2026-10-10T00:00:00.000Z";
+      const m =
+        field === "mandate" ? { ...mandate, createdAt: future } : mandate;
+      const a = field === "agent" ? { ...agent, issuedAt: future } : agent;
+      expect(
+        auth(m, a, { ...proposal(), mandateFingerprint: mandateFingerprint(m) })
+          .decision,
+      ).toBe("DENY");
+    },
+  );
+  it("unsafe integer money cannot authorize", () => {
+    expect(
+      auth(
+        mandate,
+        agent,
+        proposal({
+          amount: { currency: "USD", minor: Number.MAX_SAFE_INTEGER + 1 },
+        }),
+      ).reasonCodes,
+    ).toEqual(["MALFORMED_INPUT"]);
+  });
+  it("arithmetic overflow is denied even without a cumulative limit", () => {
+    const { cumulativeLimitMinor: _limit, ...m } = mandate;
+    void _limit;
+    expect(
+      auth(
+        m,
+        agent,
+        { ...proposal(), mandateFingerprint: mandateFingerprint(m) },
+        "LOW",
+        Number.MAX_SAFE_INTEGER,
+      ).reasonCodes,
+    ).toContain("CUMULATIVE_LIMIT_EXCEEDED");
+  });
+  it("unrecognized merchant risk cannot become a default authorization", () => {
+    expect(
+      auth(mandate, agent, proposal(), "BOGUS" as MerchantRisk).decision,
+    ).toBe("DENY");
+  });
+});

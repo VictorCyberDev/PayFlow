@@ -101,6 +101,12 @@ run("Milestone 2C state-change edge cases", () => {
         "utf8",
       ),
     );
+    await repo.migrate(
+      await readFile(
+        "db/migrations/004_milestone_2e_security_boundary.sql",
+        "utf8",
+      ),
+    );
   });
   afterAll(async () => repo.close());
   beforeEach(async () => {

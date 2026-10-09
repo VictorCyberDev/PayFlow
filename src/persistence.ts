@@ -2,6 +2,7 @@ import postgres, { type Sql } from "postgres";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
+  PrincipalSchema,
   AgentPassportSchema,
   DecisionReceiptSchema,
   MandateSchema,
@@ -29,7 +30,7 @@ const transitions: Readonly<
 > = {
   PENDING: ["AUTHORIZED", "RELEASED", "EXPIRED", "FAILED"],
   AUTHORIZED: ["EXECUTING", "RELEASED", "EXPIRED", "FAILED"],
-  EXECUTING: ["COMMITTED", "RELEASED", "FAILED"],
+  EXECUTING: ["COMMITTED"],
   COMMITTED: [],
   RELEASED: [],
   EXPIRED: [],
@@ -48,7 +49,7 @@ export const ReservationSchema = z
     mandateId: z.string().min(1),
     proposalId: z.string().min(1),
     receiptId: z.string().min(1),
-    amountMinor: z.number().int().positive(),
+    amountMinor: z.number().int().safe().positive(),
     currency: z.string().regex(/^[A-Z]{3}$/),
     status: ReservationStatusSchema,
     expiresAt: z.string().datetime(),
@@ -105,6 +106,14 @@ function row(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+export function persistedDate(value: unknown): Date {
+  const date = new Date(
+    value instanceof Date ? value.getTime() : String(value),
+  );
+  if (!Number.isFinite(date.getTime()))
+    throw new Error("MALFORMED_PERSISTED_TIME");
+  return date;
+}
 export class PostgresTrustRepository {
   constructor(readonly sql: Sql) {}
   static connect(url: string): PostgresTrustRepository {
@@ -119,6 +128,7 @@ export class PostgresTrustRepository {
     });
   }
   async savePrincipal(p: Principal): Promise<void> {
+    PrincipalSchema.parse(p);
     await this
       .sql`insert into principals(id,display_name) values(${p.id},${p.displayName}) on conflict(id) do update set display_name=excluded.display_name`;
   }
@@ -131,15 +141,16 @@ export class PostgresTrustRepository {
     id: string,
     db: Sql = this.sql,
   ): Promise<AgentPassport | null> {
-    const rows = await db`select * from agent_passports where id=${id}`;
+    const rows =
+      await db`select * from agent_passports where id=${id} for update`;
     if (!rows[0]) return null;
     const r = row(rows[0]);
     return AgentPassportSchema.parse({
       id: r.id,
       principalId: r.principal_id,
       displayName: r.display_name,
-      issuedAt: new Date(String(r.issued_at)).toISOString(),
-      expiresAt: new Date(String(r.expires_at)).toISOString(),
+      issuedAt: persistedDate(r.issued_at).toISOString(),
+      expiresAt: persistedDate(r.expires_at).toISOString(),
       status: r.status,
       capabilities: r.capabilities,
     });
@@ -155,14 +166,66 @@ export class PostgresTrustRepository {
     lock = false,
   ): Promise<Mandate | null> {
     const rows = lock
-      ? await db`select document,fingerprint from mandates where id=${id} for update`
-      : await db`select document,fingerprint from mandates where id=${id}`;
+      ? await db`select * from mandates where id=${id} for update`
+      : await db`select * from mandates where id=${id}`;
     if (!rows[0]) return null;
     const r = row(rows[0]);
     const m = MandateSchema.parse(r.document);
-    if (mandateFingerprint(m) !== r.fingerprint)
+    if (
+      mandateFingerprint(m) !== r.fingerprint ||
+      m.id !== r.id ||
+      m.principalId !== r.principal_id ||
+      m.authorizedAgentId !== r.authorized_agent_id ||
+      m.nonce !== r.nonce ||
+      (m.cumulativeLimitMinor ?? null) !==
+        (r.cumulative_limit_minor === null
+          ? null
+          : asNumber(r.cumulative_limit_minor)) ||
+      Date.parse(m.createdAt) !== persistedDate(r.created_at).getTime() ||
+      Date.parse(m.expiresAt) !== persistedDate(r.expires_at).getTime()
+    )
       throw new Error("MALFORMED_PERSISTED_MANDATE");
     return m;
+  }
+  async assertGrantSnapshot(id: string, db: Sql = this.sql): Promise<void> {
+    const rows =
+      await db`select id from execution_grants g where id=${id} and authority_snapshot=to_jsonb(g)-ARRAY['status','claimed_at','consumed_at','failed_at','authority_snapshot']`;
+    if (rows.length !== 1) throw new Error("MALFORMED_PERSISTED_GRANT");
+  }
+  async assertMandateActive(id: string, db: Sql = this.sql): Promise<void> {
+    const rows =
+      await db`select revoked_at from mandates where id=${id} for update`;
+    if (!rows[0] || rows[0].revoked_at !== null)
+      throw new Error("MANDATE_REVOKED");
+  }
+  async revokeMandate(id: string, now: string): Promise<void> {
+    if (!Number.isFinite(Date.parse(now)))
+      throw new Error("INVALID_REVOCATION_TIME");
+    await this.sql.begin(async (tx) => {
+      const changed =
+        await tx`update mandates set revoked_at=${now} where id=${id} and revoked_at is null returning id`;
+      if (changed.length !== 1)
+        throw new Error("MANDATE_REVOCATION_STATE_INVALID");
+      await this.appendEvidenceInTransaction(
+        tx,
+        "MANDATE_REVOKED",
+        { mandateId: id },
+        now,
+      );
+    });
+  }
+  async assertReceiptProposal(
+    receiptId: string,
+    proposal: TransactionProposal,
+    db: Sql = this.sql,
+  ): Promise<void> {
+    const rows =
+      await db`select proposal_snapshot from decision_receipts where id=${receiptId}`;
+    if (
+      !rows[0] ||
+      canonical(rows[0].proposal_snapshot) !== canonical(proposal)
+    )
+      throw new Error("AUTHORIZATION_PROPOSAL_CHANGED");
   }
   async saveProposal(p: TransactionProposal): Promise<void> {
     const v = TransactionProposalSchema.parse(p);
@@ -172,13 +235,20 @@ export class PostgresTrustRepository {
   async getProposal(
     id: string,
     db: Sql = this.sql,
+    lock = false,
   ): Promise<TransactionProposal | null> {
-    const rows =
-      await db`select document,amount_minor,currency from transaction_proposals where id=${id}`;
+    const rows = lock
+      ? await db`select * from transaction_proposals where id=${id} for update`
+      : await db`select * from transaction_proposals where id=${id}`;
     if (!rows[0]) return null;
     const r = row(rows[0]);
     const p = TransactionProposalSchema.parse(r.document);
     if (
+      p.id !== r.id ||
+      p.agentId !== r.agent_id ||
+      p.mandateId !== r.mandate_id ||
+      p.nonce !== r.nonce ||
+      Date.parse(p.proposedAt) !== persistedDate(r.proposed_at).getTime() ||
       p.amount.minor !== asNumber(r.amount_minor) ||
       p.amount.currency !== r.currency
     )
@@ -196,16 +266,29 @@ export class PostgresTrustRepository {
   }
   async saveReceipt(r: DecisionReceipt, db: Sql = this.sql): Promise<void> {
     const v = DecisionReceiptSchema.parse(r);
-    await db`insert into decision_receipts(id,proposal_id,mandate_id,agent_id,decision,document,evaluated_at) values(${v.receiptId},${v.proposalId},${v.mandateId},${v.agentId},${v.decision},${db.json(v)},${v.evaluatedAt})`;
+    await db`insert into decision_receipts(id,proposal_id,mandate_id,agent_id,decision,document,evaluated_at,proposal_snapshot,document_hash) select ${v.receiptId},${v.proposalId},${v.mandateId},${v.agentId},${v.decision},${db.json(v)},${v.evaluatedAt},document,encode(sha256(convert_to(${db.json(v)}::jsonb::text,'UTF8')),'hex') from transaction_proposals where id=${v.proposalId}`;
   }
   async getReceipt(
     id: string,
     db: Sql = this.sql,
   ): Promise<DecisionReceipt | null> {
     const rows =
-      await db`select document from decision_receipts where id=${id}`;
+      await db`select *,encode(sha256(convert_to(document::text,'UTF8')),'hex') actual_hash from decision_receipts where id=${id}`;
     if (!rows[0]) return null;
-    return DecisionReceiptSchema.parse(row(rows[0]).document);
+    const r = row(rows[0]);
+    const receipt = DecisionReceiptSchema.parse(r.document);
+    if (
+      r.actual_hash !== r.document_hash ||
+      receipt.receiptId !== r.id ||
+      receipt.proposalId !== r.proposal_id ||
+      receipt.mandateId !== r.mandate_id ||
+      receipt.agentId !== r.agent_id ||
+      receipt.decision !== r.decision ||
+      Date.parse(receipt.evaluatedAt) !==
+        persistedDate(r.evaluated_at).getTime()
+    )
+      throw new Error("MALFORMED_PERSISTED_RECEIPT");
+    return receipt;
   }
   async saveApproval(a: DurableApproval, db: Sql = this.sql): Promise<void> {
     const v = DurableApprovalSchema.parse(a);
@@ -224,7 +307,7 @@ export class PostgresTrustRepository {
     db: Sql = this.sql,
   ): Promise<DurableApproval | null> {
     const rows =
-      await db`select id,receipt_id,proposal_id,principal_id,status,approved_at from approvals where receipt_id=${receiptId}`;
+      await db`select id,receipt_id,proposal_id,principal_id,status,approved_at from approvals where receipt_id=${receiptId} for update`;
     if (!rows[0]) return null;
     const r = row(rows[0]);
     return DurableApprovalSchema.parse({
@@ -233,7 +316,7 @@ export class PostgresTrustRepository {
       proposalId: r.proposal_id,
       principalId: r.principal_id,
       status: r.status,
-      approvedAt: new Date(String(r.approved_at)).toISOString(),
+      approvedAt: persistedDate(r.approved_at).toISOString(),
     });
   }
   async createReservation(r: Reservation, db: Sql = this.sql): Promise<void> {
@@ -256,7 +339,7 @@ export class PostgresTrustRepository {
       amountMinor: asNumber(r.amount_minor),
       currency: r.currency,
       status: r.status,
-      expiresAt: new Date(String(r.expires_at)).toISOString(),
+      expiresAt: persistedDate(r.expires_at).toISOString(),
     });
   }
   async authorityAccounting(
@@ -264,12 +347,18 @@ export class PostgresTrustRepository {
     cumulativeLimitMinor: number | undefined,
     db: Sql = this.sql,
   ): Promise<AuthorityAccounting> {
+    const tables = await db`select to_regclass('execution_grants') grants`;
+    if (tables[0]?.grants) {
+      const inconsistent =
+        await db`select g.id from execution_grants g join authorization_reservations r on r.id=g.reservation_id join mandates m on m.id=r.mandate_id where r.mandate_id=${mandateId} and (g.proposal_id<>r.proposal_id or g.receipt_id<>r.receipt_id or g.mandate_id<>r.mandate_id or g.principal_id<>m.principal_id or g.amount_minor<>r.amount_minor or g.currency<>r.currency or (g.status='CLAIMED' and r.status<>'EXECUTING') or (g.status='CONSUMED' and r.status<>'COMMITTED') or (r.status='COMMITTED' and g.status<>'CONSUMED')) limit 1`;
+      if (inconsistent.length) throw new Error("CORRUPT_AUTHORITY_ACCOUNTING");
+    }
     const rows =
       await db`select coalesce(sum(amount_minor) filter (where status='COMMITTED'),0) committed, coalesce(sum(amount_minor) filter (where status in ('AUTHORIZED','EXECUTING')),0) reserved from authorization_reservations where mandate_id=${mandateId}`;
     const r = row(rows[0]);
     const committedMinor = asNumber(r.committed);
     const activeReservedMinor = asNumber(r.reserved);
-    const consumedMinor = committedMinor + activeReservedMinor;
+    const consumedMinor = asNumber(committedMinor + activeReservedMinor);
     return Object.freeze({
       committedMinor,
       activeReservedMinor,
@@ -279,6 +368,20 @@ export class PostgresTrustRepository {
           ? null
           : Math.max(0, cumulativeLimitMinor - consumedMinor),
     });
+  }
+  async assertManualTransition(
+    id: string,
+    to: ReservationStatus,
+    db: Sql,
+  ): Promise<void> {
+    if (to !== "EXECUTING" && to !== "COMMITTED") return;
+    const tables = await db`select to_regclass('execution_grants') grants`;
+    if (tables[0]?.grants) {
+      const rows =
+        await db`select id from execution_grants where reservation_id=${id}`;
+      if (rows.length)
+        throw new Error("EXECUTION_BOUNDARY_TRANSITION_REQUIRED");
+    }
   }
   async transitionReservation(
     id: string,
@@ -292,7 +395,11 @@ export class PostgresTrustRepository {
       const from = ReservationStatusSchema.parse(row(rows[0]).status);
       if (!canTransitionReservation(from, to))
         throw new Error("INVALID_RESERVATION_TRANSITION");
-      await tx`update authorization_reservations set status=${to},updated_at=now() where id=${id}`;
+      await this.assertManualTransition(id, to, tx);
+      const changed =
+        await tx`update authorization_reservations set status=${to},updated_at=now() where id=${id} returning id`;
+      if (changed.length !== 1)
+        throw new Error("RESERVATION_TRANSITION_FAILED");
     });
   }
   async expireStaleReservations(now: string): Promise<number> {
@@ -318,6 +425,8 @@ export class PostgresTrustRepository {
     occurredAt: string,
   ): Promise<DurableEvidence> {
     await db`select pg_advisory_xact_lock(731991)`;
+    if (!PostgresTrustRepository.verifyEvidence(await this.evidence(db)))
+      throw new Error("EVIDENCE_INTEGRITY_FAILURE");
     const rows =
       await db`select sequence,hash from evidence_events order by sequence desc limit 1`;
     const last = rows[0] ? row(rows[0]) : null;
@@ -331,12 +440,12 @@ export class PostgresTrustRepository {
       previousHash: last ? String(last.hash) : null,
     };
     const hash = evidenceHash(unsigned);
-    await db`insert into evidence_events(id,type,occurred_at,data,previous_hash,hash) values(${unsigned.id},${type},${occurredAt},${db.json(data)},${unsigned.previousHash},${hash})`;
+    await db`insert into evidence_events(sequence,id,type,occurred_at,data,previous_hash,hash) values(${sequence},${unsigned.id},${type},${occurredAt},${db.json(data)},${unsigned.previousHash},${hash})`;
     return Object.freeze({ ...unsigned, hash });
   }
-  async evidence(): Promise<readonly DurableEvidence[]> {
-    const rows = await this
-      .sql`select sequence,id,type,occurred_at,data,previous_hash,hash from evidence_events order by sequence`;
+  async evidence(db: Sql = this.sql): Promise<readonly DurableEvidence[]> {
+    const rows =
+      await db`select sequence,id,type,occurred_at,data,previous_hash,hash from evidence_events order by sequence`;
     return rows.map((value) => {
       const r = row(value);
       const data = z
@@ -352,7 +461,7 @@ export class PostgresTrustRepository {
         occurredAt: z
           .string()
           .datetime()
-          .parse(new Date(String(r.occurred_at)).toISOString()),
+          .parse(persistedDate(r.occurred_at).toISOString()),
         data,
         previousHash:
           r.previous_hash === null

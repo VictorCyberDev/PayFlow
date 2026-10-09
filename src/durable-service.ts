@@ -43,10 +43,14 @@ export class DurableAuthorizationService {
     if (!Number.isFinite(Date.parse(now)))
       throw new Error("INVALID_AUTHORIZATION_TIME");
     return this.repo.sql.begin(async (tx) => {
-      const proposal = await this.repo.getProposal(proposalId, tx);
+      let proposal = await this.repo.getProposal(proposalId, tx);
       if (!proposal) throw new Error("PROPOSAL_NOT_FOUND");
       const mandate = await this.repo.getMandate(proposal.mandateId, tx, true);
       if (!mandate) throw new Error("MANDATE_NOT_FOUND");
+      await this.repo.assertMandateActive(mandate.id, tx);
+      proposal = await this.repo.getProposal(proposalId, tx, true);
+      if (!proposal || proposal.mandateId !== mandate.id)
+        throw new Error("PROPOSAL_BINDING_MISMATCH");
       const agent = await this.repo.getAgent(proposal.agentId, tx);
       if (!agent) throw new Error("AGENT_NOT_FOUND");
       const prior =
@@ -139,10 +143,16 @@ export class DurableAuthorizationService {
       const receipt = await this.repo.getReceipt(receiptId, tx);
       if (!receipt || receipt.decision !== "ESCALATE")
         throw new Error("APPROVAL_NOT_APPLICABLE");
-      const proposal = await this.repo.getProposal(receipt.proposalId, tx);
+      let proposal = await this.repo.getProposal(receipt.proposalId, tx);
       if (!proposal) throw new Error("PROPOSAL_NOT_FOUND");
+      await this.repo.assertReceiptProposal(receiptId, proposal, tx);
       const mandate = await this.repo.getMandate(receipt.mandateId, tx, true);
       if (!mandate) throw new Error("MANDATE_NOT_FOUND");
+      await this.repo.assertMandateActive(mandate.id, tx);
+      proposal = await this.repo.getProposal(receipt.proposalId, tx, true);
+      if (!proposal || proposal.mandateId !== mandate.id)
+        throw new Error("PROPOSAL_BINDING_MISMATCH");
+      await this.repo.assertReceiptProposal(receiptId, proposal, tx);
       if (mandate.principalId !== principalId)
         throw new Error("APPROVAL_PRINCIPAL_MISMATCH");
       if (await this.repo.getApprovalByReceipt(receiptId, tx))
@@ -216,7 +226,11 @@ export class DurableAuthorizationService {
         throw new Error("INVALID_RESERVATION_TRANSITION");
       const mandateId = String(rows[0].mandate_id);
       await tx`select id from mandates where id=${mandateId} for update`;
-      await tx`update authorization_reservations set status=${to},updated_at=${now} where id=${id}`;
+      await this.repo.assertManualTransition(id, to, tx);
+      const changed =
+        await tx`update authorization_reservations set status=${to},updated_at=${now} where id=${id} returning id`;
+      if (changed.length !== 1)
+        throw new Error("RESERVATION_TRANSITION_FAILED");
       await this.repo.appendEvidenceInTransaction(
         tx,
         `RESERVATION_${to}`,

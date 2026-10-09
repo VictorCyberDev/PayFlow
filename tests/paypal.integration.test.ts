@@ -1,9 +1,19 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { generateKeyPairSync } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { mandateFingerprint } from "../src/canonical.js";
 import { DurableAuthorizationService } from "../src/durable-service.js";
 import {
+  ExecutionBoundary,
+  StaticPublicKeyRing,
   ExecutionGrantIssuer,
   type ExecutionGrantClaims,
 } from "../src/execution-grant.js";
@@ -19,6 +29,7 @@ import {
   type PaymentProvider,
   type PayPalOrderView,
 } from "../src/paypal.js";
+import { ExecutionQuarantinedError } from "../src/execution-outcome.js";
 import { PostgresTrustRepository } from "../src/persistence.js";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -80,6 +91,9 @@ class RecoveryProvider implements PaymentProvider {
   afterGet?: () => Promise<void>;
   captureResult?: (order: PayPalOrderView) => PayPalOrderView;
   checkNetworkBoundary?: () => Promise<void>;
+  afterCreate?: () => Promise<void>;
+  afterCapture?: () => Promise<void>;
+  readonly capturedByKey = new Map<string, PayPalOrderView>();
   async createOrder(
     input: Parameters<PaymentProvider["createOrder"]>[0],
   ): Promise<PayPalOrderView> {
@@ -105,6 +119,7 @@ class RecoveryProvider implements PaymentProvider {
         captures: [],
       };
     }
+    await this.afterCreate?.();
     if (this.createLosses-- > 0)
       throw new PayPalProviderError("AMBIGUOUS", "CREATE_RESPONSE_LOST");
     if (!this.order) throw new Error("ORDER_NOT_FOUND");
@@ -121,6 +136,8 @@ class RecoveryProvider implements PaymentProvider {
     await this.checkNetworkBoundary?.();
     this.calls.push("CAPTURE");
     this.captureIds.push(requestId);
+    const prior = this.capturedByKey.get(requestId);
+    if (prior) return prior;
     if (!this.order || this.order.id !== id) throw new Error("ORDER_NOT_FOUND");
     const lost = this.captureLosses-- > 0;
     if ((!lost || this.captureDespiteLoss) && !this.order.captures.length) {
@@ -138,6 +155,9 @@ class RecoveryProvider implements PaymentProvider {
         ],
       };
     }
+    if (this.order.captures.length)
+      this.capturedByKey.set(requestId, this.order);
+    await this.afterCapture?.();
     if (lost)
       throw new PayPalProviderError("AMBIGUOUS", "CAPTURE_RESPONSE_LOST");
     return this.captureResult ? this.captureResult(this.order) : this.order;
@@ -149,7 +169,7 @@ run("Milestone 2D durable PayPal execution", () => {
   let auth: DurableAuthorizationService;
   let issuer: ExecutionGrantIssuer;
   const now = "2026-10-09T12:00:00.000Z";
-  const { privateKey } = generateKeyPairSync("ed25519");
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const principal: Principal = { id: "p2d", displayName: "Principal" };
   const agent: AgentPassport = {
     id: "a2d",
@@ -215,6 +235,12 @@ run("Milestone 2D durable PayPal execution", () => {
         "utf8",
       ),
     );
+    await repo.migrate(
+      await readFile(
+        "db/migrations/004_milestone_2e_security_boundary.sql",
+        "utf8",
+      ),
+    );
   });
   afterAll(async () => repo.close());
   beforeEach(async () => {
@@ -222,7 +248,7 @@ run("Milestone 2D durable PayPal execution", () => {
     await repo.savePrincipal(principal);
     await repo.saveAgent(agent);
     await repo.saveMandate(mandate);
-    auth = new DurableAuthorizationService(repo, 60_000);
+    auth = new DurableAuthorizationService(repo, 15 * 60_000);
     issuer = new ExecutionGrantIssuer(repo, "2d-key", privateKey);
   });
   async function claimed(): Promise<{
@@ -236,15 +262,26 @@ run("Milestone 2D durable PayPal execution", () => {
     const claims = JSON.parse(
       Buffer.from(token.split(".")[0]!, "base64url").toString("utf8"),
     ) as ExecutionGrantClaims;
-    await repo.sql`update execution_grants set status='CLAIMED',claimed_at=${now} where id=${claims.jti}`;
-    await repo.sql`update authorization_reservations set status='EXECUTING' where id=${reservationId}`;
+    const crashBoundary = new ExecutionBoundary(
+      repo,
+      new StaticPublicKeyRing(new Map([["2d-key", publicKey]])),
+      {
+        execute: () =>
+          Promise.reject(
+            new ExecutionQuarantinedError("SIMULATED_CRASH_BEFORE_PROVIDER"),
+          ),
+      },
+    );
+    await expect(crashBoundary.execute(token, now)).rejects.toThrow(
+      "SIMULATED_CRASH_BEFORE_PROVIDER",
+    );
     return { claims, reservationId };
   }
 
   it("quarantines unknown capture and restart reconciliation discovers the existing capture exactly once", async () => {
     const { claims, reservationId } = await claimed();
     const provider = new LostResponseProvider();
-    const rail = new PayPalExecutionRail(repo, provider);
+    const rail = new PayPalExecutionRail(repo, provider, () => now);
     await expect(rail.execute(claims)).rejects.toThrow(
       "PAYPAL_CAPTURE_UNKNOWN",
     );
@@ -278,7 +315,7 @@ run("Milestone 2D durable PayPal execution", () => {
   it("concurrent duplicate rail invocation creates one logical attempt", async () => {
     const { claims } = await claimed();
     const provider = new LostResponseProvider();
-    const rail = new PayPalExecutionRail(repo, provider);
+    const rail = new PayPalExecutionRail(repo, provider, () => now);
     await Promise.allSettled([rail.execute(claims), rail.execute(claims)]);
     const attempts = await repo.sql`select id from payment_attempts`;
     expect(attempts).toHaveLength(1);
@@ -291,7 +328,7 @@ run("Milestone 2D durable PayPal execution", () => {
   }> {
     const { claims, reservationId } = await claimed();
     await expect(
-      new PayPalExecutionRail(repo, provider).execute(claims),
+      new PayPalExecutionRail(repo, provider, () => now).execute(claims),
     ).rejects.toThrow("UNKNOWN");
     const rows = await repo.sql`select * from payment_attempts`;
     expect(rows).toHaveLength(1);
@@ -393,7 +430,7 @@ run("Milestone 2D durable PayPal execution", () => {
     const { id } = await unknown(provider);
     await quarantined(id, "CAPTURE_UNKNOWN");
     expect(await restartRecovery(provider, id)).toBe("CAPTURED");
-    expect(provider.calls).toEqual(["CREATE", "CAPTURE", "GET"]);
+    expect(provider.calls).toEqual(["CREATE", "GET", "CAPTURE", "GET"]);
     expect(provider.captureIds).toHaveLength(1);
     expect(provider.financialSideEffects).toBe(1);
   });
@@ -406,7 +443,13 @@ run("Milestone 2D durable PayPal execution", () => {
     const before =
       await repo.sql`select capture_request_id from payment_attempts where id=${id}`;
     expect(await restartRecovery(provider, id)).toBe("CAPTURED");
-    expect(provider.calls).toEqual(["CREATE", "CAPTURE", "GET", "CAPTURE"]);
+    expect(provider.calls).toEqual([
+      "CREATE",
+      "GET",
+      "CAPTURE",
+      "GET",
+      "CAPTURE",
+    ]);
     expect(provider.captureIds).toEqual([
       before[0]!.capture_request_id,
       before[0]!.capture_request_id,
@@ -426,6 +469,7 @@ run("Milestone 2D durable PayPal execution", () => {
     expect(await restartRecovery(provider, id)).toBe("CAPTURE_UNKNOWN");
     expect(provider.calls).toEqual([
       "CREATE",
+      "GET",
       "CAPTURE",
       "GET",
       "CAPTURE",
@@ -648,7 +692,7 @@ run("Milestone 2D durable PayPal execution", () => {
       provider.captureDespiteLoss = false;
       const { id } = await unknown(provider);
       expect(
-        await new PayPalExecutionRail(repo, provider).reconcile(
+        await new PayPalExecutionRail(repo, provider, () => now).reconcile(
           id,
           "2026-10-09T18:00:00.000Z",
         ),
@@ -689,7 +733,13 @@ run("Milestone 2D durable PayPal execution", () => {
         return { ...order, status: "APPROVED" };
       };
       await expect(restartRecovery(provider, id)).rejects.toThrow("MISMATCH");
-      expect(provider.calls).toEqual(["CREATE", "CAPTURE", "GET", "CAPTURE"]);
+      expect(provider.calls).toEqual([
+        "CREATE",
+        "GET",
+        "CAPTURE",
+        "GET",
+        "CAPTURE",
+      ]);
       expect(provider.captureIds[1]).toBe(provider.captureIds[0]);
       expect(provider.financialSideEffects).toBe(1);
       await quarantined(id, "CAPTURE_UNKNOWN");
@@ -738,4 +788,449 @@ run("Milestone 2D durable PayPal execution", () => {
       expect(provider.captureIds).toHaveLength(1);
     },
   );
+
+  async function issued(): Promise<string> {
+    await repo.saveProposal(proposal);
+    const result = await auth.authorizeProposal(proposal.id, "LOW", now);
+    return issuer.issue(result.reservation!.id, now);
+  }
+  function boundary(
+    provider: RecoveryProvider,
+    repository = repo,
+  ): ExecutionBoundary {
+    return new ExecutionBoundary(
+      repository,
+      new StaticPublicKeyRing(new Map([["2d-key", publicKey]])),
+      new PayPalExecutionRail(repository, provider, () => now),
+    );
+  }
+  async function states(): Promise<void> {
+    const rows =
+      await repo.sql`select g.status grant_status,r.status reservation_status from execution_grants g join authorization_reservations r on r.id=g.reservation_id`;
+    expect(rows[0]).toMatchObject({
+      grant_status: "CLAIMED",
+      reservation_status: "EXECUTING",
+    });
+    expect(
+      (await repo.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
+    ).toHaveLength(0);
+  }
+  it("2E complete signed flow commits all three objects once, including concurrent callers and post-response restart", async () => {
+    const token = await issued(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    const second = PostgresTrustRepository.connect(url!);
+    try {
+      const results = await Promise.allSettled([
+        boundary(provider).execute(token, now),
+        boundary(provider, second).execute(token, now),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect(provider.financialSideEffects).toBe(1);
+      expect(provider.logicalOrders).toBe(1);
+      const rows = await repo.sql`select * from payment_attempts`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.status).toBe("CAPTURED");
+      expect(
+        await new PayPalExecutionRail(second, provider).reconcile(
+          String(rows[0]?.id),
+          recoveryTime,
+        ),
+      ).toBe("CAPTURED");
+      expect(provider.captureIds).toHaveLength(1);
+      expect(
+        (await repo.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
+      ).toHaveLength(1);
+      expect(
+        PostgresTrustRepository.verifyEvidence(await repo.evidence()),
+      ).toBe(true);
+    } finally {
+      await second.close();
+    }
+  });
+  it("2E finalization failure after provider success rolls back every local transition and preserves a valid evidence chain", async () => {
+    const token = await issued(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    const original = repo.appendEvidenceInTransaction.bind(repo);
+    const spy = vi
+      .spyOn(repo, "appendEvidenceInTransaction")
+      .mockImplementation(async (db, type, data, time) => {
+        if (type === "PAYMENT_COMMITTED")
+          throw new Error("INJECTED_COMMIT_FAILURE");
+        return original(db, type, data, time);
+      });
+    try {
+      await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+        "INVESTIGATION",
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    await states();
+    expect(provider.financialSideEffects).toBe(1);
+    const rows = await repo.sql`select * from payment_attempts`;
+    expect(rows[0]?.status).toBe("CAPTURE_IN_FLIGHT");
+    expect(await restartRecovery(provider, String(rows[0]?.id))).toBe(
+      "CAPTURED",
+    );
+    expect(provider.captureIds).toHaveLength(1);
+    expect(provider.financialSideEffects).toBe(1);
+    expect(PostgresTrustRepository.verifyEvidence(await repo.evidence())).toBe(
+      true,
+    );
+  });
+  it("2E lost response followed by grant replay cannot start another independent operation", async () => {
+    const token = await issued(),
+      provider = new RecoveryProvider();
+    await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+      "UNKNOWN",
+    );
+    await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+      "CONSUMED",
+    );
+    const ids = await new PayPalExecutionRail(
+      repo,
+      provider,
+    ).reconciliationCandidates();
+    expect(ids).toHaveLength(1);
+    expect(await restartRecovery(provider, ids[0]!)).toBe("CAPTURED");
+    expect(provider.financialSideEffects).toBe(1);
+    expect(provider.captureIds).toHaveLength(1);
+  });
+  it.each([
+    "SUSPENDED",
+    "REVOKED",
+    "EXPIRED",
+    "MANDATE_REVOKED",
+    "GRANT_EXPIRED",
+  ])("2E %s after GET prevents a new financial retry", async (change) => {
+    const provider = new RecoveryProvider();
+    provider.captureDespiteLoss = false;
+    const { id } = await unknown(provider);
+    provider.afterGet = async () => {
+      if (change === "MANDATE_REVOKED")
+        await repo.revokeMandate(mandate.id, recoveryTime);
+      else if (change === "GRANT_EXPIRED") {
+        /* Natural expiration uses the reconciliation clock below. */
+      } else if (change === "EXPIRED")
+        await repo.sql`update agent_passports set expires_at=${recoveryTime} where id=${agent.id}`;
+      else
+        await repo.sql`update agent_passports set status=${change} where id=${agent.id}`;
+    };
+    await expect(
+      change === "GRANT_EXPIRED"
+        ? new PayPalExecutionRail(repo, provider).reconcile(
+            id,
+            "2026-10-09T12:03:00.000Z",
+          )
+        : restartRecovery(provider, id),
+    ).rejects.toThrow();
+    await quarantined(id, "CAPTURE_UNKNOWN");
+    expect(provider.captureIds).toHaveLength(1);
+    expect(provider.financialSideEffects).toBe(0);
+  });
+  it.each([
+    "SUSPENDED",
+    "REVOKED",
+    "EXPIRED",
+    "MANDATE_REVOKED",
+    "GRANT_EXPIRED",
+  ])(
+    "2E %s after completed provider effect cannot undo it and does not prevent truthful finalization",
+    async (change) => {
+      const provider = new RecoveryProvider();
+      const { id } = await unknown(provider);
+      if (change === "MANDATE_REVOKED")
+        await repo.revokeMandate(mandate.id, recoveryTime);
+      else if (change === "GRANT_EXPIRED") {
+        /* Natural expiration uses the reconciliation clock below. */
+      } else if (change === "EXPIRED")
+        await repo.sql`update agent_passports set expires_at=${recoveryTime} where id=${agent.id}`;
+      else
+        await repo.sql`update agent_passports set status=${change} where id=${agent.id}`;
+      expect(
+        await (change === "GRANT_EXPIRED"
+          ? new PayPalExecutionRail(repo, provider).reconcile(
+              id,
+              "2026-10-09T12:03:00.000Z",
+            )
+          : restartRecovery(provider, id)),
+      ).toBe("CAPTURED");
+      expect(provider.financialSideEffects).toBe(1);
+      expect(provider.captureIds).toHaveLength(1);
+    },
+  );
+  it("2E suspension after create dispatch prevents capture without releasing authority", async () => {
+    const token = await issued(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    provider.afterCreate = async () => {
+      await repo.sql`update agent_passports set status='SUSPENDED' where id=${agent.id}`;
+    };
+    await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+      "INVESTIGATION",
+    );
+    await states();
+    expect(provider.captureIds).toHaveLength(0);
+    expect(provider.financialSideEffects).toBe(0);
+  });
+  it("2E authority claimed before process death resumes the same grant and never reissues it", async () => {
+    const { claims } = await claimed(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    expect(await repo.sql`select id from payment_attempts`).toHaveLength(0);
+    await expect(issuer.issue(claims.reservationId, now)).rejects.toThrow(
+      "NOT_EXECUTABLE",
+    );
+    const result = await new PayPalExecutionRail(
+      repo,
+      provider,
+      () => now,
+    ).execute(claims);
+    expect(result.executionId).toBe("RECOVERED-CAPTURE");
+    expect(provider.financialSideEffects).toBe(1);
+    expect(await repo.sql`select id from execution_grants`).toHaveLength(1);
+  });
+  it("2E create uncertainty after revocation cannot retry the create operation", async () => {
+    const provider = new RecoveryProvider();
+    provider.createLosses = 1;
+    const { id } = await unknown(provider);
+    await repo.revokeMandate(mandate.id, recoveryTime);
+    await expect(restartRecovery(provider, id)).rejects.toThrow("REVOKED");
+    expect(provider.createIds).toHaveLength(1);
+    await quarantined(id, "ORDER_CREATE_UNKNOWN");
+  });
+  it.each(["RELEASED", "FAILED"])(
+    "2E reservation APIs cannot turn executing uncertainty into %s",
+    async (status) => {
+      const provider = new RecoveryProvider();
+      const { id, reservationId } = await unknown(provider);
+      await expect(
+        repo.transitionReservation(
+          reservationId,
+          status as "RELEASED" | "FAILED",
+        ),
+      ).rejects.toThrow("INVALID_RESERVATION_TRANSITION");
+      await expect(
+        auth.transitionReservation(
+          reservationId,
+          status as "RELEASED" | "FAILED",
+          recoveryTime,
+        ),
+      ).rejects.toThrow("INVALID_RESERVATION_TRANSITION");
+      expect(
+        await auth.expireStaleReservations("2026-11-02T00:00:00.000Z"),
+      ).toBe(0);
+      await quarantined(id, "CAPTURE_UNKNOWN");
+    },
+  );
+  it("2E GET-to-retry race relies on the identical key when capture becomes visible after the GET snapshot", async () => {
+    const provider = new RecoveryProvider();
+    provider.captureDespiteLoss = false;
+    const { id } = await unknown(provider);
+    const get = provider.getOrder.bind(provider);
+    provider.getOrder = async (orderId) => {
+      const snapshot = structuredClone(await get(orderId));
+      // Another in-flight delivery of this same operation completes at PayPal.
+      provider.captureLosses = 0;
+      await provider.captureOrder(orderId, provider.captureIds[0]!);
+      return snapshot;
+    };
+    expect(await restartRecovery(provider, id)).toBe("CAPTURED");
+    expect(provider.captureIds).toHaveLength(3);
+    expect(new Set(provider.captureIds).size).toBe(1);
+    expect(provider.financialSideEffects).toBe(1);
+  });
+  it("2E delayed capture visibility still converges using the persisted key without another financial effect", async () => {
+    const provider = new RecoveryProvider();
+    const { id } = await unknown(provider);
+    const completed = structuredClone(provider.order!);
+    provider.order = { ...completed, status: "APPROVED", captures: [] };
+    expect(await restartRecovery(provider, id)).toBe("CAPTURED");
+    expect(provider.captureIds[1]).toBe(provider.captureIds[0]);
+    expect(provider.financialSideEffects).toBe(1);
+  });
+  it.each(["id", "amount", "currency", "reference", "status", "multiple"])(
+    "2E malformed %s capture response during normal execution never releases authority or commits",
+    async (field) => {
+      const token = await issued(),
+        provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      provider.captureResult = (order) => {
+        const value = structuredClone(order);
+        if (field === "id") return { ...value, id: "SUBSTITUTED-ORDER" };
+        if (field === "reference")
+          return {
+            ...value,
+            purchaseUnits: [
+              {
+                ...value.purchaseUnits[0]!,
+                referenceId: "SUBSTITUTED-PROPOSAL",
+              },
+            ],
+          };
+        if (field === "status") return { ...value, status: "UNRECOGNIZED" };
+        if (field === "multiple")
+          return {
+            ...value,
+            captures: [
+              ...value.captures,
+              { ...value.captures[0]!, id: "SECOND" },
+            ],
+          };
+        return {
+          ...value,
+          captures: [
+            {
+              ...value.captures[0]!,
+              ...(field === "amount"
+                ? { amountValue: "0.01" }
+                : { currency: "EUR" }),
+            },
+          ],
+        };
+      };
+      await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+        "INVESTIGATION",
+      );
+      await states();
+      expect(provider.financialSideEffects).toBe(1);
+      const rows = await repo.sql`select id from payment_attempts`;
+      expect(await restartRecovery(provider, String(rows[0]?.id))).toBe(
+        "CAPTURED",
+      );
+      expect(provider.captureIds).toHaveLength(1);
+    },
+  );
+  it.each([
+    "principal_id",
+    "agent_id",
+    "capability",
+    "merchant_id",
+    "proposal_digest",
+    "mandate_fingerprint",
+  ])(
+    "2E corrupted persisted grant %s cannot drive a provider retry",
+    async (field) => {
+      const provider = new RecoveryProvider();
+      provider.captureDespiteLoss = false;
+      const { id } = await unknown(provider);
+      if (field === "principal_id")
+        await repo.savePrincipal({
+          id: "other-principal",
+          displayName: "Other",
+        });
+      if (field === "agent_id")
+        await repo.saveAgent({ ...agent, id: "other-agent" });
+      const value =
+        field === "principal_id"
+          ? "other-principal"
+          : field === "agent_id"
+            ? "other-agent"
+            : field === "capability"
+              ? "SEARCH_PRODUCTS"
+              : field.endsWith("fingerprint") || field.endsWith("digest")
+                ? "0".repeat(64)
+                : "other-merchant";
+      await repo.sql`update execution_grants set ${repo.sql(field)}=${value} where status='CLAIMED'`;
+      await expect(restartRecovery(provider, id)).rejects.toThrow("MISMATCH");
+      expect(provider.financialSideEffects).toBe(0);
+      expect(provider.captureIds).toHaveLength(1);
+      expect(
+        (await repo.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
+      ).toHaveLength(0);
+    },
+  );
+  it("2E changing a proposal merchant after authorization cannot acquire a newly signed grant", async () => {
+    await repo.saveProposal(proposal);
+    const result = await auth.authorizeProposal(proposal.id, "LOW", now);
+    await repo.sql`update transaction_proposals set document=jsonb_set(document,'{merchant,id}','"OTHER-MERCHANT"'::jsonb) where id=${proposal.id}`;
+    await expect(issuer.issue(result.reservation!.id, now)).rejects.toThrow(
+      "AUTHORIZATION_PROPOSAL_CHANGED",
+    );
+    expect(await repo.sql`select id from execution_grants`).toHaveLength(0);
+  });
+  it("2E valid-schema receipt corruption cannot change authorization", async () => {
+    await repo.saveProposal(proposal);
+    const result = await auth.authorizeProposal(proposal.id, "LOW", now);
+    await repo.sql`update decision_receipts set document=jsonb_set(document,'{amount,minor}','1'::jsonb) where id=${result.receipt.receiptId}`;
+    await expect(issuer.issue(result.reservation!.id, now)).rejects.toThrow(
+      "MALFORMED_PERSISTED_RECEIPT",
+    );
+  });
+  it("2E receipt snapshots retain history while changed ESCALATE proposals cannot acquire approval", async () => {
+    const escalated = { ...mandate, autonomousPurchaseThresholdMinor: 1000 };
+    await repo.sql`update mandates set document=${repo.sql.json(escalated)},fingerprint=${mandateFingerprint(escalated)} where id=${mandate.id}`;
+    await repo.saveProposal({
+      ...proposal,
+      mandateFingerprint: mandateFingerprint(escalated),
+    });
+    const result = await auth.authorizeProposal(proposal.id, "LOW", now);
+    expect(result.receipt.decision).toBe("ESCALATE");
+    await repo.sql`update transaction_proposals set document=jsonb_set(document,'{merchant,id}','"OTHER-MERCHANT"'::jsonb) where id=${proposal.id}`;
+    await expect(
+      auth.approveEscalation(result.receipt.receiptId, principal.id, now),
+    ).rejects.toThrow("AUTHORIZATION_PROPOSAL_CHANGED");
+    expect((await repo.getReceipt(result.receipt.receiptId))?.decision).toBe(
+      "ESCALATE",
+    );
+    expect(
+      await repo.sql`select id from authorization_reservations`,
+    ).toHaveLength(0);
+  });
+  it("2E evidence insertion rollback neither consumes authority nor breaks the next hash-chain sequence", async () => {
+    await expect(
+      repo.sql.begin(async (tx) => {
+        await repo.appendEvidenceInTransaction(
+          tx,
+          "INJECTED_ROLLBACK",
+          { test: true },
+          now,
+        );
+        throw new Error("CRASH");
+      }),
+    ).rejects.toThrow("CRASH");
+    await repo.appendEvidence("AFTER_RESTART", { test: true }, now);
+    const entries = await repo.evidence();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.sequence).toBe(1);
+    expect(PostgresTrustRepository.verifyEvidence(entries)).toBe(true);
+  });
+  it("2E a corrupt evidence chain cannot be extended into false payment commitment", async () => {
+    const token = await issued(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    await repo.sql`update evidence_events set data='{"corrupt":true}'::jsonb where sequence=1`;
+    await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+      "EVIDENCE_INTEGRITY_FAILURE",
+    );
+    expect(provider.financialSideEffects).toBe(0);
+    expect(provider.logicalOrders).toBe(0);
+    expect(PostgresTrustRepository.verifyEvidence(await repo.evidence())).toBe(
+      false,
+    );
+  });
+
+  it("2E an unclassified sink failure is quarantined and redacted rather than releasing authority", async () => {
+    const token = await issued();
+    let effects = 0;
+    const raw = "SYNTHETIC_SECRET_FROM_PROVIDER";
+    const execution = new ExecutionBoundary(
+      repo,
+      new StaticPublicKeyRing(new Map([["2d-key", publicKey]])),
+      {
+        execute: () => {
+          effects++;
+          return Promise.reject(new Error(raw));
+        },
+      },
+    );
+    await expect(execution.execute(token, now)).rejects.toThrow(
+      "EXECUTION_OUTCOME_UNPROVEN",
+    );
+    expect(effects).toBe(1);
+    await states();
+    expect(JSON.stringify(await repo.evidence())).not.toContain(raw);
+  });
 });

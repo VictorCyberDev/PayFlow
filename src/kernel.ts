@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mandateFingerprint } from "./canonical.js";
 import {
+  MerchantRiskSchema,
   AgentPassportSchema,
   MandateSchema,
   TransactionProposalSchema,
@@ -68,8 +69,9 @@ export function authorize(
     !mandateResult.success ||
     !agentResult.success ||
     !proposalResult.success ||
-    !Number.isInteger(context.cumulativeSpentMinor) ||
+    !Number.isSafeInteger(context.cumulativeSpentMinor) ||
     context.cumulativeSpentMinor < 0 ||
+    !MerchantRiskSchema.safeParse(context.merchantRisk).success ||
     !Number.isFinite(Date.parse(context.now))
   ) {
     return {
@@ -100,7 +102,10 @@ export function authorize(
     if (!reasons.includes(code)) reasons.push(code);
   };
 
-  checks.mandate = now <= Date.parse(mandate.expiresAt) ? "PASS" : "FAIL";
+  checks.mandate =
+    now >= Date.parse(mandate.createdAt) && now < Date.parse(mandate.expiresAt)
+      ? "PASS"
+      : "FAIL";
   if (checks.mandate === "FAIL") fail("MANDATE_EXPIRED");
 
   const fingerprint = mandateFingerprint(mandate);
@@ -118,14 +123,16 @@ export function authorize(
   checks.agentAuthority =
     agentMatches &&
     agent.status === "ACTIVE" &&
-    now <= Date.parse(agent.expiresAt)
+    now >= Date.parse(agent.issuedAt) &&
+    now < Date.parse(agent.expiresAt)
       ? "PASS"
       : "FAIL";
   if (!agentMatches) fail("AGENT_UNAUTHORIZED");
   if (agent.status === "SUSPENDED" || agent.status === "REVOKED") {
     fail("AGENT_SUSPENDED");
   }
-  if (now > Date.parse(agent.expiresAt)) fail("AGENT_EXPIRED");
+  if (now >= Date.parse(agent.expiresAt) || now < Date.parse(agent.issuedAt))
+    fail("AGENT_EXPIRED");
 
   const capabilityAllowed =
     mandate.allowedCapabilities.includes(proposal.requestedCapability) &&
@@ -148,9 +155,12 @@ export function authorize(
   }
 
   const cumulativeAllowed =
-    mandate.cumulativeLimitMinor === undefined ||
-    context.cumulativeSpentMinor + proposal.amount.minor <=
-      mandate.cumulativeLimitMinor;
+    Number.isSafeInteger(
+      context.cumulativeSpentMinor + proposal.amount.minor,
+    ) &&
+    (mandate.cumulativeLimitMinor === undefined ||
+      context.cumulativeSpentMinor + proposal.amount.minor <=
+        mandate.cumulativeLimitMinor);
   checks.cumulativeBudget = cumulativeAllowed ? "PASS" : "FAIL";
   if (!cumulativeAllowed) fail("CUMULATIVE_LIMIT_EXCEEDED");
 

@@ -57,3 +57,12 @@ Order creation ambiguity is handled separately: safe retries reuse the same crea
 2D does not expose an insecure placeholder webhook. Explicit reconciliation is authoritative. Verified, replay-protected webhook ingestion may be added later using PayPal-supported authenticity verification and the same provider/local bindings.
 
 See `ADR-002-execution-grants.md` and `ADR-003-paypal-execution-reconciliation.md`.
+
+## Integrated Milestone 2E review
+
+[ADR 004](ADR-004-integrated-security-boundary.md) documents the integrated trust
+boundary, current-authority dispatch checks, fail-closed finalization, rollback-safe
+evidence, corruption detection, reconciliation discovery and adversarial matrices.
+The dispatch handoff is the revocation cutoff; GET plus retry is not atomic, and
+provider idempotency/retention remain external dependencies. Unknown authority is
+never released merely because a response or local commit failed.

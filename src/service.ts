@@ -20,7 +20,15 @@ interface EvaluatedDecision {
   readonly proposal: TransactionProposal;
 }
 
+function immutable<T>(value: T): T {
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) immutable(child);
+    Object.freeze(value);
+  }
+  return value;
+}
 export class TrustKernelService {
+  readonly #executedReceipts = new Set<string>();
   readonly #seenNonces = new Set<string>();
   readonly #seenProposalIds = new Set<string>();
   readonly #spent = new Map<string, number>();
@@ -46,19 +54,25 @@ export class TrustKernelService {
 
     const nonceKey = `${mandate.id}:${proposal.nonce}`;
     const proposalKey = `${mandate.id}:${proposal.id}`;
-    const receipt = authorize(mandate, agent, proposal, {
-      ...context,
-      cumulativeSpentMinor: this.#spent.get(mandate.id) ?? 0,
-      replaySeen:
-        this.#seenNonces.has(nonceKey) ||
-        this.#seenProposalIds.has(proposalKey),
-    });
+    const receipt = immutable(
+      authorize(mandate, agent, proposal, {
+        ...context,
+        cumulativeSpentMinor: this.#spent.get(mandate.id) ?? 0,
+        replaySeen:
+          this.#seenNonces.has(nonceKey) ||
+          this.#seenProposalIds.has(proposalKey),
+      }),
+    );
 
     this.#seenNonces.add(nonceKey);
     this.#seenProposalIds.add(proposalKey);
     this.#decisions.set(
       receipt.receiptId,
-      Object.freeze({ receipt, mandate, proposal }),
+      Object.freeze({
+        receipt,
+        mandate: immutable(structuredClone(mandate)),
+        proposal: immutable(structuredClone(proposal)),
+      }),
     );
 
     this.ledger.append(
@@ -95,6 +109,8 @@ export class TrustKernelService {
       throw new Error("APPROVAL_PRINCIPAL_MISMATCH");
     }
 
+    if (this.#approvals.has(receipt.receiptId))
+      throw new Error("APPROVAL_ALREADY_RECORDED");
     const approval = Object.freeze({
       id: randomUUID(),
       receiptId: receipt.receiptId,
@@ -122,12 +138,21 @@ export class TrustKernelService {
 
     const approval = this.#approvals.get(receipt.receiptId);
     const artifact = this.executor.artifact(receipt, approval);
-    const order = await this.executor.createOrder(proposal, artifact);
-    this.#spent.set(
-      receipt.mandateId,
-      (this.#spent.get(receipt.mandateId) ?? 0) + proposal.amount.minor,
-    );
-    return order;
+    if (this.#executedReceipts.has(receipt.receiptId))
+      throw new Error("EXECUTION_REPLAY_DETECTED");
+    const consumed =
+      (this.#spent.get(receipt.mandateId) ?? 0) + proposal.amount.minor;
+    if (
+      !Number.isSafeInteger(consumed) ||
+      (evaluated.mandate.cumulativeLimitMinor !== undefined &&
+        consumed > evaluated.mandate.cumulativeLimitMinor)
+    )
+      throw new Error("CUMULATIVE_LIMIT_EXCEEDED");
+    this.#executedReceipts.add(receipt.receiptId);
+    // Reserve before awaiting the mock provider. Errors retain the demo hold.
+
+    this.#spent.set(receipt.mandateId, consumed);
+    return this.executor.createOrder(proposal, artifact);
   }
 
   #requireIssuedDecision(receipt: DecisionReceipt): EvaluatedDecision {

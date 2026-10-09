@@ -61,3 +61,12 @@ Evidence records safe IDs, status, amount/currency and failure classifications n
 ## Explicit non-claims
 
 2D is Sandbox only. It does not implement live PayPal, hardware-backed keys, immutable audit storage, production principal authentication, LLM mandate parsing, product discovery, final UI, refunds, disputes, subscriptions, multi-provider payments, Milestone 2E or Milestone 3.
+
+## Integrated Milestone 2E review
+
+[ADR 004](ADR-004-integrated-security-boundary.md) documents the integrated trust
+boundary, current-authority dispatch checks, fail-closed finalization, rollback-safe
+evidence, corruption detection, reconciliation discovery and adversarial matrices.
+The dispatch handoff is the revocation cutoff; GET plus retry is not atomic, and
+provider idempotency/retention remain external dependencies. Unknown authority is
+never released merely because a response or local commit failed.

@@ -50,4 +50,13 @@ The smoke path never stores or automates a Sandbox payer password. Manual payer 
 
 ## Scope boundary
 
-Milestones 1, 2A, 2B and 2C security invariants remain in force. 2D does not implement live PayPal, LLM mandate parsing, product discovery, final UI, autonomous shopping, subscriptions, refunds, disputes, multi-provider payments, Milestone 2E or Milestone 3. Webhook mutation is intentionally deferred rather than accepting an insecure unsigned placeholder; explicit provider reconciliation is authoritative in 2D.
+Milestones 1, 2A, 2B and 2C security invariants remain in force. 2D does not implement live PayPal, LLM mandate parsing, product discovery, final UI, autonomous shopping, subscriptions, refunds, disputes, multi-provider payments or Milestone 3. Webhook mutation is intentionally deferred rather than accepting an insecure unsigned placeholder; explicit provider reconciliation is authoritative in 2D.
+
+## Milestone 2E security boundary
+
+Normal execution and reconciliation share atomic Payment Attempt/grant/reservation
+finalization. Unknown outcomes retain authority; recovery dispatch rechecks current
+revocation/expiration and reuses persisted provider keys. Apply the forward
+`db/migrations/004_milestone_2e_security_boundary.sql` after migrations 001–003.
+See [ADR 004](docs/ADR-004-integrated-security-boundary.md) for crash windows,
+revocation handoff, evidence semantics, recovery APIs and residual dependencies.
