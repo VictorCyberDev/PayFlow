@@ -30,3 +30,4 @@ jobs:
           git add src/execution-grant.ts
           git commit -m "fix(2d): quarantine ambiguous provider outcomes"
           git push origin HEAD:milestone-2-durable-paypal
+# one-shot patch trigger
