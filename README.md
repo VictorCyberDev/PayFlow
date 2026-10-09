@@ -1,38 +1,32 @@
 # PayFlow
 
-**PayFlow is a programmable trust layer for agentic commerce.**
+**PayFlow is a programmable trust layer for agentic commerce.** AI agents may propose commerce actions; the deterministic Trust Kernel remains the financial authority. PayPal is only an execution provider.
 
-AI agents may propose commerce actions. PayFlow's deterministic Trust Kernel decides whether those actions are authorized. The LLM/agent remains outside the trusted financial authorization boundary.
+## Milestone 2D — PayPal Sandbox execution
 
-## Milestone 2C — cryptographic execution grants
+The trusted path is:
 
-PayFlow issues short-lived Ed25519-signed execution grants bound to an exact authorized proposal and revalidates durable authority before execution. A grant is not a Decision Receipt, approval, reservation or payment attempt: it is a one-use cryptographic authorization to attempt one exact execution.
+`Trust Kernel -> durable reservation -> Ed25519 execution grant -> immediate durable revalidation -> one-time authority claim -> durable Payment Attempt -> PayPal Orders v2 -> reconciliation -> COMMITTED`.
 
-The signed `payflow.execution-grant.v1` claims bind the principal, agent, mandate/fingerprint, proposal/SHA-256 canonical digest, Decision Receipt, reservation, capability, integer-minor amount, currency, merchant, authorization-engine version, audience, `kid`, issue time and expiry. The default TTL is 120 seconds and configuration is capped at 300 seconds.
+2D uses PayPal Sandbox only (`https://api-m.sandbox.paypal.com`), server-side OAuth, Orders v2 and `intent=CAPTURE`. Non-sandbox configuration is rejected. Credentials and OAuth tokens are never committed or written to evidence.
 
-Ed25519 uses Node's standard `crypto` implementation. The private key belongs only to the issuer. Verification uses a `kid`-selected public-key ring so rotation can retain old public keys while live grants expire. No private signing key is stored in PostgreSQL or committed to this repository.
+A Payment Attempt is durable and unique per execution grant/reservation. It stores separate stable create-order and capture idempotency IDs before provider side effects, plus the PayPal order/capture IDs, local/provider statuses, authoritative integer-minor amount/currency, failure classification and reconciliation timestamps. Order creation is not payment success.
 
-### Execution choke point
+### Ambiguous outcomes
 
-`ExecutionBoundary` is the future provider choke point. It verifies grant format/version, audience, expiry, `kid` and Ed25519 signature before entering a PostgreSQL transaction. It then locks the durable grant, mandate and reservation; reloads proposal, agent, receipt and approval where applicable; checks exact proposal digest/amount/currency/merchant/capability bindings and current mandate/agent/reservation validity; and atomically changes `ISSUED -> CLAIMED` plus `AUTHORIZED -> EXECUTING`.
+PostgreSQL and PayPal cannot participate in one atomic transaction. A timeout/reset/ambiguous 5xx after a capture request therefore enters `CAPTURE_UNKNOWN`, not `FAILED`. The grant remains `CLAIMED` and the reservation remains `EXECUTING`; authority is quarantined and is not returned to the mandate budget.
 
-Only after that transaction commits is the fake execution sink invoked. Concurrent use of the same grant cannot claim authority twice. Success finalizes `CONSUMED` + `COMMITTED`; deterministic fake-provider failure finalizes `FAILED` + `FAILED`. A duplicate invocation is rejected rather than replaying a side effect.
+Reconciliation uses Show Order. If PayPal proves the exact expected capture completed, PayFlow validates amount/currency and transactionally records `CAPTURED`, `CONSUMED` and `COMMITTED` without sending another capture. If provider state remains ambiguous, PayFlow remains fail-closed.
 
-An `ESCALATE` receipt cannot receive executable authority until the existing 2B principal approval flow creates a valid reservation. The receipt itself remains `ESCALATE`.
+Payer approval is represented explicitly. If PayPal requires payer action, the order and approval URL are persisted and no capture is claimed as successful. The final redirect UI is intentionally out of scope.
 
-### Remaining external-provider boundary
+Money conversion uses integer minor units and explicit currency precision (`8900 USD -> 89.00`); binary floating point is not used.
 
-2C deliberately does **not** integrate PayPal. A real network side effect cannot be atomic with PostgreSQL. Milestone 2D must persist provider payment attempts, establish provider idempotency, and reconcile ambiguous outcomes such as provider success followed by a lost response. PayFlow does not claim atomic external payment execution.
-
-See `docs/ADR-002-execution-grants.md` for canonicalization, key rotation, one-use semantics and TOCTOU decisions.
-
-## Milestones 2A/2B foundation
-
-PostgreSQL remains authoritative for security state. Per-mandate `SELECT ... FOR UPDATE` serializes cumulative authority acquisition. Durable reservations account for committed and active reserved authority; replay keys, principal-bound approvals and tamper-evident evidence survive process recreation. The deterministic Trust Kernel remains independent of PostgreSQL.
+See `docs/ADR-003-paypal-execution-reconciliation.md` for the distributed-systems decision.
 
 ## Development
 
-Set `TEST_DATABASE_URL` to a disposable PostgreSQL database for integration tests. CI provisions PostgreSQL 17 automatically. Test Ed25519 keys are generated at runtime and CI requires no signing secrets.
+Set `TEST_DATABASE_URL` to a disposable PostgreSQL database. Normal CI uses deterministic fake provider/HTTP boundaries and does not need PayPal credentials.
 
 ```bash
 npm ci
@@ -46,6 +40,14 @@ npm audit --omit=dev --audit-level=high
 npm run build
 ```
 
-## Deferred beyond 2C
+Optional real Sandbox smoke test:
 
-PayPal OAuth, Orders/capture, webhooks and real credentials are Milestone 2D. LLM mandate parsing, product discovery, browser automation, final UI, subscriptions, refunds, disputes and multi-provider execution remain out of scope.
+```bash
+PAYPAL_ENVIRONMENT=sandbox PAYPAL_CLIENT_ID=... PAYPAL_CLIENT_SECRET=... npm run test:paypal:sandbox
+```
+
+The smoke path never stores or automates a Sandbox payer password. Manual payer approval may be required before capture.
+
+## Scope boundary
+
+Milestones 1, 2A, 2B and 2C security invariants remain in force. 2D does not implement live PayPal, LLM mandate parsing, product discovery, final UI, autonomous shopping, subscriptions, refunds, disputes, multi-provider payments, Milestone 2E or Milestone 3. Webhook mutation is intentionally deferred rather than accepting an insecure unsigned placeholder; explicit provider reconciliation is authoritative in 2D.
