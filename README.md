@@ -2,71 +2,42 @@
 
 **PayFlow is a programmable trust layer for agentic commerce.**
 
-AI agents can reason about what to buy. PayFlow decides what an agent is allowed to do with a principal's money.
+AI agents may propose commerce actions. PayFlow's deterministic Trust Kernel decides whether those actions are authorized. The LLM/agent remains outside the trusted financial authorization boundary.
 
-> Agent → Transaction Intent → Deterministic Authorization → Payment Execution → Verification → Evidence
+## Milestone 2A — durable foundation
 
-The language model/agent is deliberately outside the trusted authorization boundary. It can propose a transaction, but it cannot produce a trusted authorization decision.
+Milestone 2A adds a PostgreSQL persistence boundary without coupling the deterministic kernel to PostgreSQL. `PostgresTrustRepository` persists principals, passports, fingerprinted mandates, proposals, Decision Receipts, principal-bound approvals, replay keys, reservation state, payment-attempt/provider identifiers and tamper-evident evidence. Money remains integer minor units.
 
-## Milestone 1 — Trust Kernel
+The SQL migration uses primary/unique keys, foreign keys, checks for non-negative monetary state, ISO-like currency shape, timestamp ordering and explicit database enums for reservation/payment state. Proposal IDs and mandate-scoped proposal nonces are unique; replay keys have an atomic `(scope, replay_key)` primary key.
 
-This milestone implements the foundational authorization architecture:
+Milestone 1 authorization semantics remain unchanged: fail closed; explicit capability intersection; `ALLOW | DENY | ESCALATE`; mandate fingerprints; separate principal-bound approval; no payment side effect before authorization.
 
-- principal-authored mandates
-- agent passports and explicit capabilities
-- canonical mandate serialization and SHA-256 `mandateFingerprint`
-- typed transaction proposals
-- deterministic `ALLOW | DENY | ESCALATE` policy evaluation
-- structured Decision Receipts
-- nonce and proposal-ID replay protection
-- tamper-evident hash-chained evidence ledger
-- authorization-gated payment execution
-- mock payment provider
-- PayPal provider boundary (no network transactions)
-- explicit principal-bound approval for escalated proposals
-- adversarial tests
+### Reservation foundation
 
-## Security model
+`PENDING → AUTHORIZED → EXECUTING → COMMITTED` is the success path. `PENDING`/`AUTHORIZED` may become `RELEASED`, `EXPIRED` or `FAILED`; `EXECUTING` may become `COMMITTED`, `RELEASED` or `FAILED`. Terminal states cannot transition. Transitions lock the reservation row and fail closed when invalid.
 
-Authorization is fail-closed. The kernel recomputes policy from validated inputs and does not trust an agent-supplied authorization result. A mandate fingerprint binds security-critical mandate fields. The normal in-process service path records issued Decision Receipts and refuses an unissued receipt or a substituted proposal before reaching the payment provider. `DENY` cannot execute; `ESCALATE` requires a separate approval bound to the mandate principal.
+This milestone does **not** yet claim concurrency-safe budget authorization. Atomic cumulative-budget reservation and authorization transactions are Milestone 2B work.
 
-These are Milestone 1 process-local controls, not distributed cryptographic credentials. Human/session authentication, durable authorization state, concurrency-safe reservations and short-lived signed execution grants remain future work.
+### Durable evidence
 
-The evidence ledger is **tamper-evident**, not immutable storage and not a blockchain. `mandateFingerprint` is a hash fingerprint, not a digital signature.
+PostgreSQL evidence records retain a SHA-256 previous-hash chain. Appends serialize on a PostgreSQL advisory transaction lock so concurrent writers do not fork the application-level chain. Verification detects modified/reordered entries. This is tamper-evident, not immutable: a privileged database writer can rewrite the database/chain or delete all evidence.
 
-See `docs/THREAT_MODEL.md` and `docs/ARCHITECTURE.md`.
+## Development
 
-## PayPal
-
-PayPal is the primary intended payment rail for the hackathon. Milestone 1 defines a server-side provider boundary only. No credentials are required and no real or sandbox financial transaction is made.
-
-Expected future server-only environment variables are documented in `.env.example`.
-
-## Run
+Set `TEST_DATABASE_URL` to a disposable PostgreSQL database for integration tests. CI provisions PostgreSQL automatically.
 
 ```bash
 npm ci
-npm run dev
-```
-
-The developer demo prints the keyboard mandate scenarios and their Decision Receipts/evidence verification.
-
-## Quality gates
-
-```bash
 npm run format:check
 npm run lint
 npm run typecheck
 npm test
+npm run test:integration
 npm run test:coverage
 npm audit --omit=dev --audit-level=high
 npm run build
 ```
 
-## Current limitations
+## Deferred beyond 2A
 
-Milestone 1 uses in-memory replay state, cumulative-spend state, issued-receipt state, approvals and evidence storage. The execution boundary is process-local rather than a cross-service cryptographic grant. The PayPal adapter intentionally does not contact PayPal. Merchant risk is a trusted server-side context input in this milestone; a production risk oracle is not implemented. Human approval is checked against the mandate principal ID, but production-grade authentication of the approving human/session is not implemented.
-
-## Roadmap
-
-Milestone 2 should add durable transactional persistence, concurrency-safe budget/replay reservations, short-lived cryptographically verifiable authorization grants, a real PayPal sandbox adapter behind the existing boundary, stronger principal/agent authentication and merchant/risk attestation, and service/API boundaries. Product discovery, autonomous browsing, LLM mandate parsing, polished UI, subscriptions and disputes remain deferred until the trust boundary is hardened.
+Milestone 2B must atomically reserve cumulative authority during authorization and remove remaining process-local security state from the execution orchestration. Cryptographic execution grants, immediate pre-payment revalidation and PayPal Sandbox are later Milestone 2 increments. LLM mandate parsing, product discovery and final UI remain out of scope.
