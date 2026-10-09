@@ -1,51 +1,59 @@
-# PayFlow Threat Model — Milestone 2C
+# PayFlow Threat Model — Milestone 2D
 
-Milestone 1 fail-closed policy semantics and the durable/concurrency controls from 2A/2B remain required. 2C protects the authorization-to-execution handoff.
+Milestone 1 fail-closed policy semantics and the durable/concurrency controls from 2A/2B plus 2C execution-grant protections remain required. 2D adds a real Sandbox provider without making PayPal an authorization authority.
 
-## Authorization substitution
+## Authorization and provider substitution
 
-Threat: a caller obtains authority for one transaction and changes amount, currency, merchant, agent, mandate, proposal, capability or reservation before execution.
+Threat: amount, currency, merchant, order, capture, attempt, proposal, agent, mandate or reservation is substituted after authorization.
 
-Control: a short-lived Ed25519 signature covers exact execution claims, including a deterministic SHA-256 proposal digest. The execution boundary also reloads the authoritative proposal and compares digest and explicit financial bindings. Modified signed payloads fail signature verification; modified persisted state fails revalidation.
+Controls: the Ed25519 execution grant binds exact authority; immediate durable revalidation remains mandatory. Payment Attempts redundantly persist grant/reservation/proposal/mandate/principal plus integer-minor amount/currency. PayPal capture amount/currency must match. Provider order/capture IDs have durable uniqueness constraints. Any mismatch fails closed and is not committed.
 
-## Forged or confused grants
+## Duplicate capture and request replay
 
-Control: verification is hard-coded to Ed25519 through Node `crypto`; there is no caller-selectable algorithm and no `alg=none` path. Version and audience are explicit. `kid` must resolve to a known public key. Wrong keys, malformed grants, unsupported versions, wrong audiences and bad signatures fail before provider invocation.
+Threat: a retry or concurrent request creates a second charge.
 
-Residual risk: production secret-manager/KMS/HSM custody and automated key rotation are not implemented. Compromise of the active private key permits grant forgery until that key is removed from trust.
+Controls: the 2C grant/reservation claim remains the primary choke point. One grant/reservation maps to one Payment Attempt. Create-order and capture have separate stable persisted request IDs; retries of the same logical operation reuse them. A successful capture ID is unique. Concurrent attempt creation is protected by the reservation/grant uniqueness constraints.
 
-## Stale authority
+## Lost response / timeout after provider success
 
-Threat: a correctly signed grant is used after the agent/mandate/approval/reservation changes.
+Threat: PayPal captures successfully but the response is lost, then PayFlow charges again or releases authority.
 
-Control: signature validity alone is insufficient. Immediately before claiming execution authority PayFlow locks durable state and revalidates mandate fingerprint/expiry/agent/capability, agent status/expiry/principal/capability, exact receipt/proposal/reservation bindings, reservation status/expiry, and approval for ESCALATE.
+Controls: timeout, reset, malformed post-transmission response and ambiguous 5xx become `CAPTURE_UNKNOWN`, never ordinary failure. Grant stays `CLAIMED`; reservation stays `EXECUTING`; authority remains quarantined. Reconciliation uses Show Order and, when PayPal proves the expected completed capture, finalizes the existing attempt without another capture.
 
-## Grant replay
+Residual risk: prolonged PayPal unavailability can leave authority quarantined for an extended period. This is intentionally safer than overspending.
 
-Control: each JTI is a durable primary key. Execution locks its grant row and accepts only `ISSUED`. The same transaction moves grant to `CLAIMED` and reservation to `EXECUTING`. Concurrent requests for the same grant serialize on that row; only one can reach the sink. Successful use becomes `CONSUMED`; deterministic sink failure becomes `FAILED`. Duplicate calls are rejected, not replayed idempotently.
+## Process crash after side effect
 
-## Concurrent overspend
+Durable Payment Attempt state survives process death. Crash before create is safe to resume. Crash after order creation resumes the existing order. Crash after capture success but before local finalization is resolved from provider state. Local finalization is transactional across Payment Attempt, execution grant, reservation and evidence.
 
-The 2B per-mandate lock remains authoritative for reservation acquisition. `AUTHORIZED` and `EXECUTING` reservations consume capacity. The existing real PostgreSQL 8000 + 8000 against 10000 concurrency test remains required.
+## Provider/local divergence
 
-## Escalation bypass
+PayPal and PostgreSQL cannot share an atomic transaction. PayFlow compensates with durable intent, provider idempotency and reconciliation. `HTTP 2xx` alone is not settlement; provider capture status is interpreted explicitly and pending is distinct from success/failure.
 
-An ESCALATE receipt alone is not executable. Grant issuance requires the reservation created by the 2B approval flow, and execution rechecks an `APPROVED` record bound to the same principal/proposal/receipt. The original receipt remains ESCALATE.
+## Payer approval
 
-## Corrupt persisted state
+Order creation does not imply capture. Orders requiring payer action persist the order/approval URL and remain non-final. 2D never stores or automates payer credentials.
 
-Runtime schemas and redundant signed/persisted bindings fail closed on malformed critical state. A privileged database writer remains a trusted-system threat: with sufficient access it can alter related rows/evidence consistently. The evidence chain is tamper-evident, not immutable.
+## Forged/duplicate webhooks
 
-## Evidence exposure
+2D intentionally exposes no unsigned webhook mutation endpoint. Explicit reconciliation is authoritative. Future webhook support must use PayPal-supported authenticity verification, a configured webhook ID, durable provider-event replay protection and the same order/capture/amount/currency bindings.
 
-Execution evidence records grant IDs/digests, outcomes and safe reason codes. It does not intentionally record private signing keys, secrets or complete grant tokens.
+## OAuth and credential compromise
 
-## External provider TOCTOU
+OAuth is server-side. Tokens are cached only in process memory, refreshed before expiry and never written to evidence. Client secrets and Authorization headers are not persisted. Stale-token/auth failures fail closed. Residual risk: compromise of PayPal credentials permits provider-side actions and requires operational rotation/revocation.
 
-2C atomically claims local execution authority before provider I/O, then commits the transaction. It intentionally does not hold PostgreSQL locks across a fake network operation. A real provider can succeed while PayFlow loses the response, so `EXECUTING` cannot by itself prove provider outcome.
+## Malformed provider responses
 
-Milestone 2D must persist payment attempts before network I/O, use provider idempotency keys and implement reconciliation/webhook semantics for ambiguous outcomes. PostgreSQL + PayPal atomicity is not claimed.
+PayPal OAuth/order structures are schema-validated. Malformed or structurally unusable responses fail closed; after a side-effecting request they are treated as ambiguous where execution may already have occurred.
+
+## Existing 2C threats
+
+Grant forgery, wrong audience/version/key, stale authority, grant replay, escalation bypass and corrupt persisted authority remain protected by the 2C signed-grant and immediate-revalidation design. `AUTHORIZED`/`EXECUTING` reservations continue to consume mandate capacity.
+
+## Evidence and PII
+
+Evidence records safe IDs, status, amount/currency and failure classifications needed to reconstruct the financial timeline. It must never contain Client Secret, OAuth access token, Authorization header or raw credentials. Provider response storage is intentionally minimized rather than persisting whole PayPal payloads.
 
 ## Explicit non-claims
 
-2C does not implement PayPal, hardware-backed keys, non-repudiation, immutable audit storage, distributed consensus, production principal authentication, atomic external payment execution, LLM mandate parsing, product discovery or UI.
+2D is Sandbox only. It does not implement live PayPal, hardware-backed keys, immutable audit storage, production principal authentication, LLM mandate parsing, product discovery, final UI, refunds, disputes, subscriptions, multi-provider payments, Milestone 2E or Milestone 3.
