@@ -297,7 +297,8 @@ run("Milestone 2B durable authorization", () => {
       )[0]?.count,
     ).toBe(0);
     expect((await repo.evidence()).length).toBe(before);
-    await repo.sql`drop trigger reject_rollback on authorization_reservations; drop function reject_rollback_reservation()`;
+    await repo.sql`drop trigger reject_rollback on authorization_reservations`;
+    await repo.sql`drop function reject_rollback_reservation()`;
   });
 
   it("expires stale reservations idempotently and restores capacity", async () => {
