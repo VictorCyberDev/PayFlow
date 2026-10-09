@@ -280,7 +280,7 @@ run("Milestone 2C cryptographic execution grants", () => {
     expect(sink.calls).toBe(0);
   });
   it("fails closed when mandate expires or changes after issuance", async () => {
-    let x = await authorizedToken();
+    const x = await authorizedToken();
     const changed = {
       ...mandate,
       purpose: "changed",
