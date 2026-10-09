@@ -4,27 +4,43 @@
 
 AI agents may propose commerce actions. PayFlow's deterministic Trust Kernel decides whether those actions are authorized. The LLM/agent remains outside the trusted financial authorization boundary.
 
-## Milestone 2A — durable foundation
+## Milestone 2B — atomic durable authorization
 
-Milestone 2A adds a PostgreSQL persistence boundary without coupling the deterministic kernel to PostgreSQL. `PostgresTrustRepository` persists principals, passports, fingerprinted mandates, proposals, Decision Receipts, principal-bound approvals, replay keys, reservation state, payment-attempt/provider identifiers and tamper-evident evidence. Money remains integer minor units.
+Milestone 2B moves security-critical authorization orchestration onto the PostgreSQL foundation. `DurableAuthorizationService` loads runtime-validated security objects, locks the mandate's authoritative row, derives current financial authority, reruns the deterministic Trust Kernel and commits the Decision Receipt, replay claims, reservation and security evidence atomically where applicable.
 
-The SQL migration uses primary/unique keys, foreign keys, checks for non-negative monetary state, ISO-like currency shape, timestamp ordering and explicit database enums for reservation/payment state. Proposal IDs and mandate-scoped proposal nonces are unique; replay keys have an atomic `(scope, replay_key)` primary key.
+The Trust Kernel itself remains independent of PostgreSQL and independently unit-testable.
 
-Milestone 1 authorization semantics remain unchanged: fail closed; explicit capability intersection; `ALLOW | DENY | ESCALATE`; mandate fingerprints; separate principal-bound approval; no payment side effect before authorization.
+### Concurrency-safe cumulative authority
 
-### Reservation foundation
+For each mandate, PostgreSQL `SELECT ... FOR UPDATE` on the mandate row is the serialization point for authority acquisition. PayFlow uses PostgreSQL `READ COMMITTED` plus that explicit lock; it does not claim global serializable isolation.
 
-`PENDING → AUTHORIZED → EXECUTING → COMMITTED` is the success path. `PENDING`/`AUTHORIZED` may become `RELEASED`, `EXPIRED` or `FAILED`; `EXECUTING` may become `COMMITTED`, `RELEASED` or `FAILED`. Terminal states cannot transition. Transitions lock the reservation row and fail closed when invalid.
+Authority is derived from durable reservation state rather than trusting `spent_minor`:
 
-This milestone does **not** yet claim concurrency-safe budget authorization. Atomic cumulative-budget reservation and authorization transactions are Milestone 2B work.
+```text
+consumed = committed + active_reserved
+available = cumulative_limit - consumed
 
-### Durable evidence
+committed      = COMMITTED reservations
+active_reserved = AUTHORIZED + EXECUTING reservations
+```
 
-PostgreSQL evidence records retain a SHA-256 previous-hash chain. Appends serialize on a PostgreSQL advisory transaction lock so concurrent writers do not fork the application-level chain. Verification detects modified/reordered entries. This is tamper-evident, not immutable: a privileged database writer can rewrite the database/chain or delete all evidence.
+`RELEASED`, `EXPIRED` and `FAILED` reservations restore capacity. A real integration test concurrently submits 8000 + 8000 minor units against a 10000-unit mandate and asserts that only one can acquire executable authority.
+
+### Escalation and replay
+
+An `ESCALATE` Decision Receipt remains immutable. A separate durable approval must bind to the correct principal, proposal and receipt. Before approval creates authority, policy and cumulative capacity are revalidated under the mandate lock.
+
+Proposal IDs, mandate-scoped proposal nonces and execution-relevant replay keys are durable. Duplicate/concurrent attempts cannot both acquire reservations.
+
+### Crash recovery and evidence
+
+Reservations carry durable expiry. An idempotent recovery operation expires stale `PENDING`/`AUTHORIZED` reservations without releasing committed spend. A production scheduler/background worker is not included yet.
+
+Authorization evidence is persisted in the same PostgreSQL transaction as the state it describes, so rolled-back authorization cannot leave a durable success event. Evidence retains the SHA-256 previous-hash chain. It is tamper-evident, not immutable: a privileged database writer can rewrite/re-hash/delete the chain.
 
 ## Development
 
-Set `TEST_DATABASE_URL` to a disposable PostgreSQL database for integration tests. CI provisions PostgreSQL automatically.
+Set `TEST_DATABASE_URL` to a disposable PostgreSQL database for integration tests. CI provisions PostgreSQL 17 automatically.
 
 ```bash
 npm ci
@@ -38,6 +54,6 @@ npm audit --omit=dev --audit-level=high
 npm run build
 ```
 
-## Deferred beyond 2A
+## Deferred beyond 2B
 
-Milestone 2B must atomically reserve cumulative authority during authorization and remove remaining process-local security state from the execution orchestration. Cryptographic execution grants, immediate pre-payment revalidation and PayPal Sandbox are later Milestone 2 increments. LLM mandate parsing, product discovery and final UI remain out of scope.
+Milestone 2B stops at durable authorization/reservation eligibility. Cryptographic execution grants, immediate pre-payment revalidation and PayPal are intentionally deferred. The remaining execution TOCTOU boundary must be closed before a later payment provider integration is treated as production-safe. LLM mandate parsing, product discovery and final UI remain out of scope.
