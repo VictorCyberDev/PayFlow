@@ -183,3 +183,46 @@ fields after approval. Approval remains receipt-specific and does not rewrite it
 historical ESCALATE decision. The authorization/reservation revocation race test
 observes the blocked PostgreSQL revoker before releasing the authorization
 transaction, then proves grant issuance is denied.
+
+## Formal revocation linearization point
+
+Revocation, suspension or expiration observed before PayFlow's transactional
+dispatch handoff prevents that provider operation. The handoff is the successful
+COMMIT of the transaction that revalidates locked authority, changes the attempt
+to ORDER_CREATING or CAPTURE_IN_FLIGHT, and appends PAYPAL_OPERATION_DISPATCHED.
+An authority change that commits first is seen by the dispatch checks; a revoker
+blocked behind dispatch's authority locks takes effect after that handoff.
+Expiration is checked with fresh time after obtaining authority locks and again
+after evidence serialization, immediately before issuing COMMIT. The second
+check closes the discovered ledger-wait expiration window; it rolls back both
+dispatch state and evidence. Time checks use the trusted server clock at the
+transaction decision boundary, not an atomic provider/network timestamp.
+
+Once this validated handoff commits, that specific operation is irreversibly
+dispatched from PayFlow's authorization perspective and may proceed even if
+revocation commits before network transmission. This does not mean bytes have
+physically left the process at COMMIT, and no recall after handoff is promised.
+Every subsequent independent operation, including capture after create, needs
+another current-authority handoff. Completed external effects remain truthfully
+reconcilable and finalizable after revocation or expiration.
+
+Provider arguments are constructed from the private, detached attempt snapshot
+validated against locked durable state, not reread from mutable rows after
+handoff. Create uses that snapshot's money, currency, proposal reference and
+persisted create key; capture uses its verified order ID and persisted capture
+key. Grant/receipt snapshots bind the logical merchant and capability; the
+Sandbox adapter and server credentials bind the provider. Post-handoff database
+corruption cannot alter the in-memory operation and fails closed at subsequent
+validation/finalization. Logical merchant binding is not multi-payee routing.
+
+PostgreSQL and PayPal cannot share an atomic transaction. GET plus retry is not
+atomic, provider idempotency retention is finite, and no exactly-once distributed
+execution is claimed. A crash after handoff may leave uncertain dispatch; the
+existing same-key recovery and UNKNOWN authority quarantine still apply.
+
+The PostgreSQL closure tests force revocation-first and dispatch-first row-lock
+outcomes, check committed dispatch evidence before simulated transmission, and
+count provider financial effects. They also cover expiration after handoff and
+post-handoff durable request substitution. Existing tests cover expiration before
+create/capture handoff and expiry during provider waits. These tests simulate
+provider transmission deterministically; they do not assert network atomicity.

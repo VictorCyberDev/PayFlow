@@ -66,3 +66,20 @@ evidence, corruption detection, reconciliation discovery and adversarial matrice
 The dispatch handoff is the revocation cutoff; GET plus retry is not atomic, and
 provider idempotency/retention remain external dependencies. Unknown authority is
 never released merely because a response or local commit failed.
+
+## Formal revocation linearization point
+
+The successful transaction COMMIT that revalidates locked authority, moves the
+attempt to ORDER_CREATING or CAPTURE_IN_FLIGHT and appends
+PAYPAL_OPERATION_DISPATCHED is the revocation linearization point. Revocation,
+suspension or expiration before this handoff prevents the operation. After
+handoff the specific validated operation may proceed, even before physical
+network transmission; it cannot be recalled by local revocation. Subsequent
+independent operations require fresh authority checks. Completed provider effects
+remain truthfully reconcilable after revocation or expiration.
+
+Request material comes from the private validated attempt snapshot, not mutable
+durable rows reread after handoff. PostgreSQL and PayPal have no shared atomic
+transaction; GET plus retry is not atomic and distributed exactly-once execution
+is not claimed. See [ADR-004](ADR-004-integrated-security-boundary.md#formal-revocation-linearization-point)
+for the lock, snapshot, race-test and crash-recovery guarantees.

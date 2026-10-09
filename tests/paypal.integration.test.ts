@@ -88,6 +88,10 @@ class RecoveryProvider implements PaymentProvider {
   captureLosses = 1;
   captureDespiteLoss = true;
   order: PayPalOrderView | undefined;
+  beforeCreate?: (
+    input: Parameters<PaymentProvider["createOrder"]>[0],
+  ) => Promise<void>;
+  beforeCapture?: (id: string, requestId: string) => Promise<void>;
   afterGet?: () => Promise<void>;
   captureResult?: (order: PayPalOrderView) => PayPalOrderView;
   checkNetworkBoundary?: () => Promise<void>;
@@ -98,6 +102,7 @@ class RecoveryProvider implements PaymentProvider {
     input: Parameters<PaymentProvider["createOrder"]>[0],
   ): Promise<PayPalOrderView> {
     await this.checkNetworkBoundary?.();
+    await this.beforeCreate?.(input);
     this.calls.push("CREATE");
     const newKey = !this.createIds.includes(input.requestId);
     this.createIds.push(input.requestId);
@@ -134,6 +139,7 @@ class RecoveryProvider implements PaymentProvider {
   }
   async captureOrder(id: string, requestId: string): Promise<PayPalOrderView> {
     await this.checkNetworkBoundary?.();
+    await this.beforeCapture?.(id, requestId);
     this.calls.push("CAPTURE");
     this.captureIds.push(requestId);
     const prior = this.capturedByKey.get(requestId);
@@ -1770,4 +1776,286 @@ run("Milestone 2D durable PayPal execution", () => {
     expect(provider.captureIds).toHaveLength(1);
     expect(provider.financialSideEffects).toBe(0);
   });
+  it.each(["revocation", "expiration"])(
+    "closure %s before handoff while the passport lock is held prevents dispatch",
+    async (change) => {
+      const c = await claimed(),
+        provider = new RecoveryProvider();
+      let clock = now;
+      const session = await repo.sql.reserve();
+      let execution: Promise<unknown> | undefined;
+      try {
+        await session`begin`;
+        await session`update agent_passports set status=${change === "revocation" ? "REVOKED" : "ACTIVE"} where id=${agent.id}`;
+        const pid = Number(
+          (await session`select pg_backend_pid() as pid`)[0]?.pid,
+        );
+        execution = new PayPalExecutionRail(
+          repo,
+          provider,
+          () => clock,
+        ).execute(c.claims);
+        // Attach the handler immediately: the intentional denial is not an unhandled rejection.
+        const outcome = execution.catch((error: unknown) => error);
+        let blocked = false;
+        for (let probe = 0; probe < 100 && !blocked; probe++) {
+          const rows =
+            await repo.sql`select pid from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))`;
+          blocked = rows.length > 0;
+        }
+        expect(blocked).toBe(true);
+        if (change === "expiration") clock = "2026-10-09T12:03:00.000Z";
+        await session`commit`;
+        expect(await outcome).toBeInstanceOf(ExecutionQuarantinedError);
+        expect(provider.calls).toEqual([]);
+        expect(provider.financialSideEffects).toBe(0);
+        await states();
+      } finally {
+        await session`rollback`;
+        await execution?.catch(() => undefined);
+        session.release();
+      }
+    },
+  );
+
+  it.each(["ORDER_CREATING", "CAPTURE_IN_FLIGHT"])(
+    "closure %s handoff wins the authority lock; later revocation cannot recall that operation",
+    async (status) => {
+      const token = await issued(),
+        provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      let reached!: () => void, release!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const original = repo.appendEvidenceInTransaction.bind(repo);
+      const spy = vi
+        .spyOn(repo, "appendEvidenceInTransaction")
+        .mockImplementation(async (tx, type, data, time) => {
+          const event = await original(tx, type, data, time);
+          if (
+            type === "PAYPAL_OPERATION_DISPATCHED" &&
+            data.status === status
+          ) {
+            reached();
+            await gate;
+          }
+          return event;
+        });
+      const second = PostgresTrustRepository.connect(url!);
+      let revocation: Promise<unknown> | undefined;
+      const beforeTransmission = async () => {
+        await revocation;
+        expect((await second.getAgent(agent.id))?.status).toBe("REVOKED");
+        const events = await second.evidence();
+        expect(
+          events.filter(
+            (e) =>
+              e.type === "PAYPAL_OPERATION_DISPATCHED" &&
+              e.data.status === status,
+          ),
+        ).toHaveLength(1);
+      };
+      if (status === "ORDER_CREATING")
+        provider.beforeCreate = beforeTransmission;
+      else provider.beforeCapture = beforeTransmission;
+      const execution = boundary(provider).execute(token, now);
+      const outcome = execution.catch((error: unknown) => error);
+      try {
+        await entered;
+        revocation =
+          second.sql`update agent_passports /*closure_dispatch_wins*/ set status='REVOKED' where id=${agent.id}`.then(
+            (rows) => rows,
+          );
+        let blocked = false;
+        for (let probe = 0; probe < 100 && !blocked; probe++) {
+          const rows =
+            await repo.sql`select pid from pg_stat_activity where query like ${"%closure_dispatch_wins%"} and wait_event_type='Lock'`;
+          blocked = rows.length === 1;
+        }
+        expect(blocked).toBe(true);
+        release();
+        const result = await outcome;
+        await revocation;
+        expect(provider.logicalOrders).toBe(1);
+        if (status === "ORDER_CREATING") {
+          expect(result).toBeInstanceOf(ExecutionQuarantinedError);
+          expect(provider.captureIds).toHaveLength(0);
+          expect(provider.financialSideEffects).toBe(0);
+          await states();
+        } else {
+          expect(result).not.toBeInstanceOf(Error);
+          expect(provider.captureIds).toHaveLength(1);
+          expect(provider.financialSideEffects).toBe(1);
+          const rows = await repo.sql`select id from payment_attempts`;
+          expect(await restartRecovery(provider, String(rows[0]?.id))).toBe(
+            "CAPTURED",
+          );
+          expect(provider.captureIds).toHaveLength(1);
+          expect(provider.financialSideEffects).toBe(1);
+          expect(
+            (await repo.evidence()).filter(
+              (e) => e.type === "PAYMENT_COMMITTED",
+            ),
+          ).toHaveLength(1);
+        }
+      } finally {
+        release();
+        spy.mockRestore();
+        await outcome;
+        await revocation;
+        await second.close();
+      }
+    },
+  );
+
+  it.each(["create", "capture"])(
+    "closure expiration after committed %s handoff permits only the already handed-off operation",
+    async (operation) => {
+      const token = await issued(),
+        provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      let clock = now;
+      const expire = async () => {
+        const rows = await repo.sql`select status from payment_attempts`;
+        expect(rows[0]?.status).toBe(
+          operation === "create" ? "ORDER_CREATING" : "CAPTURE_IN_FLIGHT",
+        );
+        clock = "2026-10-09T12:03:00.000Z";
+        await Promise.resolve();
+      };
+      if (operation === "create") provider.beforeCreate = expire;
+      else provider.beforeCapture = expire;
+      const execution = new ExecutionBoundary(
+        repo,
+        new StaticPublicKeyRing(new Map([["2d-key", publicKey]])),
+        new PayPalExecutionRail(repo, provider, () => clock),
+      );
+      if (operation === "create") {
+        await expect(execution.execute(token, now)).rejects.toThrow(
+          "INVESTIGATION",
+        );
+        expect(provider.captureIds).toHaveLength(0);
+        expect(provider.financialSideEffects).toBe(0);
+        await states();
+      } else {
+        await execution.execute(token, now);
+        expect(provider.financialSideEffects).toBe(1);
+        const rows = await repo.sql`select id from payment_attempts`;
+        expect(
+          await new PayPalExecutionRail(repo, provider, () => clock).reconcile(
+            String(rows[0]?.id),
+            clock,
+          ),
+        ).toBe("CAPTURED");
+        expect(provider.captureIds).toHaveLength(1);
+        expect(provider.financialSideEffects).toBe(1);
+      }
+      expect(provider.logicalOrders).toBe(1);
+    },
+  );
+
+  it.each(["amount_minor", "currency", "create_order_request_id"])(
+    "closure mutable durable %s after create handoff cannot substitute the frozen request",
+    async (field) => {
+      const token = await issued(),
+        provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      provider.beforeCreate = async (input) => {
+        const rows = await repo.sql`select * from payment_attempts`;
+        const originalKey = String(rows[0]?.create_order_request_id);
+        expect(rows[0]?.status).toBe("ORDER_CREATING");
+        await repo.sql`update payment_attempts set ${repo.sql(field)}=${field === "amount_minor" ? 1 : field === "currency" ? "EUR" : "SUBSTITUTED"}`;
+        expect(input).toEqual({
+          amountValue: "89.00",
+          currency: "USD",
+          merchantReference: proposal.id,
+          requestId: originalKey,
+        });
+      };
+      await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+        "INVESTIGATION",
+      );
+      expect(provider.order?.purchaseUnits[0]).toEqual({
+        referenceId: proposal.id,
+        amountValue: "89.00",
+        currency: "USD",
+      });
+      expect(provider.logicalOrders).toBe(1);
+      expect(provider.captureIds).toHaveLength(0);
+      expect(provider.financialSideEffects).toBe(0);
+      await states();
+    },
+  );
+
+  it.each(["provider_order_id", "capture_request_id"])(
+    "closure mutable durable %s after capture handoff cannot redirect the financial operation or falsely finalize",
+    async (field) => {
+      const token = await issued(),
+        provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      provider.beforeCapture = async (id, key) => {
+        const rows = await repo.sql`select * from payment_attempts`;
+        expect(rows[0]?.status).toBe("CAPTURE_IN_FLIGHT");
+        const orderId = String(rows[0]?.provider_order_id),
+          requestId = String(rows[0]?.capture_request_id);
+        await repo.sql`update payment_attempts set ${repo.sql(field)}='SUBSTITUTED'`;
+        expect(id).toBe(orderId);
+        expect(key).toBe(requestId);
+      };
+      await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+        "INVESTIGATION",
+      );
+      expect(provider.order?.id).toBe("RECOVERED-ORDER");
+      expect(provider.financialSideEffects).toBe(1);
+      expect(provider.captureIds).toHaveLength(1);
+      await states();
+    },
+  );
+  it.each(["ORDER_CREATING", "CAPTURE_IN_FLIGHT"])(
+    "closure expiration while %s evidence waits rolls back the uncommitted handoff",
+    async (status) => {
+      const token = await issued(),
+        provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      let clock = now;
+      const original = repo.appendEvidenceInTransaction.bind(repo);
+      const spy = vi
+        .spyOn(repo, "appendEvidenceInTransaction")
+        .mockImplementation(async (tx, type, data, time) => {
+          const event = await original(tx, type, data, time);
+          if (type === "PAYPAL_OPERATION_DISPATCHED" && data.status === status)
+            clock = "2026-10-09T12:03:00.000Z";
+          return event;
+        });
+      try {
+        const execution = new ExecutionBoundary(
+          repo,
+          new StaticPublicKeyRing(new Map([["2d-key", publicKey]])),
+          new PayPalExecutionRail(repo, provider, () => clock),
+        );
+        await expect(execution.execute(token, now)).rejects.toThrow(
+          "INVESTIGATION",
+        );
+        expect(provider.logicalOrders).toBe(
+          status === "ORDER_CREATING" ? 0 : 1,
+        );
+        expect(provider.captureIds).toHaveLength(0);
+        expect(provider.financialSideEffects).toBe(0);
+        expect(
+          (await repo.evidence()).filter(
+            (e) =>
+              e.type === "PAYPAL_OPERATION_DISPATCHED" &&
+              e.data.status === status,
+          ),
+        ).toHaveLength(0);
+        await states();
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
 });

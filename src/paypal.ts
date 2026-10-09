@@ -710,6 +710,19 @@ export class PayPalExecutionRail implements ExecutionSink {
         { paymentAttemptId: String(a.id), status },
         now,
       );
+      // Ledger serialization can wait after authority validation. Recheck time
+      // after that final lock/write so a delayed handoff rolls back on expiry.
+      const handoffTime = currentTime();
+      if (!this.retryWindow(a, handoffTime))
+        throw new Error("PAYPAL_RETRY_WINDOW_EXPIRED");
+      if (
+        Date.parse(handoffTime) >= Date.parse(agent.expiresAt) ||
+        Date.parse(handoffTime) >= Date.parse(mandate.expiresAt) ||
+        Date.parse(handoffTime) >= persistedDate(g.expires_at).getTime() ||
+        Date.parse(handoffTime) >=
+          persistedDate(reservations[0]?.expires_at).getTime()
+      )
+        throw new Error("PAYMENT_AUTHORITY_NOT_CURRENT");
     });
   }
   async claimedGrantsWithoutAttempts(): Promise<readonly string[]> {
