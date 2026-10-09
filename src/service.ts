@@ -8,10 +8,10 @@ import type {
 } from "./domain.js";
 import type { EvidenceLedger } from "./evidence.js";
 import { authorize, type AuthorizationContext } from "./kernel.js";
-import {
+import type {
   AuthorizedPaymentExecutor,
-  type HumanApproval,
-  type PaymentOrder,
+  HumanApproval,
+  PaymentOrder,
 } from "./payment.js";
 
 interface EvaluatedDecision {
