@@ -26,3 +26,4 @@ jobs:
           git add src/paypal.ts tests/paypal.integration.test.ts tests/paypal.test.ts
           git commit -m "fix(2d): satisfy strict lint rules"
           git push origin HEAD:milestone-2-durable-paypal
+# corrected one-shot run
