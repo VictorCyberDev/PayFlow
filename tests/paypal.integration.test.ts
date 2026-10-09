@@ -28,11 +28,13 @@ class LostResponseProvider implements PaymentProvider {
   captureCalls = 0;
   order: PayPalOrderView | undefined;
   async createOrder(): Promise<PayPalOrderView> {
+    await Promise.resolve();
     this.createCalls++;
     this.order = { id: "PAYPAL-ORDER-1", status: "APPROVED", captures: [] };
     return this.order;
   }
   async captureOrder(): Promise<PayPalOrderView> {
+    await Promise.resolve();
     this.captureCalls++;
     this.order = {
       id: "PAYPAL-ORDER-1",
@@ -49,6 +51,7 @@ class LostResponseProvider implements PaymentProvider {
     throw new PayPalProviderError("AMBIGUOUS", "SIMULATED_RESPONSE_LOSS");
   }
   async getOrder(): Promise<PayPalOrderView> {
+    await Promise.resolve();
     if (!this.order) throw new Error("ORDER_NOT_FOUND");
     return this.order;
   }

@@ -36,7 +36,7 @@ describe("Milestone 2D PayPal provider", () => {
     const oauth = new PayPalOAuthClient(
       "client",
       "super-secret",
-      fetcher as typeof fetch,
+      fetcher,
       () => now,
     );
     expect(await oauth.accessToken()).toBe("secret-token-1");
@@ -49,17 +49,15 @@ describe("Milestone 2D PayPal provider", () => {
 
   it("coalesces concurrent token refreshes", async () => {
     const fetcher = vi.fn(
-      async () =>
+      async () => (
+        await Promise.resolve(),
         new Response(
           JSON.stringify({ access_token: "token", expires_in: 60 }),
           { status: 200, headers: { "content-type": "application/json" } },
-        ),
+        )
+      ),
     );
-    const oauth = new PayPalOAuthClient(
-      "client",
-      "secret",
-      fetcher as typeof fetch,
-    );
+    const oauth = new PayPalOAuthClient("client", "secret", fetcher);
     expect(
       await Promise.all([
         oauth.accessToken(),
@@ -71,12 +69,13 @@ describe("Milestone 2D PayPal provider", () => {
   });
 
   it("fails closed on OAuth rejection", async () => {
-    const fetcher = vi.fn(async () => new Response("no", { status: 401 }));
-    const oauth = new PayPalOAuthClient(
-      "client",
-      "secret",
-      fetcher as typeof fetch,
+    const fetcher = vi.fn(
+      async () => (
+        await Promise.resolve(),
+        new Response("no", { status: 401 })
+      ),
     );
+    const oauth = new PayPalOAuthClient("client", "secret", fetcher);
     await expect(oauth.accessToken()).rejects.toMatchObject({
       classification: "AUTHENTICATION",
       message: "PAYPAL_OAUTH_REJECTED",
@@ -87,7 +86,13 @@ describe("Milestone 2D PayPal provider", () => {
     const calls: Array<{ url: string; requestId: string | null }> = [];
     const fetcher = vi.fn(
       async (input: string | URL | Request, init?: RequestInit) => {
-        const url = String(input);
+        await Promise.resolve();
+        const url =
+          input instanceof Request
+            ? input.url
+            : input instanceof URL
+              ? input.toString()
+              : input;
         if (url.endsWith("/v1/oauth2/token"))
           return new Response(
             JSON.stringify({ access_token: "token", expires_in: 3600 }),
@@ -108,8 +113,8 @@ describe("Milestone 2D PayPal provider", () => {
       },
     );
     const provider = new PayPalPaymentProvider(
-      new PayPalOAuthClient("client", "secret", fetcher as typeof fetch),
-      fetcher as typeof fetch,
+      new PayPalOAuthClient("client", "secret", fetcher),
+      fetcher,
     );
     await provider.createOrder({
       amountValue: "89.00",
@@ -132,17 +137,24 @@ describe("Milestone 2D PayPal provider", () => {
   });
 
   it("classifies ambiguous 5xx after a side-effect request", async () => {
-    const fetcher = vi.fn(async (input: string | URL | Request) =>
-      String(input).endsWith("/v1/oauth2/token")
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
+      await Promise.resolve();
+      const url =
+        input instanceof Request
+          ? input.url
+          : input instanceof URL
+            ? input.toString()
+            : input;
+      return url.endsWith("/v1/oauth2/token")
         ? new Response(
             JSON.stringify({ access_token: "token", expires_in: 3600 }),
             { status: 200, headers: { "content-type": "application/json" } },
           )
-        : new Response("oops", { status: 503 }),
-    );
+        : new Response("oops", { status: 503 });
+    });
     const provider = new PayPalPaymentProvider(
-      new PayPalOAuthClient("client", "secret", fetcher as typeof fetch),
-      fetcher as typeof fetch,
+      new PayPalOAuthClient("client", "secret", fetcher),
+      fetcher,
     );
     await expect(
       provider.captureOrder("ORDER-1", "capture-stable"),
@@ -154,13 +166,9 @@ describe("Milestone 2D PayPal provider", () => {
 
   it("rejects live mode", () => {
     const fetcher = vi.fn();
-    const oauth = new PayPalOAuthClient(
-      "client",
-      "secret",
-      fetcher as typeof fetch,
+    const oauth = new PayPalOAuthClient("client", "secret", fetcher);
+    expect(() => new PayPalPaymentProvider(oauth, fetcher, "live")).toThrow(
+      "PAYPAL_2D_SANDBOX_ONLY",
     );
-    expect(
-      () => new PayPalPaymentProvider(oauth, fetcher as typeof fetch, "live"),
-    ).toThrow("PAYPAL_2D_SANDBOX_ONLY");
   });
 });

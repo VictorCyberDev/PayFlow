@@ -277,6 +277,12 @@ export class PayPalPaymentProvider implements PaymentProvider {
 function requestId(kind: string, attemptId: string): string {
   return `payflow-${kind}-${createHash("sha256").update(attemptId).digest("hex").slice(0, 40)}`;
 }
+function requiredString(value: unknown, name: string): string {
+  if (typeof value !== "string" || value.length === 0)
+    throw new Error(`MALFORMED_PAYMENT_ATTEMPT_${name}`);
+  return value;
+}
+
 function asRow(v: unknown): Record<string, unknown> {
   if (!v || typeof v !== "object") throw new Error("MALFORMED_PAYMENT_ATTEMPT");
   return v as Record<string, unknown>;
@@ -291,7 +297,9 @@ export class PayPalExecutionRail implements ExecutionSink {
     c: ExecutionGrantClaims,
   ): Promise<{ readonly executionId: string }> {
     const a = await this.ensureAttempt(c);
-    let orderId = a.provider_order_id ? String(a.provider_order_id) : undefined;
+    let orderId = a.provider_order_id
+      ? requiredString(a.provider_order_id, "PROVIDER_ORDER_ID")
+      : undefined;
     if (!orderId) {
       await this.state(
         String(a.id),
@@ -382,13 +390,15 @@ export class PayPalExecutionRail implements ExecutionSink {
       "PAYPAL_RECONCILIATION_STARTED",
       {
         paymentAttemptId: attemptId,
-        paypalOrderId: String(a.provider_order_id),
+        paypalOrderId: requiredString(a.provider_order_id, "PROVIDER_ORDER_ID"),
       },
       now,
     );
     let order: PayPalOrderView;
     try {
-      order = await this.provider.getOrder(String(a.provider_order_id));
+      order = await this.provider.getOrder(
+        requiredString(a.provider_order_id, "PROVIDER_ORDER_ID"),
+      );
     } catch {
       return "CAPTURE_UNKNOWN";
     }
