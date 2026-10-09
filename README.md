@@ -4,43 +4,35 @@
 
 AI agents may propose commerce actions. PayFlow's deterministic Trust Kernel decides whether those actions are authorized. The LLM/agent remains outside the trusted financial authorization boundary.
 
-## Milestone 2B — atomic durable authorization
+## Milestone 2C — cryptographic execution grants
 
-Milestone 2B moves security-critical authorization orchestration onto the PostgreSQL foundation. `DurableAuthorizationService` loads runtime-validated security objects, locks the mandate's authoritative row, derives current financial authority, reruns the deterministic Trust Kernel and commits the Decision Receipt, replay claims, reservation and security evidence atomically where applicable.
+PayFlow issues short-lived Ed25519-signed execution grants bound to an exact authorized proposal and revalidates durable authority before execution. A grant is not a Decision Receipt, approval, reservation or payment attempt: it is a one-use cryptographic authorization to attempt one exact execution.
 
-The Trust Kernel itself remains independent of PostgreSQL and independently unit-testable.
+The signed `payflow.execution-grant.v1` claims bind the principal, agent, mandate/fingerprint, proposal/SHA-256 canonical digest, Decision Receipt, reservation, capability, integer-minor amount, currency, merchant, authorization-engine version, audience, `kid`, issue time and expiry. The default TTL is 120 seconds and configuration is capped at 300 seconds.
 
-### Concurrency-safe cumulative authority
+Ed25519 uses Node's standard `crypto` implementation. The private key belongs only to the issuer. Verification uses a `kid`-selected public-key ring so rotation can retain old public keys while live grants expire. No private signing key is stored in PostgreSQL or committed to this repository.
 
-For each mandate, PostgreSQL `SELECT ... FOR UPDATE` on the mandate row is the serialization point for authority acquisition. PayFlow uses PostgreSQL `READ COMMITTED` plus that explicit lock; it does not claim global serializable isolation.
+### Execution choke point
 
-Authority is derived from durable reservation state rather than trusting `spent_minor`:
+`ExecutionBoundary` is the future provider choke point. It verifies grant format/version, audience, expiry, `kid` and Ed25519 signature before entering a PostgreSQL transaction. It then locks the durable grant, mandate and reservation; reloads proposal, agent, receipt and approval where applicable; checks exact proposal digest/amount/currency/merchant/capability bindings and current mandate/agent/reservation validity; and atomically changes `ISSUED -> CLAIMED` plus `AUTHORIZED -> EXECUTING`.
 
-```text
-consumed = committed + active_reserved
-available = cumulative_limit - consumed
+Only after that transaction commits is the fake execution sink invoked. Concurrent use of the same grant cannot claim authority twice. Success finalizes `CONSUMED` + `COMMITTED`; deterministic fake-provider failure finalizes `FAILED` + `FAILED`. A duplicate invocation is rejected rather than replaying a side effect.
 
-committed      = COMMITTED reservations
-active_reserved = AUTHORIZED + EXECUTING reservations
-```
+An `ESCALATE` receipt cannot receive executable authority until the existing 2B principal approval flow creates a valid reservation. The receipt itself remains `ESCALATE`.
 
-`RELEASED`, `EXPIRED` and `FAILED` reservations restore capacity. A real integration test concurrently submits 8000 + 8000 minor units against a 10000-unit mandate and asserts that only one can acquire executable authority.
+### Remaining external-provider boundary
 
-### Escalation and replay
+2C deliberately does **not** integrate PayPal. A real network side effect cannot be atomic with PostgreSQL. Milestone 2D must persist provider payment attempts, establish provider idempotency, and reconcile ambiguous outcomes such as provider success followed by a lost response. PayFlow does not claim atomic external payment execution.
 
-An `ESCALATE` Decision Receipt remains immutable. A separate durable approval must bind to the correct principal, proposal and receipt. Before approval creates authority, policy and cumulative capacity are revalidated under the mandate lock.
+See `docs/ADR-002-execution-grants.md` for canonicalization, key rotation, one-use semantics and TOCTOU decisions.
 
-Proposal IDs, mandate-scoped proposal nonces and execution-relevant replay keys are durable. Duplicate/concurrent attempts cannot both acquire reservations.
+## Milestones 2A/2B foundation
 
-### Crash recovery and evidence
-
-Reservations carry durable expiry. An idempotent recovery operation expires stale `PENDING`/`AUTHORIZED` reservations without releasing committed spend. A production scheduler/background worker is not included yet.
-
-Authorization evidence is persisted in the same PostgreSQL transaction as the state it describes, so rolled-back authorization cannot leave a durable success event. Evidence retains the SHA-256 previous-hash chain. It is tamper-evident, not immutable: a privileged database writer can rewrite/re-hash/delete the chain.
+PostgreSQL remains authoritative for security state. Per-mandate `SELECT ... FOR UPDATE` serializes cumulative authority acquisition. Durable reservations account for committed and active reserved authority; replay keys, principal-bound approvals and tamper-evident evidence survive process recreation. The deterministic Trust Kernel remains independent of PostgreSQL.
 
 ## Development
 
-Set `TEST_DATABASE_URL` to a disposable PostgreSQL database for integration tests. CI provisions PostgreSQL 17 automatically.
+Set `TEST_DATABASE_URL` to a disposable PostgreSQL database for integration tests. CI provisions PostgreSQL 17 automatically. Test Ed25519 keys are generated at runtime and CI requires no signing secrets.
 
 ```bash
 npm ci
@@ -54,6 +46,6 @@ npm audit --omit=dev --audit-level=high
 npm run build
 ```
 
-## Deferred beyond 2B
+## Deferred beyond 2C
 
-Milestone 2B stops at durable authorization/reservation eligibility. Cryptographic execution grants, immediate pre-payment revalidation and PayPal are intentionally deferred. The remaining execution TOCTOU boundary must be closed before a later payment provider integration is treated as production-safe. LLM mandate parsing, product discovery and final UI remain out of scope.
+PayPal OAuth, Orders/capture, webhooks and real credentials are Milestone 2D. LLM mandate parsing, product discovery, browser automation, final UI, subscriptions, refunds, disputes and multi-provider execution remain out of scope.
