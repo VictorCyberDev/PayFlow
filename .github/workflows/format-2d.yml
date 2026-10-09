@@ -24,4 +24,4 @@ jobs:
           git add package.json src/paypal.ts tests/paypal.test.ts tests/paypal.integration.test.ts tests/paypal.sandbox.test.ts
           git diff --cached --quiet || git commit -m "style(2d): format PayPal milestone files"
           git push origin HEAD:milestone-2-durable-paypal
-# one-shot formatter; remove after the formatting commit lands
+# one-shot formatter; final trigger after 2D docs
