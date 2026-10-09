@@ -14,7 +14,10 @@ jobs:
         with:
           node-version: 20
       - run: npm install
-      - run: npm run format:check
+      - name: Verify committed formatting
+        run: |
+          npm run format
+          git diff --exit-code
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
