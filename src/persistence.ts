@@ -435,6 +435,31 @@ export class PostgresTrustRepository {
     data: DurableEvidence["data"],
     occurredAt: string,
   ): Promise<DurableEvidence> {
+    if (type === "PAYMENT_COMMITTED") {
+      if (
+        typeof data.paymentAttemptId !== "string" ||
+        typeof data.paypalCaptureId !== "string"
+      )
+        throw new Error("PAYMENT_EVIDENCE_BINDING_INVALID");
+      // Match finalization's lock order before acquiring the ledger lock.
+      const attempts =
+        await db`select * from payment_attempts where id=${data.paymentAttemptId} for update`;
+      if (attempts.length !== 1)
+        throw new Error("PAYMENT_EVIDENCE_STATE_INVALID");
+      const attempt = row(attempts[0]);
+      const grantId = z.string().min(1).parse(attempt.grant_id),
+        reservationId = z.string().min(1).parse(attempt.reservation_id),
+        mandateId = z.string().min(1).parse(attempt.mandate_id);
+      await db`select id from execution_grants where id=${grantId} for update`;
+      await db`select id from authorization_reservations where id=${reservationId} for update`;
+      await db`select id from mandates where id=${mandateId} for update`;
+      const state =
+        await db`select p.id from payment_attempts p join execution_grants g on g.id=p.grant_id join authorization_reservations r on r.id=p.reservation_id join mandates m on m.id=p.mandate_id where p.id=${data.paymentAttemptId} and p.status='CAPTURED' and p.provider='PAYPAL' and p.provider_status='COMPLETED' and p.provider_capture_status='COMPLETED' and p.provider_capture_id=${data.paypalCaptureId} and g.status='CONSUMED' and r.status='COMMITTED' and g.reservation_id=r.id and p.proposal_id=g.proposal_id and p.proposal_id=r.proposal_id and g.receipt_id=r.receipt_id and p.mandate_id=g.mandate_id and p.mandate_id=r.mandate_id and p.principal_id=g.principal_id and p.principal_id=m.principal_id and p.amount_minor=g.amount_minor and p.amount_minor=r.amount_minor and p.currency=g.currency and p.currency=r.currency and p.merchant_reference=g.merchant_id`;
+      const existing =
+        await db`select id from evidence_events where type='PAYMENT_COMMITTED' and data->>'paymentAttemptId'=${data.paymentAttemptId}`;
+      if (state.length !== 1 || existing.length !== 0)
+        throw new Error("PAYMENT_EVIDENCE_STATE_INVALID");
+    }
     occurredAt = persistedDate(occurredAt).toISOString();
     z.record(
       z.string(),

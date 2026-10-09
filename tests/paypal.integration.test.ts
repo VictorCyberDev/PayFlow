@@ -1679,4 +1679,53 @@ run("Milestone 2D durable PayPal execution", () => {
       expect(provider.captureIds).toHaveLength(1);
     },
   );
+
+  it("2E ledger API rejects PAYMENT_COMMITTED while financial authority is unresolved", async () => {
+    const provider = new RecoveryProvider();
+    provider.captureDespiteLoss = false;
+    const { id } = await unknown(provider);
+    await expect(
+      repo.appendEvidence(
+        "PAYMENT_COMMITTED",
+        { paymentAttemptId: id, paypalCaptureId: "FORGED" },
+        now,
+      ),
+    ).rejects.toThrow("PAYMENT_EVIDENCE_STATE_INVALID");
+    await states();
+    expect(provider.financialSideEffects).toBe(0);
+    expect(PostgresTrustRepository.verifyEvidence(await repo.evidence())).toBe(
+      true,
+    );
+  });
+  it.each(["duplicate", "substituted capture"])(
+    "2E ledger API rejects a %s commitment without another logical event",
+    async (change) => {
+      const token = await issued(),
+        provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      await boundary(provider).execute(token, now);
+      const rows =
+        await repo.sql`select id,provider_capture_id from payment_attempts`;
+      await expect(
+        repo.appendEvidence(
+          "PAYMENT_COMMITTED",
+          {
+            paymentAttemptId: String(rows[0]?.id),
+            paypalCaptureId:
+              change === "duplicate"
+                ? String(rows[0]?.provider_capture_id)
+                : "FORGED",
+          },
+          now,
+        ),
+      ).rejects.toThrow("PAYMENT_EVIDENCE_STATE_INVALID");
+      expect(
+        (await repo.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
+      ).toHaveLength(1);
+      expect(provider.financialSideEffects).toBe(1);
+      expect(
+        PostgresTrustRepository.verifyEvidence(await repo.evidence()),
+      ).toBe(true);
+    },
+  );
 });

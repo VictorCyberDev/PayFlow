@@ -122,7 +122,8 @@ evidence and provider IDs; never normalize corrupt financial state into success.
 Under locks, successful finalization checks exact IDs/bindings/provider money and
 state, then verifies affected rows: attempt CAPTURED, grant CONSUMED, reservation
 COMMITTED. PAYMENT_COMMITTED is in that same transaction. A failure rolls back
-all changes. Repeated/concurrent reconciliation cannot append a second logical
+all changes. The generic ledger API also locks/checks the finalized financial
+rows and refuses missing, substituted or duplicate PAYMENT_COMMITTED events. Repeated/concurrent reconciliation cannot append a second logical
 commitment. Original ALLOW/ESCALATE receipts are never rewritten by approval.
 
 Migration 004 freezes receipt proposal/document and immutable grant snapshots,
