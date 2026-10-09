@@ -1,12 +1,26 @@
-name: PayFlow Type Fix
+name: PayFlow CI
 on:
+  pull_request:
   push:
     branches: [milestone-2-durable-paypal]
 permissions:
-  contents: write
+  contents: read
 jobs:
-  fix:
+  verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: payflow
+          POSTGRES_PASSWORD: payflow_test
+          POSTGRES_DB: payflow_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U payflow -d payflow_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://payflow:payflow_test@localhost:5432/payflow_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,19 +28,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Apply typed JSON adapter fix
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('src/persistence.ts')
-          s=p.read_text().replace('${this.sql.json(r)},${r.evaluatedAt}', '${this.sql.json(r as unknown as never)},${r.evaluatedAt}')
-          p.write_text(s)
-          PY
-          npm run format
-      - name: Commit fix
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src/persistence.ts
-          git commit -m "fix: adapt Decision Receipt to PostgreSQL JSON type"
-          git push
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run test:coverage
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run build
