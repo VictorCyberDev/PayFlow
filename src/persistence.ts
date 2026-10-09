@@ -231,7 +231,14 @@ export class PostgresTrustRepository {
         type: String(r.type),
         occurredAt: new Date(String(r.occurred_at)).toISOString(),
         data: r.data as DurableEvidence["data"],
-        previousHash: r.previous_hash === null ? null : String(r.previous_hash),
+        previousHash:
+          r.previous_hash === null
+            ? null
+            : typeof r.previous_hash === "string"
+              ? r.previous_hash
+              : (() => {
+                  throw new Error("MALFORMED_PERSISTED_EVIDENCE");
+                })(),
         hash: String(r.hash),
       });
     });
