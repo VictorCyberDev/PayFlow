@@ -1,6 +1,8 @@
 name: Fix 2D Lint
 on:
-  workflow_dispatch:
+  push:
+    branches: [milestone-2-durable-paypal]
+    paths: [.github/workflows/fix-2d-lint.yml]
 permissions:
   contents: write
 jobs:
@@ -15,11 +17,12 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx eslint src/paypal.ts tests/paypal.integration.test.ts tests/paypal.test.ts --fix
+      - run: node .github/scripts/fix-2d-lint.mjs
       - run: npm run format
+      - run: npm run lint
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/paypal.ts tests/paypal.integration.test.ts tests/paypal.test.ts
-          git diff --cached --quiet || git commit -m "fix(2d): apply safe lint autofixes"
+          git commit -m "fix(2d): satisfy strict lint rules"
           git push origin HEAD:milestone-2-durable-paypal
