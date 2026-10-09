@@ -1233,4 +1233,450 @@ run("Milestone 2D durable PayPal execution", () => {
     await states();
     expect(JSON.stringify(await repo.evidence())).not.toContain(raw);
   });
+
+  async function escalation(): Promise<string> {
+    const m = { ...mandate, autonomousPurchaseThresholdMinor: 1000 };
+    await repo.sql`update mandates set document=${repo.sql.json(m)},fingerprint=${mandateFingerprint(m)} where id=${mandate.id}`;
+    await repo.saveProposal({
+      ...proposal,
+      mandateFingerprint: mandateFingerprint(m),
+    });
+    const result = await auth.authorizeProposal(proposal.id, "LOW", now);
+    await auth.approveEscalation(result.receipt.receiptId, principal.id, now);
+    return issuer.issue(
+      (await repo.getReservationByProposal(proposal.id))!.id,
+      now,
+    );
+  }
+  it.each([
+    "principalId",
+    "agentId",
+    "mandateId",
+    "proposalId",
+    "receiptId",
+    "reservationId",
+    "capability",
+    "amountMinor",
+    "currency",
+    "merchantId",
+    "proposalDigest",
+    "mandateFingerprint",
+  ])("2E signed payload %s substitution stops before PayPal", async (field) => {
+    const token = await issued(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    const payload = JSON.parse(
+      Buffer.from(token.split(".")[0]!, "base64url").toString("utf8"),
+    ) as Record<string, unknown>;
+    payload[field] =
+      field === "amountMinor"
+        ? 1
+        : field === "capability"
+          ? "CAPTURE_PAYMENT"
+          : field === "currency"
+            ? "EUR"
+            : field.endsWith("Digest") || field.endsWith("Fingerprint")
+              ? "0".repeat(64)
+              : "SUBSTITUTED";
+    const altered =
+      Buffer.from(JSON.stringify(payload)).toString("base64url") +
+      "." +
+      token.split(".")[1]!;
+    await expect(boundary(provider).execute(altered, now)).rejects.toThrow();
+    expect(provider.logicalOrders).toBe(0);
+    expect(provider.financialSideEffects).toBe(0);
+  });
+  it.each(["before authorization", "before issuance", "before claim"])(
+    "2E durable mandate revocation %s blocks provider execution",
+    async (stage) => {
+      const provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      await repo.saveProposal(proposal);
+      if (stage === "before authorization") {
+        await repo.revokeMandate(mandate.id, now);
+        await expect(
+          auth.authorizeProposal(proposal.id, "LOW", now),
+        ).rejects.toThrow("REVOKED");
+        expect(await repo.getReservationByProposal(proposal.id)).toBeNull();
+      } else {
+        const result = await auth.authorizeProposal(proposal.id, "LOW", now);
+        const token =
+          stage === "before claim"
+            ? await issuer.issue(result.reservation!.id, now)
+            : undefined;
+        await repo.revokeMandate(mandate.id, now);
+        if (token)
+          await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+            "REVOKED",
+          );
+        else
+          await expect(
+            issuer.issue(result.reservation!.id, now),
+          ).rejects.toThrow("REVOKED");
+      }
+      expect(provider.logicalOrders).toBe(0);
+      expect(provider.financialSideEffects).toBe(0);
+    },
+  );
+  it.each(["SUSPENDED", "REVOKED", "EXPIRED"])(
+    "2E passport %s between reservation and grant issuance cannot execute",
+    async (status) => {
+      await repo.saveProposal(proposal);
+      const result = await auth.authorizeProposal(proposal.id, "LOW", now);
+      if (status === "EXPIRED")
+        await repo.sql`update agent_passports set expires_at=${now} where id=${agent.id}`;
+      else
+        await repo.sql`update agent_passports set status=${status} where id=${agent.id}`;
+      await expect(issuer.issue(result.reservation!.id, now)).rejects.toThrow(
+        "AGENT_NOT_EXECUTABLE",
+      );
+      expect(await repo.sql`select id from execution_grants`).toHaveLength(0);
+    },
+  );
+  it.each(["REVOKED", "EXPIRED", "PRINCIPAL", "PROPOSAL"])(
+    "2E approval %s after claim and before capture blocks the financial operation",
+    async (change) => {
+      const token = await escalation(),
+        provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      if (change === "PRINCIPAL")
+        await repo.savePrincipal({
+          id: "other-principal",
+          displayName: "Other",
+        });
+      if (change === "PROPOSAL")
+        await repo.saveProposal({
+          ...proposal,
+          id: "other-proposal",
+          nonce: "other-proposal-nonce",
+          mandateFingerprint: mandateFingerprint({
+            ...mandate,
+            autonomousPurchaseThresholdMinor: 1000,
+          }),
+        });
+      provider.afterCreate = async () => {
+        if (change === "PRINCIPAL")
+          await repo.sql`update approvals set principal_id='other-principal'`;
+        else if (change === "PROPOSAL")
+          await repo.sql`update approvals set proposal_id='other-proposal'`;
+        else await repo.sql`update approvals set status=${change}`;
+      };
+      await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+        "INVESTIGATION",
+      );
+      await states();
+      expect(provider.captureIds).toHaveLength(0);
+      expect(provider.financialSideEffects).toBe(0);
+    },
+  );
+  it("2E duplicate approval concurrency reserves only once and retains the historical ESCALATE decision", async () => {
+    const m = { ...mandate, autonomousPurchaseThresholdMinor: 1000 };
+    await repo.sql`update mandates set document=${repo.sql.json(m)},fingerprint=${mandateFingerprint(m)} where id=${mandate.id}`;
+    await repo.saveProposal({
+      ...proposal,
+      mandateFingerprint: mandateFingerprint(m),
+    });
+    const result = await auth.authorizeProposal(proposal.id, "LOW", now);
+    const second = PostgresTrustRepository.connect(url!);
+    try {
+      const results = await Promise.allSettled([
+        auth.approveEscalation(result.receipt.receiptId, principal.id, now),
+        new DurableAuthorizationService(second).approveEscalation(
+          result.receipt.receiptId,
+          principal.id,
+          now,
+        ),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect(await repo.sql`select id from approvals`).toHaveLength(1);
+      expect(
+        await repo.sql`select id from authorization_reservations`,
+      ).toHaveLength(1);
+      expect((await repo.getReceipt(result.receipt.receiptId))?.decision).toBe(
+        "ESCALATE",
+      );
+    } finally {
+      await second.close();
+    }
+  });
+  it.each(["amount", "currency", "merchant", "capability"])(
+    "2E %s mutation after human approval cannot become a signed execution grant",
+    async (change) => {
+      const m = { ...mandate, autonomousPurchaseThresholdMinor: 1000 };
+      await repo.sql`update mandates set document=${repo.sql.json(m)},fingerprint=${mandateFingerprint(m)} where id=${mandate.id}`;
+      const p = { ...proposal, mandateFingerprint: mandateFingerprint(m) };
+      await repo.saveProposal(p);
+      const result = await auth.authorizeProposal(p.id, "LOW", now);
+      const approved = await auth.approveEscalation(
+        result.receipt.receiptId,
+        principal.id,
+        now,
+      );
+      const altered = structuredClone(p);
+      if (change === "amount") altered.amount = { ...altered.amount, minor: 1 };
+      if (change === "currency")
+        altered.amount = { ...altered.amount, currency: "EUR" };
+      if (change === "merchant")
+        altered.merchant = { ...altered.merchant, id: "OTHER" };
+      if (change === "capability")
+        altered.requestedCapability = "CAPTURE_PAYMENT";
+      await repo.sql`update transaction_proposals set document=${repo.sql.json(altered)},amount_minor=${altered.amount.minor},currency=${altered.amount.currency} where id=${p.id}`;
+      await expect(issuer.issue(approved.reservation.id, now)).rejects.toThrow(
+        "AUTHORIZATION_PROPOSAL_CHANGED",
+      );
+      expect((await repo.getReceipt(result.receipt.receiptId))?.decision).toBe(
+        "ESCALATE",
+      );
+    },
+  );
+  it("2E grant issuance failure after signing and insertion rolls back the grant/evidence while retaining a recoverable reservation", async () => {
+    await repo.saveProposal(proposal);
+    const result = await auth.authorizeProposal(proposal.id, "LOW", now);
+    const original = repo.appendEvidenceInTransaction.bind(repo);
+    const spy = vi
+      .spyOn(repo, "appendEvidenceInTransaction")
+      .mockImplementation(async (db, type, data, time) => {
+        const event = await original(db, type, data, time);
+        if (type === "EXECUTION_GRANT_ISSUED")
+          throw new Error("SIMULATED_ISSUANCE_CRASH");
+        return event;
+      });
+    try {
+      await expect(issuer.issue(result.reservation!.id, now)).rejects.toThrow(
+        "ISSUANCE_CRASH",
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await repo.sql`select id from execution_grants`).toHaveLength(0);
+    expect((await repo.getReservationByProposal(proposal.id))?.status).toBe(
+      "AUTHORIZED",
+    );
+    const token = await issuer.issue(result.reservation!.id, now),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    await boundary(provider).execute(token, now);
+    expect(provider.financialSideEffects).toBe(1);
+    expect(PostgresTrustRepository.verifyEvidence(await repo.evidence())).toBe(
+      true,
+    );
+  });
+  it.each([
+    "create_order_request_id",
+    "capture_request_id",
+    "expires_at",
+    "created_at",
+  ])(
+    "2E corrupted recovery %s remains quarantined without another provider dispatch",
+    async (field) => {
+      const provider = new RecoveryProvider();
+      provider.captureDespiteLoss = false;
+      const { id, claims } = await unknown(provider);
+      if (field === "expires_at")
+        await repo.sql`update execution_grants set expires_at='2026-11-01T00:00:00Z' where id=${claims.jti}`;
+      else if (field === "created_at")
+        await repo.sql`update payment_attempts set created_at='infinity' where id=${id}`;
+      else
+        await repo.sql`update payment_attempts set ${repo.sql(field)}='SUBSTITUTED-KEY' where id=${id}`;
+      await expect(restartRecovery(provider, id)).rejects.toThrow();
+      expect(provider.captureIds).toHaveLength(1);
+      expect(provider.financialSideEffects).toBe(0);
+      await states();
+    },
+  );
+  it.each(["RELEASED", "FAILED", "COMMITTED"])(
+    "2E corrupted executing reservation %s cannot free capacity for another financial authorization",
+    async (status) => {
+      const provider = new RecoveryProvider();
+      provider.captureDespiteLoss = false;
+      const { reservationId } = await unknown(provider);
+      await repo.sql`update authorization_reservations set status=${status} where id=${reservationId}`;
+      const another = {
+        ...proposal,
+        id: "another",
+        nonce: "another-proposal-nonce",
+        amount: { currency: "USD", minor: 10000 },
+      };
+      await repo.saveProposal(another);
+      await expect(
+        auth.authorizeProposal(another.id, "LOW", now),
+      ).rejects.toThrow("CORRUPT_AUTHORITY_ACCOUNTING");
+      expect(await repo.getReservationByProposal(another.id)).toBeNull();
+      expect(provider.financialSideEffects).toBe(0);
+    },
+  );
+  it("2E stale worker snapshot cannot finalize peer-updated state after a provider operation", async () => {
+    const token = await issued(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    provider.afterCapture = async () => {
+      await repo.sql`update payment_attempts set status='CAPTURE_UNKNOWN'`;
+    };
+    await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+      "INVESTIGATION",
+    );
+    await states();
+    const rows = await repo.sql`select id from payment_attempts`;
+    expect(await restartRecovery(provider, String(rows[0]?.id))).toBe(
+      "CAPTURED",
+    );
+    expect(provider.financialSideEffects).toBe(1);
+    expect(provider.captureIds).toHaveLength(1);
+  });
+  it("2E equivalent timestamp forms are normalized before evidence hashing", async () => {
+    await repo.appendEvidence(
+      "CANONICAL_TIME",
+      { test: true },
+      "2026-10-09T12:00:00Z",
+    );
+    await repo.appendEvidence("NEXT_EVENT", { test: true }, now);
+    expect(PostgresTrustRepository.verifyEvidence(await repo.evidence())).toBe(
+      true,
+    );
+  });
+  it("2E millisecond timestamps survive the entire signed PostgreSQL/provider flow", async () => {
+    const time = "2026-10-09T12:00:00.123Z";
+    await repo.saveProposal({ ...proposal, proposedAt: time });
+    const result = await auth.authorizeProposal(proposal.id, "LOW", time);
+    const token = await issuer.issue(result.reservation!.id, time),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    const execution = new ExecutionBoundary(
+      repo,
+      new StaticPublicKeyRing(new Map([["2d-key", publicKey]])),
+      new PayPalExecutionRail(repo, provider, () => time),
+    );
+    await execution.execute(token, time);
+    expect(provider.financialSideEffects).toBe(1);
+    expect(PostgresTrustRepository.verifyEvidence(await repo.evidence())).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    "grant_id",
+    "proposal_id",
+    "mandate_id",
+    "principal_id",
+    "amount_minor",
+    "currency",
+    "merchant_reference",
+    "create_order_request_id",
+    "capture_request_id",
+  ])(
+    "2E missing Payment Attempt %s cannot authorize recovery",
+    async (field) => {
+      const provider = new RecoveryProvider();
+      provider.captureDespiteLoss = false;
+      const { id } = await unknown(provider);
+      await repo.sql`update payment_attempts set ${repo.sql(field)}=null where id=${id}`;
+      await expect(restartRecovery(provider, id)).rejects.toThrow();
+      expect(provider.financialSideEffects).toBe(0);
+      expect(provider.captureIds).toHaveLength(1);
+      await states();
+    },
+  );
+  it("2E a CAPTURED attempt with uncommitted grant authority is corruption, never successful reconciliation", async () => {
+    const token = await issued(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    await boundary(provider).execute(token, now);
+    await repo.sql`update execution_grants set status='CLAIMED'`;
+    const rows = await repo.sql`select id from payment_attempts`;
+    await expect(
+      restartRecovery(provider, String(rows[0]?.id)),
+    ).rejects.toThrow("GRANT_FINALIZATION_STATE_INVALID");
+    expect(provider.financialSideEffects).toBe(1);
+    expect(provider.captureIds).toHaveLength(1);
+    expect(
+      (await repo.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
+    ).toHaveLength(1);
+  });
+  it("2E revocation racing authorization-to-reservation is serialized and prevents subsequent grant issuance", async () => {
+    await repo.saveProposal(proposal);
+    let reached!: () => void, release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const original = repo.createReservation.bind(repo);
+    const spy = vi
+      .spyOn(repo, "createReservation")
+      .mockImplementation(async (reservation, tx) => {
+        reached();
+        await gate;
+        return original(reservation, tx);
+      });
+    const second = PostgresTrustRepository.connect(url!);
+    const authorization = auth.authorizeProposal(proposal.id, "LOW", now);
+    let revocation: Promise<unknown> | undefined;
+    try {
+      await entered;
+      revocation =
+        second.sql`update agent_passports /*2e_revocation_race*/ set status='REVOKED' where id=${agent.id}`.then(
+          (result) => result,
+        );
+      let blocked = false;
+      for (let probe = 0; probe < 100 && !blocked; probe++) {
+        const rows =
+          await repo.sql`select pid from pg_stat_activity where query like ${"%2e_revocation_race%"} and wait_event_type='Lock'`;
+        blocked = rows.length === 1;
+      }
+      expect(blocked).toBe(true);
+      release();
+      const result = await authorization;
+      await revocation;
+      expect(result.reservation?.status).toBe("AUTHORIZED");
+      await expect(issuer.issue(result.reservation!.id, now)).rejects.toThrow(
+        "AGENT_NOT_EXECUTABLE",
+      );
+      expect(await repo.sql`select id from payment_attempts`).toHaveLength(0);
+    } finally {
+      release();
+      spy.mockRestore();
+      await authorization.catch(() => undefined);
+      await revocation;
+      await second.close();
+    }
+  });
+
+  it("2E mutually FAILED grant/reservation cannot release an unresolved Payment Attempt's authority", async () => {
+    const provider = new RecoveryProvider();
+    provider.captureDespiteLoss = false;
+    const { id } = await unknown(provider);
+    await repo.sql`update execution_grants set status='FAILED',failed_at=${now}`;
+    await repo.sql`update authorization_reservations set status='FAILED'`;
+    await expect(
+      repo.authorityAccounting(mandate.id, mandate.cumulativeLimitMinor),
+    ).rejects.toThrow("CORRUPT_PAYMENT_ACCOUNTING");
+    await expect(restartRecovery(provider, id)).rejects.toThrow(
+      "GRANT_FINALIZATION_STATE_INVALID",
+    );
+    expect(provider.financialSideEffects).toBe(0);
+    expect(provider.captureIds).toHaveLength(1);
+  });
+
+  it.each(["captured_at", "consumed_at", "commit evidence"])(
+    "2E corrupted finalized %s cannot be reported as successful reconciliation",
+    async (field) => {
+      const token = await issued(),
+        provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      await boundary(provider).execute(token, now);
+      const rows = await repo.sql`select id from payment_attempts`;
+      if (field === "captured_at")
+        await repo.sql`update payment_attempts set captured_at='infinity'`;
+      else if (field === "consumed_at")
+        await repo.sql`update execution_grants set consumed_at='infinity'`;
+      else
+        await repo.sql`delete from evidence_events where type='PAYMENT_COMMITTED'`;
+      await expect(
+        restartRecovery(provider, String(rows[0]?.id)),
+      ).rejects.toThrow();
+      expect(provider.financialSideEffects).toBe(1);
+      expect(provider.captureIds).toHaveLength(1);
+    },
+  );
 });

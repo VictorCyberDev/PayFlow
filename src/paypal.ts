@@ -133,6 +133,7 @@ export class PayPalOAuthClient {
     try {
       r = await this.fetcher(`${BASE}/v1/oauth2/token`, {
         method: "POST",
+        signal: AbortSignal.timeout(15_000),
         headers: {
           Authorization: `Basic ${Buffer.from(`${this.id}:${this.secret}`).toString("base64")}`,
           "Content-Type": "application/x-www-form-urlencoded",
@@ -222,6 +223,7 @@ export class PayPalPaymentProvider implements PaymentProvider {
     try {
       r = await this.fetcher(`${BASE}${path}`, {
         method,
+        signal: AbortSignal.timeout(15_000),
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -653,6 +655,7 @@ export class PayPalExecutionRail implements ExecutionSink {
         if (
           !approval ||
           approval.status !== "APPROVED" ||
+          Date.parse(approval.approvedAt) > Date.parse(now) ||
           approval.principalId !== a.principal_id ||
           approval.proposalId !== a.proposal_id
         )
@@ -741,6 +744,23 @@ export class PayPalExecutionRail implements ExecutionSink {
       throw new Error("PAYMENT_AUTHORITY_MISSING");
     const g = asRow(grants[0]),
       r = asRow(reservations[0]);
+    const claimedAt = persistedDate(g.claimed_at).getTime();
+    if (
+      claimedAt < persistedDate(g.issued_at).getTime() ||
+      claimedAt >= persistedDate(g.expires_at).getTime()
+    )
+      throw new Error("PAYMENT_AUTHORITY_CLAIM_TIME_INVALID");
+    persistedDate(r.created_at);
+    persistedDate(r.updated_at);
+    persistedDate(a.updated_at);
+    if (finalized) {
+      persistedDate(g.consumed_at);
+      persistedDate(a.captured_at);
+      const committed =
+        await tx`select id from evidence_events where type='PAYMENT_COMMITTED' and data->>'paymentAttemptId'=${String(a.id)} and data->>'paypalCaptureId'=${String(a.provider_capture_id)}`;
+      if (committed.length !== 1)
+        throw new Error("PAYMENT_FINALIZATION_EVIDENCE_MISSING");
+    }
     for (const value of [
       g.issued_at,
       g.expires_at,

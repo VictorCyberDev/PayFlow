@@ -347,11 +347,22 @@ export class PostgresTrustRepository {
     cumulativeLimitMinor: number | undefined,
     db: Sql = this.sql,
   ): Promise<AuthorityAccounting> {
+    const corruptReservations =
+      await db`select r.id from authorization_reservations r join transaction_proposals p on p.id=r.proposal_id join decision_receipts d on d.id=r.receipt_id where r.mandate_id=${mandateId} and (r.mandate_id<>p.mandate_id or d.proposal_id<>r.proposal_id or d.mandate_id<>r.mandate_id or d.agent_id<>p.agent_id or r.amount_minor<>p.amount_minor or r.currency<>p.currency or (d.document->'amount'->'minor') is distinct from to_jsonb(r.amount_minor) or (d.document->'amount'->'currency') is distinct from to_jsonb(r.currency::text) or d.proposal_snapshot<>p.document or d.document_hash<>encode(sha256(convert_to(d.document::text,'UTF8')),'hex') or d.decision not in ('ALLOW','ESCALATE')) limit 1`;
+    if (corruptReservations.length)
+      throw new Error("CORRUPT_AUTHORITY_ACCOUNTING");
     const tables = await db`select to_regclass('execution_grants') grants`;
     if (tables[0]?.grants) {
       const inconsistent =
-        await db`select g.id from execution_grants g join authorization_reservations r on r.id=g.reservation_id join mandates m on m.id=r.mandate_id where r.mandate_id=${mandateId} and (g.proposal_id<>r.proposal_id or g.receipt_id<>r.receipt_id or g.mandate_id<>r.mandate_id or g.principal_id<>m.principal_id or g.amount_minor<>r.amount_minor or g.currency<>r.currency or (g.status='CLAIMED' and r.status<>'EXECUTING') or (g.status='CONSUMED' and r.status<>'COMMITTED') or (r.status='COMMITTED' and g.status<>'CONSUMED')) limit 1`;
+        await db`select g.id from execution_grants g join authorization_reservations r on r.id=g.reservation_id join mandates m on m.id=r.mandate_id where r.mandate_id=${mandateId} and (g.proposal_id<>r.proposal_id or g.receipt_id<>r.receipt_id or g.mandate_id<>r.mandate_id or g.principal_id<>m.principal_id or g.amount_minor<>r.amount_minor or g.currency<>r.currency or g.authority_snapshot is distinct from (to_jsonb(g)-ARRAY['status','claimed_at','consumed_at','failed_at','authority_snapshot']) or (g.status='ISSUED' and r.status not in ('AUTHORIZED','RELEASED','EXPIRED','FAILED')) or (g.status='FAILED' and r.status<>'FAILED') or (g.status='CLAIMED' and r.status<>'EXECUTING') or (g.status='CONSUMED' and r.status<>'COMMITTED') or (r.status='COMMITTED' and g.status<>'CONSUMED')) limit 1`;
       if (inconsistent.length) throw new Error("CORRUPT_AUTHORITY_ACCOUNTING");
+    }
+    const attempts =
+      await db`select 1 from information_schema.columns where table_schema='public' and table_name='payment_attempts' and column_name='grant_id'`;
+    if (attempts.length) {
+      const inconsistent =
+        await db`select p.id from payment_attempts p join authorization_reservations r on r.id=p.reservation_id left join execution_grants g on g.id=p.grant_id where r.mandate_id=${mandateId} and p.provider='PAYPAL' and (g.id is null or p.proposal_id is distinct from r.proposal_id or p.mandate_id is distinct from r.mandate_id or p.principal_id is distinct from g.principal_id or p.grant_id is distinct from g.id or g.reservation_id is distinct from r.id or p.amount_minor is distinct from r.amount_minor or p.currency is distinct from r.currency or p.merchant_reference is distinct from g.merchant_id or p.status in ('FAILED','CANCELLED') or (p.status='CAPTURED' and (g.status<>'CONSUMED' or r.status<>'COMMITTED' or p.provider_capture_id is null or p.provider_capture_status is distinct from 'COMPLETED')) or (p.status<>'CAPTURED' and (g.status<>'CLAIMED' or r.status<>'EXECUTING'))) limit 1`;
+      if (inconsistent.length) throw new Error("CORRUPT_PAYMENT_ACCOUNTING");
     }
     const rows =
       await db`select coalesce(sum(amount_minor) filter (where status='COMMITTED'),0) committed, coalesce(sum(amount_minor) filter (where status in ('AUTHORIZED','EXECUTING')),0) reserved from authorization_reservations where mandate_id=${mandateId}`;
@@ -424,6 +435,11 @@ export class PostgresTrustRepository {
     data: DurableEvidence["data"],
     occurredAt: string,
   ): Promise<DurableEvidence> {
+    occurredAt = persistedDate(occurredAt).toISOString();
+    z.record(
+      z.string(),
+      z.union([z.string(), z.number().finite(), z.boolean(), z.null()]),
+    ).parse(data);
     await db`select pg_advisory_xact_lock(731991)`;
     if (!PostgresTrustRepository.verifyEvidence(await this.evidence(db)))
       throw new Error("EVIDENCE_INTEGRITY_FAILURE");

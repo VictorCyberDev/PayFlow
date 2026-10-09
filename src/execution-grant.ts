@@ -128,13 +128,20 @@ export class ExecutionGrantIssuer {
     private readonly audience = "payflow.payment-execution",
     private readonly ttlMs = DEFAULT_EXECUTION_GRANT_TTL_MS,
   ) {
-    if (ttlMs <= 0 || ttlMs > MAX_EXECUTION_GRANT_TTL_MS)
+    if (privateKey.asymmetricKeyType !== "ed25519")
+      throw new Error("ED25519_SIGNING_KEY_REQUIRED");
+    if (
+      !Number.isSafeInteger(ttlMs) ||
+      ttlMs <= 0 ||
+      ttlMs > MAX_EXECUTION_GRANT_TTL_MS
+    )
       throw new Error("INVALID_GRANT_TTL");
   }
 
   async issue(reservationId: string, now: string): Promise<string> {
     if (!Number.isFinite(Date.parse(now)))
       throw new Error("INVALID_ISSUANCE_TIME");
+    now = persistedDate(now).toISOString();
     return this.repo.sql.begin(async (tx) => {
       const rows =
         await tx`select * from authorization_reservations where id=${reservationId} for update`;
@@ -208,6 +215,7 @@ export class ExecutionGrantIssuer {
         if (
           !approval ||
           approval.status !== "APPROVED" ||
+          Date.parse(approval.approvedAt) > Date.parse(now) ||
           approval.principalId !== mandate.principalId ||
           approval.proposalId !== proposal.id
         )
@@ -308,6 +316,12 @@ export class ExecutionBoundary {
     const publicKey = this.keys.resolve(claims.kid);
     if (!publicKey)
       return this.verificationFailure(token, "UNKNOWN_GRANT_KID", now);
+    if (publicKey.asymmetricKeyType !== "ed25519")
+      return this.verificationFailure(
+        token,
+        "ED25519_VERIFICATION_KEY_REQUIRED",
+        now,
+      );
     if (!verify(null, Buffer.from(stable(claims)), publicKey, signature))
       return this.verificationFailure(token, "INVALID_GRANT_SIGNATURE", now);
 
@@ -435,6 +449,7 @@ export class ExecutionBoundary {
           });
           if (
             approval.status !== "APPROVED" ||
+            Date.parse(approval.approvedAt) > Date.parse(now) ||
             approval.principalId !== claims.principalId ||
             approval.proposalId !== claims.proposalId
           )

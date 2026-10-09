@@ -60,7 +60,7 @@ Evidence records safe IDs, status, amount/currency and failure classifications n
 
 ## Explicit non-claims
 
-2D is Sandbox only. It does not implement live PayPal, hardware-backed keys, immutable audit storage, production principal authentication, LLM mandate parsing, product discovery, final UI, refunds, disputes, subscriptions, multi-provider payments, Milestone 2E or Milestone 3.
+2D is Sandbox only. It does not implement live PayPal, hardware-backed keys, immutable audit storage, production principal authentication, LLM mandate parsing, product discovery, final UI, refunds, disputes, subscriptions, multi-provider payments or Milestone 3.
 
 ## Integrated Milestone 2E review
 

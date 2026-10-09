@@ -30,7 +30,8 @@ strict provider verification -> atomic attempt/grant/reservation/evidence commit
 
 Receipt snapshots detect mutation before grant issuance or human approval. Grant
 snapshots detect mutation of immutable persisted claims, including lifetime.
-Relational shadow fields are checked against documents. The financial rail admits
+Relational shadow fields are checked against documents. Accounting refuses inconsistent
+reservation/receipt/grant bindings and impossible claimed/committed lifecycle pairs. The financial rail admits
 only CREATE_ORDER/CAPTURE_PAYMENT and checks principal, agent, mandate, proposal,
 receipt, reservation, grant, capability, logical merchant, amount and currency.
 Provider verification checks order ID, one purchase-unit reference, money,
@@ -49,6 +50,7 @@ last, under a global transaction advisory lock. General transitions cannot
 manually execute/finalize a reservation associated with an execution grant.
 
 A session advisory lock serializes a Payment Attempt across provider requests.
+OAuth and order HTTP requests have a 15-second deadline and no internal retry loop.
 Short local transactions validate and commit a dispatch intent, then commit or
 roll back before any network request. No PostgreSQL transaction spans PayPal.
 Dispatch rechecks passport suspension/revocation/expiration, mandate revocation/
@@ -129,7 +131,9 @@ allocation from evidence sequence numbers. Appends allocate the explicit next
 sequence under the existing advisory lock and verify the existing chain first.
 Rollback consumes no number. Historical evidence is not rehashed or silently
 repaired. Legacy snapshots are backfilled from migration-time state; they cannot
-prove that old documents had never changed. Previously broken evidence requires
+prove that old documents had never changed. Legacy terminal FAILED/CANCELLED PayPal attempts require investigation before
+new authority accounting: old failure labels are not proof of no financial effect.
+No automated rewrite of their financial history is performed. Previously broken evidence requires
 investigation; the migration deliberately does not rewrite history.
 
 Errors in evidence use bounded reason codes instead of exception text. OAuth
@@ -149,3 +153,30 @@ Clock inputs are trusted server inputs, not agent-controlled parameters; deploym
 must use synchronized clocks. Session locks serialize cooperative workers, not an
 arbitrary hostile SQL writer. Investigation is required when outcome or security
 state cannot be proven. No Milestone 3 or natural-language mandate layer is added.
+
+## Final invariant proof inventory
+
+These are bounded claims about the trusted runtime, cooperating PostgreSQL workers
+and the provider idempotency contract described above, not claims against a
+compromised host/provider/database administrator.
+
+| Question                                                         | Control and concrete executable test                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Spend more than authorized?                                      | Mandate-serialized accounting, safe integers, active holds; M2B concurrent cumulative-budget tests and 2E corrupt-accounting/M1 concurrent-budget tests.                                                                                                   |
+| Substitute merchant/money/capability?                            | Signed claims, frozen receipt/proposal/grant bindings and strict provider verification; 2E signed-payload, post-approval mutation and normal-execution provider-substitution matrices. Logical merchant is bound; PayPal payee routing is not implemented. |
+| Spend using a stale/revoked grant?                               | Current authority revalidation at claim and each dispatch; existing 2C stale-authority tests and 2E revocation stages, after-GET races and post-create suspension.                                                                                         |
+| Two workers spend one reservation twice?                         | Atomic one-time claim, unique attempt and session serialization; two-instance full-boundary test and existing concurrent grant/reconciliation tests count one effect/commit.                                                                               |
+| Lost responses cause duplicate capture?                          | Persisted key, GET before retry, bounded retention; provider DID/DID NOT capture tests, delayed visibility and GET-to-retry race count one effect.                                                                                                         |
+| Malformed provider response create false success?                | Full order/reference/money/currency/status/capture validation; normal-execution and recovery substitution matrices retain quarantined authority.                                                                                                           |
+| Corrupt PostgreSQL state become authorization?                   | Schema relationships/uniqueness, shadow/snapshot checks, accounting consistency and claim evidence; missing-attempt-field, grant corruption, receipt mutation and impossible lifecycle tests.                                                              |
+| UNKNOWN release authority?                                       | Executing holds survive expiry/release/failure APIs and unclassified sink errors; 2E reservation transition, repeated ambiguity and corrupt-accounting tests.                                                                                              |
+| PAYMENT_COMMITTED without durable transitions?                   | Locked finalization, affected-row verification and same-transaction evidence; suppressed grant transition and injected finalization crash tests prove rollback and one subsequent commitment.                                                              |
+| Secrets enter evidence/log/database through payment diagnostics? | Whitelisted evidence fields, bounded reason codes, no raw response/exception persistence; synthetic HTTP and unclassified-sink redaction tests plus existing no-token evidence test. IDs remain necessary forensic data.                                   |
+| Network while critical PostgreSQL transaction held?              | Explicit dispatch commit and short finalization transactions; existing provider-boundary test inspects PostgreSQL activity on each create/GET/capture.                                                                                                     |
+
+Human approval tests additionally cover concurrent duplicate submission, wrong
+principal/proposal, revoked/expired approval after claim, and altered financial
+fields after approval. Approval remains receipt-specific and does not rewrite its
+historical ESCALATE decision. The authorization/reservation revocation race test
+observes the blocked PostgreSQL revoker before releasing the authorization
+transaction, then proves grant issuance is denied.
