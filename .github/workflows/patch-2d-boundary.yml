@@ -1,0 +1,32 @@
+name: Patch 2D Execution Boundary
+on:
+  push:
+    branches: [milestone-2-durable-paypal]
+    paths: [.github/workflows/patch-2d-boundary.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: milestone-2-durable-paypal
+      - run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/execution-grant.ts')
+          s=p.read_text()
+          if 'ExecutionQuarantinedError' not in s:
+              s=s.replace('import { z } from "zod";','import { z } from "zod";\nimport { ExecutionQuarantinedError } from "./execution-outcome.js";')
+          old='''    } catch (error) {\n      await this.repo.sql.begin(async (tx) => {\n        await tx`update execution_grants set status='FAILED',failed_at=${now} where id=${claims.jti} and status='CLAIMED'`;\n        await tx`update authorization_reservations set status='FAILED',updated_at=${now} where id=${claims.reservationId} and status='EXECUTING'`;\n        await this.repo.appendEvidenceInTransaction(\n          tx,\n          "PAYMENT_EXECUTION_FAILED",\n          { grantId: claims.jti },\n          now,\n        );\n      });\n      throw error;\n    }'''
+          new='''    } catch (error) {\n      if (error instanceof ExecutionQuarantinedError) {\n        await this.repo.appendEvidence(\n          "PAYMENT_EXECUTION_QUARANTINED",\n          { grantId: claims.jti, reason: error.message },\n          now,\n        );\n        throw error;\n      }\n      await this.repo.sql.begin(async (tx) => {\n        await tx`update execution_grants set status='FAILED',failed_at=${now} where id=${claims.jti} and status='CLAIMED'`;\n        await tx`update authorization_reservations set status='FAILED',updated_at=${now} where id=${claims.reservationId} and status='EXECUTING'`;\n        await this.repo.appendEvidenceInTransaction(\n          tx,\n          "PAYMENT_EXECUTION_FAILED",\n          { grantId: claims.jti },\n          now,\n        );\n      });\n      throw error;\n    }'''
+          if old not in s:
+              raise SystemExit('expected boundary block not found')
+          p.write_text(s.replace(old,new))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/execution-grant.ts
+          git commit -m "fix(2d): quarantine ambiguous provider outcomes"
+          git push origin HEAD:milestone-2-durable-paypal
