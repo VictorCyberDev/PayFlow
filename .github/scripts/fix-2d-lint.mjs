@@ -6,18 +6,19 @@ s = s.replaceAll("String(a.provider_order_id)", 'requiredString(a.provider_order
 fs.writeFileSync("src/paypal.ts", s);
 
 s = fs.readFileSync("tests/paypal.integration.test.ts", "utf8");
-s = s.replace("async createOrder(): Promise<PayPalOrderView> {", "createOrder(): Promise<PayPalOrderView> {");
-s = s.replace("return this.order;\n  }\n  async captureOrder", "return Promise.resolve(this.order);\n  }\n  captureOrder");
-s = s.replace('throw new PayPalProviderError("AMBIGUOUS", "SIMULATED_RESPONSE_LOSS");', 'return Promise.reject(new PayPalProviderError("AMBIGUOUS", "SIMULATED_RESPONSE_LOSS"));');
-s = s.replace("async getOrder(): Promise<PayPalOrderView> {", "getOrder(): Promise<PayPalOrderView> {");
-s = s.replace('if (!this.order) throw new Error("ORDER_NOT_FOUND");\n    return this.order;', 'if (!this.order) return Promise.reject(new Error("ORDER_NOT_FOUND"));\n    return Promise.resolve(this.order);');
+s = s.replace("async createOrder(): Promise<PayPalOrderView> {", "async createOrder(): Promise<PayPalOrderView> {\n    await Promise.resolve();");
+s = s.replace("async captureOrder(): Promise<PayPalOrderView> {", "async captureOrder(): Promise<PayPalOrderView> {\n    await Promise.resolve();");
+s = s.replace("async getOrder(): Promise<PayPalOrderView> {", "async getOrder(): Promise<PayPalOrderView> {\n    await Promise.resolve();");
 fs.writeFileSync("tests/paypal.integration.test.ts", s);
 
 s = fs.readFileSync("tests/paypal.test.ts", "utf8");
 s = s.replaceAll("fetcher as typeof fetch", "fetcher");
 s = s.replaceAll("const url = String(input);", "const url = input instanceof Request ? input.url : input instanceof URL ? input.toString() : input;");
 s = s.replaceAll("String(input).endsWith", "(input instanceof Request ? input.url : input instanceof URL ? input.toString() : input).endsWith");
-s = s.replaceAll("vi.fn(async () => new Response", "vi.fn(() => Promise.resolve(new Response");
-s = s.replaceAll("vi.fn(async (input: string | URL | Request, init?: RequestInit) => {", "vi.fn((input: string | URL | Request, init?: RequestInit) => {");
-s = s.replaceAll("vi.fn(async (input: string | URL | Request) =>", "vi.fn((input: string | URL | Request) =>");
+s = s.replace("const fetcher = vi.fn(async () => new Response(JSON.stringify({ access_token: \"token\", expires_in: 60 })", "const fetcher = vi.fn(async () => { await Promise.resolve(); return new Response(JSON.stringify({ access_token: \"token\", expires_in: 60 })");
+s = s.replace("headers: { \"content-type\": \"application/json\" } }));\n    const oauth = new PayPalOAuthClient(\"client\", \"secret\", fetcher", "headers: { \"content-type\": \"application/json\" } }); });\n    const oauth = new PayPalOAuthClient(\"client\", \"secret\", fetcher");
+s = s.replace("const fetcher = vi.fn(async () => new Response(\"no\", { status: 401 }));", "const fetcher = vi.fn(async () => { await Promise.resolve(); return new Response(\"no\", { status: 401 }); });");
+s = s.replace("const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {", "const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {\n      await Promise.resolve();");
+s = s.replace("const fetcher = vi.fn(async (input: string | URL | Request) =>", "const fetcher = vi.fn(async (input: string | URL | Request) => { await Promise.resolve(); return");
+s = s.replace(": new Response(\"oops\", { status: 503 }));", ": new Response(\"oops\", { status: 503 }); });");
 fs.writeFileSync("tests/paypal.test.ts", s);
