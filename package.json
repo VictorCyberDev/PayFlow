@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "vitest run tests/persistence.integration.test.ts",
+    "test:integration": "vitest run tests/persistence.integration.test.ts tests/durable-authorization.integration.test.ts",
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
