@@ -99,7 +99,7 @@ const orderSchema = z.object({
 
 export class PayPalOAuthClient {
   private cache?: { token: string; expiresAt: number };
-  private inflight?: Promise<string>;
+  private inflight: Promise<string> | undefined;
   constructor(
     private readonly id: string,
     private readonly secret: string,
@@ -263,12 +263,13 @@ export class PayPalPaymentProvider implements PaymentProvider {
           amountValue: c.amount.value,
           currency: c.amount.currency_code,
         })) ?? [];
+    const payerActionUrl = p.links?.find(
+      (l) => l.rel === "payer-action" || l.rel === "approve",
+    )?.href;
     return {
       id: p.id,
       status: p.status,
-      payerActionUrl: p.links?.find(
-        (l) => l.rel === "payer-action" || l.rel === "approve",
-      )?.href,
+      ...(payerActionUrl ? { payerActionUrl } : {}),
       captures,
     };
   }
