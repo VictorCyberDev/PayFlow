@@ -20,7 +20,11 @@ Threat: PayPal captures successfully but the response is lost, then PayFlow char
 
 Controls: timeout, reset, malformed post-transmission response and ambiguous 5xx become `CAPTURE_UNKNOWN`, never ordinary failure. Grant stays `CLAIMED`; reservation stays `EXECUTING`; authority remains quarantined. Reconciliation uses Show Order and, when PayPal proves the expected completed capture, finalizes the existing attempt without another capture.
 
-Residual risk: prolonged PayPal unavailability can leave authority quarantined for an extended period. This is intentionally safer than overspending.
+Create-order response loss with no local order ID is recovered with the original durable amount/currency/proposal reference and persisted create key. Capture recovery GETs and validates the order first; an existing capture is never recaptured. Only a bound `APPROVED` order with no captures or payer-action URL permits same-key capture retry. Repeated ambiguity never releases the reservation or grant. Automatic retries stop six hours after the original attempt; idempotency retention is not assumed to be infinite.
+
+Finalization locks the attempt, grant and reservation, verifies exact bindings and states, and checks all three affected-row counts before atomically committing state and `PAYMENT_COMMITTED` evidence. Corrupt state or a suppressed update rolls back. A session advisory lock serializes reconcilers without holding a transaction during network requests; already finalized state is validated before returning success and no duplicate commitment is emitted.
+
+Residual risk: prolonged PayPal unavailability or expiry of the conservative retry window can require operator investigation while authority stays quarantined. GET and retry are not atomic at PayPal; safety depends on provider idempotency. Database-session loss releases the advisory lock, and privileged writers or external provider actors are outside that serialization. Perfect exactly-once distributed execution is not claimed.
 
 ## Process crash after side effect
 

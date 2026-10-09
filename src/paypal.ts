@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
+import type { Sql } from "postgres";
 import type { ExecutionGrantClaims, ExecutionSink } from "./execution-grant.js";
 import { ExecutionQuarantinedError } from "./execution-outcome.js";
 import type { PostgresTrustRepository } from "./persistence.js";
@@ -45,6 +46,11 @@ export interface PayPalOrderView {
   readonly id: string;
   readonly status: string;
   readonly payerActionUrl?: string;
+  readonly purchaseUnits: readonly {
+    referenceId: string;
+    amountValue?: string;
+    currency?: string;
+  }[];
   readonly captures: readonly {
     id: string;
     status: string;
@@ -76,6 +82,10 @@ const orderSchema = z.object({
   purchase_units: z
     .array(
       z.object({
+        reference_id: z.string().min(1),
+        amount: z
+          .object({ value: z.string(), currency_code: z.string() })
+          .optional(),
         payments: z
           .object({
             captures: z
@@ -214,6 +224,7 @@ export class PayPalPaymentProvider implements PaymentProvider {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
+          Prefer: "return=representation",
           ...(requestId ? { "PayPal-Request-Id": requestId } : {}),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -269,6 +280,12 @@ export class PayPalPaymentProvider implements PaymentProvider {
     return {
       id: p.id,
       status: p.status,
+      purchaseUnits: (p.purchase_units ?? []).map((u) => ({
+        referenceId: u.reference_id,
+        ...(u.amount
+          ? { amountValue: u.amount.value, currency: u.amount.currency_code }
+          : {}),
+      })),
       ...(payerActionUrl ? { payerActionUrl } : {}),
       captures,
     };
@@ -382,53 +399,388 @@ export class PayPalExecutionRail implements ExecutionSink {
     attemptId: string,
     now = new Date().toISOString(),
   ): Promise<string> {
-    const rows = await this.repo
-      .sql`select * from payment_attempts where id=${attemptId}`;
-    if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
-    const a = asRow(rows[0]);
-    if (!a.provider_order_id) return String(a.status);
-    await this.repo.appendEvidence(
-      "PAYPAL_RECONCILIATION_STARTED",
-      {
-        paymentAttemptId: attemptId,
-        paypalOrderId: requiredString(a.provider_order_id, "PROVIDER_ORDER_ID"),
-      },
-      now,
-    );
-    let order: PayPalOrderView;
+    if (!Number.isFinite(Date.parse(now)))
+      throw new Error("INVALID_RECONCILIATION_TIME");
+    // Session-scoped serialization survives transaction boundaries, but never
+    // holds a transaction across a provider request. Process death releases it.
+    const db = await this.repo.sql.reserve();
+    let locked = false;
     try {
-      order = await this.provider.getOrder(
-        requiredString(a.provider_order_id, "PROVIDER_ORDER_ID"),
+      await db`select pg_advisory_lock(hashtextextended(${attemptId}, 2))`;
+      locked = true;
+      const rows =
+        await db`select * from payment_attempts where id=${attemptId}`;
+      if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
+      let a = asRow(rows[0]);
+      if (["FAILED", "CANCELLED", "NOT_STARTED"].includes(String(a.status)))
+        return String(a.status);
+      await this.reconciliationTransaction(db, async (tx) => {
+        const attempts =
+          await tx`select * from payment_attempts where id=${attemptId} for update`;
+        if (!attempts[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
+        a = asRow(attempts[0]);
+        await this.assertAuthority(tx, a, a.status === "CAPTURED");
+        if (
+          a.status === "CAPTURED" &&
+          (!a.provider_order_id ||
+            !a.provider_capture_id ||
+            a.provider_capture_status !== "COMPLETED")
+        )
+          throw new Error("PAYMENT_FINALIZATION_STATE_INVALID");
+      });
+      await this.reconciliationTransaction(db, (tx) =>
+        this.repo.appendEvidenceInTransaction(
+          tx,
+          "PAYPAL_RECONCILIATION_STARTED",
+          { paymentAttemptId: attemptId },
+          now,
+        ),
       );
-    } catch {
-      return "CAPTURE_UNKNOWN";
+
+      if (!a.provider_order_id) {
+        if (
+          !["ORDER_CREATE_UNKNOWN", "ORDER_CREATING"].includes(String(a.status))
+        )
+          throw new Error("PAYMENT_ATTEMPT_ORDER_MISSING");
+        if (!this.retryWindow(a, now)) return String(a.status);
+        let created: PayPalOrderView;
+        try {
+          created = await this.provider.createOrder({
+            amountValue: paypalMoney(
+              Number(a.amount_minor),
+              String(a.currency),
+            ),
+            currency: requiredString(a.currency, "CURRENCY"),
+            // Original create uses the proposal as PayPal reference_id.
+            merchantReference: requiredString(a.proposal_id, "PROPOSAL_ID"),
+            requestId: requiredString(
+              a.create_order_request_id,
+              "CREATE_REQUEST_ID",
+            ),
+          });
+        } catch {
+          await this.reconciliationState(db, a, "ORDER_CREATE_UNKNOWN", now);
+          return "ORDER_CREATE_UNKNOWN";
+        }
+        this.assertOrder(a, created, true);
+        const status =
+          created.payerActionUrl ||
+          ["CREATED", "SAVED", "PAYER_ACTION_REQUIRED"].includes(created.status)
+            ? "PAYER_ACTION_REQUIRED"
+            : "ORDER_CREATED";
+        await this.reconciliationTransaction(db, async (tx) => {
+          const rows =
+            await tx`select * from payment_attempts where id=${attemptId} for update`;
+          if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
+          const current = asRow(rows[0]);
+          this.assertUnchanged(a, current);
+          await this.assertAuthority(tx, current);
+          const changed =
+            await tx`update payment_attempts set provider_order_id=${created.id},provider_status=${created.status},payer_action_url=${created.payerActionUrl ?? null},status=${status},last_reconciled_at=${now},updated_at=${now} where id=${attemptId} and status=${String(a.status)} returning id`;
+          if (changed.length !== 1)
+            throw new Error("PAYMENT_FINALIZATION_STATE_INVALID");
+          await this.repo.appendEvidenceInTransaction(
+            tx,
+            "PAYPAL_ORDER_RECOVERED",
+            {
+              paymentAttemptId: attemptId,
+              paypalOrderId: created.id,
+            },
+            now,
+          );
+        });
+        a = {
+          ...a,
+          provider_order_id: created.id,
+          provider_status: created.status,
+          status,
+        };
+        if (status === "PAYER_ACTION_REQUIRED") return status;
+      }
+
+      let order: PayPalOrderView;
+      try {
+        // Always retrieve provider state before considering a capture retry.
+        order = await this.provider.getOrder(
+          requiredString(a.provider_order_id, "PROVIDER_ORDER_ID"),
+        );
+      } catch {
+        if (a.status === "CAPTURED")
+          throw new Error("PAYPAL_FINALIZED_ORDER_UNVERIFIED");
+        return String(a.status);
+      }
+      this.assertOrder(a, order, true);
+      if (order.captures.length === 0) {
+        // APPROVED + a fully bound single purchase unit + no captures is the
+        // only automatic retry condition. COMPLETED without capture is unknown.
+        if (
+          order.status !== "APPROVED" ||
+          order.payerActionUrl ||
+          !this.retryWindow(a, now)
+        )
+          return String(a.status);
+        if (
+          ![
+            "CAPTURE_UNKNOWN",
+            "CAPTURE_IN_FLIGHT",
+            "ORDER_CREATED",
+            "PAYER_ACTION_REQUIRED",
+          ].includes(String(a.status))
+        )
+          return String(a.status);
+        try {
+          order = await this.provider.captureOrder(
+            requiredString(a.provider_order_id, "PROVIDER_ORDER_ID"),
+            requiredString(a.capture_request_id, "CAPTURE_REQUEST_ID"),
+          );
+        } catch {
+          await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", now);
+          return "CAPTURE_UNKNOWN";
+        }
+        this.assertOrder(a, order, false);
+      }
+      const cap = order.captures[0];
+      if (!cap || !["COMPLETED", "PENDING"].includes(cap.status)) {
+        await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", now);
+        return "CAPTURE_UNKNOWN";
+      }
+      this.assertBinding(a, cap);
+      if (cap.status === "PENDING") {
+        await this.reconciliationState(
+          db,
+          a,
+          "CAPTURE_PENDING_PROVIDER",
+          now,
+          cap,
+        );
+        return "CAPTURE_PENDING_PROVIDER";
+      }
+      if (order.status !== "COMPLETED")
+        throw new Error("PAYPAL_ORDER_STATUS_MISMATCH");
+      await this.reconciliationTransaction(db, async (tx) => {
+        const rows =
+          await tx`select * from payment_attempts where id=${attemptId} for update`;
+        if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
+        const current = asRow(rows[0]);
+        this.assertUnchanged(a, current);
+        await this.assertAuthority(tx, current, current.status === "CAPTURED");
+        this.assertOrder(current, order, false);
+        this.assertBinding(current, cap);
+        if (current.status === "CAPTURED") {
+          if (
+            current.provider_capture_id !== cap.id ||
+            current.provider_capture_status !== cap.status
+          )
+            throw new Error("PAYMENT_FINALIZATION_STATE_INVALID");
+          return;
+        }
+        const attempt =
+          await tx`update payment_attempts set status='CAPTURED',provider_status=${order.status},provider_capture_id=${cap.id},provider_capture_status=${cap.status},captured_at=${now},last_reconciled_at=${now},updated_at=${now} where id=${attemptId} and status=${String(current.status)} returning id,status`;
+        const grant =
+          await tx`update execution_grants set status='CONSUMED',consumed_at=${now} where id=${String(current.grant_id)} and status='CLAIMED' returning id,status`;
+        const reservation =
+          await tx`update authorization_reservations set status='COMMITTED',updated_at=${now} where id=${String(current.reservation_id)} and status='EXECUTING' returning id,status`;
+        if (
+          attempt.length !== 1 ||
+          grant.length !== 1 ||
+          reservation.length !== 1 ||
+          attempt[0]!.id !== attemptId ||
+          attempt[0]!.status !== "CAPTURED" ||
+          grant[0]!.id !== current.grant_id ||
+          grant[0]!.status !== "CONSUMED" ||
+          reservation[0]!.id !== current.reservation_id ||
+          reservation[0]!.status !== "COMMITTED"
+        )
+          throw new Error("PAYMENT_FINALIZATION_STATE_INVALID");
+        await this.repo.appendEvidenceInTransaction(
+          tx,
+          "PAYPAL_RECONCILIATION_RESOLVED",
+          {
+            paymentAttemptId: attemptId,
+            paypalCaptureId: cap.id,
+          },
+          now,
+        );
+        await this.repo.appendEvidenceInTransaction(
+          tx,
+          "PAYMENT_COMMITTED",
+          {
+            paymentAttemptId: attemptId,
+            paypalCaptureId: cap.id,
+          },
+          now,
+        );
+      });
+      return "CAPTURED";
+    } finally {
+      try {
+        if (locked)
+          await db`select pg_advisory_unlock(hashtextextended(${attemptId}, 2))`;
+      } finally {
+        db.release();
+      }
     }
+  }
+  private async reconciliationTransaction<T>(
+    db: Sql,
+    action: (tx: Sql) => Promise<T>,
+  ): Promise<T> {
+    // postgres.js reserved connections expose SQL but no begin() at runtime.
+    // Explicit transaction statements keep all locks and writes on that session.
+    await db`begin`;
+    try {
+      const result = await action(db);
+      await db`commit`;
+      return result;
+    } catch (error) {
+      await db`rollback`;
+      throw error;
+    }
+  }
+  private retryWindow(a: Record<string, unknown>, now: string): boolean {
+    // Conservative six-hour Orders idempotency retention, measured from the
+    // original attempt, never extended by a retry or an UNKNOWN update.
+    const age = Date.parse(now) - new Date(String(a.created_at)).getTime();
+    return Number.isFinite(age) && age >= 0 && age < 6 * 60 * 60 * 1000;
+  }
+  private assertUnchanged(
+    a: Record<string, unknown>,
+    current: Record<string, unknown>,
+  ): void {
+    for (const field of [
+      "id",
+      "status",
+      "grant_id",
+      "reservation_id",
+      "proposal_id",
+      "mandate_id",
+      "principal_id",
+      "amount_minor",
+      "currency",
+      "merchant_reference",
+      "provider",
+      "operation",
+      "create_order_request_id",
+      "capture_request_id",
+      "provider_order_id",
+      "provider_capture_id",
+    ]) {
+      if (a[field] !== current[field])
+        throw new Error("PAYMENT_ATTEMPT_CHANGED_DURING_RECONCILIATION");
+    }
+  }
+  private async assertAuthority(
+    tx: Sql,
+    a: Record<string, unknown>,
+    finalized = false,
+  ): Promise<void> {
+    const grants =
+      await tx`select * from execution_grants where id=${requiredString(a.grant_id, "GRANT_ID")} for update`;
+    const reservations =
+      await tx`select * from authorization_reservations where id=${requiredString(a.reservation_id, "RESERVATION_ID")} for update`;
+    if (!grants[0] || !reservations[0])
+      throw new Error("PAYMENT_AUTHORITY_MISSING");
+    const g = asRow(grants[0]),
+      r = asRow(reservations[0]);
+    if (g.status !== (finalized ? "CONSUMED" : "CLAIMED"))
+      throw new Error("GRANT_FINALIZATION_STATE_INVALID");
+    if (r.status !== (finalized ? "COMMITTED" : "EXECUTING"))
+      throw new Error("RESERVATION_FINALIZATION_STATE_INVALID");
+    if (
+      a.provider !== "PAYPAL" ||
+      a.operation !== "CAPTURE" ||
+      g.id !== a.grant_id ||
+      r.id !== a.reservation_id ||
+      g.reservation_id !== r.id ||
+      g.proposal_id !== a.proposal_id ||
+      r.proposal_id !== a.proposal_id ||
+      g.mandate_id !== a.mandate_id ||
+      r.mandate_id !== a.mandate_id ||
+      g.principal_id !== a.principal_id ||
+      g.receipt_id !== r.receipt_id ||
+      g.merchant_id !== a.merchant_reference ||
+      Number(g.amount_minor) !== Number(a.amount_minor) ||
+      Number(r.amount_minor) !== Number(a.amount_minor) ||
+      g.currency !== a.currency ||
+      r.currency !== a.currency
+    )
+      throw new Error("PAYMENT_AUTHORITY_BINDING_MISMATCH");
+    paypalMoney(Number(a.amount_minor), requiredString(a.currency, "CURRENCY"));
+    requiredString(a.create_order_request_id, "CREATE_REQUEST_ID");
+    requiredString(a.capture_request_id, "CAPTURE_REQUEST_ID");
+  }
+  private assertOrder(
+    a: Record<string, unknown>,
+    order: PayPalOrderView,
+    requireAmount: boolean,
+  ): void {
+    requiredString(order.id, "PROVIDER_ORDER_ID");
+    const unit = order.purchaseUnits[0];
+    if (
+      (a.provider_order_id && order.id !== a.provider_order_id) ||
+      ![
+        "CREATED",
+        "SAVED",
+        "APPROVED",
+        "PAYER_ACTION_REQUIRED",
+        "COMPLETED",
+      ].includes(order.status) ||
+      order.purchaseUnits.length !== 1 ||
+      !unit ||
+      unit.referenceId !== a.proposal_id ||
+      ((requireAmount ||
+        unit.amountValue !== undefined ||
+        unit.currency !== undefined) &&
+        (unit.amountValue !==
+          paypalMoney(Number(a.amount_minor), String(a.currency)) ||
+          unit.currency !== a.currency)) ||
+      order.captures.length > 1
+    )
+      throw new PayPalProviderError(
+        "STATE_MISMATCH",
+        "PAYPAL_ORDER_BINDING_MISMATCH",
+      );
     const cap = order.captures[0];
-    if (!cap) return String(a.status);
-    this.assertBinding(a, cap);
-    if (cap.status !== "COMPLETED") {
-      await this.repo
-        .sql`update payment_attempts set status='CAPTURE_PENDING_PROVIDER',provider_capture_id=${cap.id},provider_capture_status=${cap.status},last_reconciled_at=${now},updated_at=${now} where id=${attemptId}`;
-      return "CAPTURE_PENDING_PROVIDER";
-    }
-    await this.repo.sql.begin(async (tx) => {
-      await tx`update payment_attempts set status='CAPTURED',provider_capture_id=${cap.id},provider_capture_status=${cap.status},captured_at=${now},last_reconciled_at=${now},updated_at=${now} where id=${attemptId}`;
-      await tx`update execution_grants set status='CONSUMED',consumed_at=${now} where id=${String(a.grant_id)} and status='CLAIMED'`;
-      await tx`update authorization_reservations set status='COMMITTED',updated_at=${now} where id=${String(a.reservation_id)} and status='EXECUTING'`;
-      await this.repo.appendEvidenceInTransaction(
-        tx,
-        "PAYPAL_RECONCILIATION_RESOLVED",
-        { paymentAttemptId: attemptId, paypalCaptureId: cap.id },
-        now,
+    if (a.provider_capture_id && !cap)
+      throw new PayPalProviderError(
+        "STATE_MISMATCH",
+        "PAYPAL_CAPTURE_ID_MISMATCH",
       );
+    if (cap) {
+      requiredString(cap.id, "PROVIDER_CAPTURE_ID");
+      this.assertBinding(a, cap);
+      if (a.provider_capture_id && a.provider_capture_id !== cap.id)
+        throw new PayPalProviderError(
+          "STATE_MISMATCH",
+          "PAYPAL_CAPTURE_ID_MISMATCH",
+        );
+    }
+  }
+  private async reconciliationState(
+    db: Sql,
+    a: Record<string, unknown>,
+    status: string,
+    now: string,
+    cap?: PayPalOrderView["captures"][number],
+  ): Promise<void> {
+    await this.reconciliationTransaction(db, async (tx) => {
+      const rows =
+        await tx`select * from payment_attempts where id=${String(a.id)} for update`;
+      if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
+      const current = asRow(rows[0]);
+      this.assertUnchanged(a, current);
+      await this.assertAuthority(tx, current);
+      const changed =
+        await tx`update payment_attempts set status=${status},provider_capture_id=${cap?.id ?? (current.provider_capture_id ? requiredString(current.provider_capture_id, "PROVIDER_CAPTURE_ID") : null)},provider_capture_status=${cap?.status ?? (current.provider_capture_status ? requiredString(current.provider_capture_status, "PROVIDER_CAPTURE_STATUS") : null)},last_reconciled_at=${now},updated_at=${now} where id=${String(a.id)} and status=${String(current.status)} returning id`;
+      if (changed.length !== 1)
+        throw new Error("PAYMENT_FINALIZATION_STATE_INVALID");
       await this.repo.appendEvidenceInTransaction(
         tx,
-        "PAYMENT_COMMITTED",
-        { paymentAttemptId: attemptId, paypalCaptureId: cap.id },
+        "PAYPAL_RECONCILIATION_UNRESOLVED",
+        { paymentAttemptId: String(a.id), status },
         now,
       );
     });
-    return "CAPTURED";
   }
   private async ensureAttempt(
     c: ExecutionGrantClaims,

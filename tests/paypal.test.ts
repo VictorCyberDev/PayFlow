@@ -171,4 +171,99 @@ describe("Milestone 2D PayPal provider", () => {
       "PAYPAL_2D_SANDBOX_ONLY",
     );
   });
+  it("preserves purchase-unit and capture bindings from Show Order and requests full representations", async () => {
+    const fetcher = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        await Promise.resolve();
+        const url = input instanceof Request ? input.url : String(input);
+        if (!url.endsWith("/v1/oauth2/token"))
+          expect(new Headers(init?.headers).get("Prefer")).toBe(
+            "return=representation",
+          );
+        return new Response(
+          JSON.stringify(
+            url.endsWith("/v1/oauth2/token")
+              ? { access_token: "token", expires_in: 3600 }
+              : {
+                  id: "ORDER-1",
+                  status: "COMPLETED",
+                  purchase_units: [
+                    {
+                      reference_id: "proposal-1",
+                      amount: { value: "89.00", currency_code: "USD" },
+                      payments: {
+                        captures: [
+                          {
+                            id: "CAPTURE-1",
+                            status: "COMPLETED",
+                            amount: { value: "89.00", currency_code: "USD" },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+          ),
+          { status: 200 },
+        );
+      },
+    );
+    const provider = new PayPalPaymentProvider(
+      new PayPalOAuthClient("client", "secret", fetcher),
+      fetcher,
+    );
+    const order = await provider.getOrder("ORDER-1");
+    expect(order).toMatchObject({
+      id: "ORDER-1",
+      status: "COMPLETED",
+      purchaseUnits: [
+        { referenceId: "proposal-1", amountValue: "89.00", currency: "USD" },
+      ],
+      captures: [
+        {
+          id: "CAPTURE-1",
+          status: "COMPLETED",
+          amountValue: "89.00",
+          currency: "USD",
+        },
+      ],
+    });
+    // Inspect the actual adapter HTTP request, not a mocked normalized view.
+    const request = fetcher.mock.calls[1];
+    expect(request?.[0]).toBe(
+      "https://api-m.sandbox.paypal.com/v2/checkout/orders/ORDER-1",
+    );
+    expect(new Headers(request?.[1]?.headers).get("Prefer")).toBe(
+      "return=representation",
+    );
+  });
+
+  it("keeps malformed purchase-unit bindings ambiguous after capture and rejects them on GET", async () => {
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
+      await Promise.resolve();
+      const url = input instanceof Request ? input.url : String(input);
+      return new Response(
+        JSON.stringify(
+          url.endsWith("/v1/oauth2/token")
+            ? { access_token: "token", expires_in: 3600 }
+            : {
+                id: "ORDER-1",
+                status: "COMPLETED",
+                purchase_units: [{ reference_id: "" }],
+              },
+        ),
+        { status: 200 },
+      );
+    });
+    const provider = new PayPalPaymentProvider(
+      new PayPalOAuthClient("client", "secret", fetcher),
+      fetcher,
+    );
+    await expect(provider.getOrder("ORDER-1")).rejects.toMatchObject({
+      classification: "MALFORMED",
+    });
+    await expect(
+      provider.captureOrder("ORDER-1", "persisted-capture-key"),
+    ).rejects.toMatchObject({ classification: "AMBIGUOUS" });
+  });
 });
