@@ -162,7 +162,7 @@ export class PostgresTrustRepository {
   }
   async saveReceipt(r: DecisionReceipt): Promise<void> {
     await this
-      .sql`insert into decision_receipts(id,proposal_id,mandate_id,agent_id,decision,document,evaluated_at) values(${r.receiptId},${r.proposalId},${r.mandateId},${r.agentId},${r.decision},${this.sql.json(r)},${r.evaluatedAt})`;
+      .sql`insert into decision_receipts(id,proposal_id,mandate_id,agent_id,decision,document,evaluated_at) values(${r.receiptId},${r.proposalId},${r.mandateId},${r.agentId},${r.decision},${this.sql.json(r as unknown as never)},${r.evaluatedAt})`;
   }
   async getReceipt(id: string): Promise<DecisionReceipt | null> {
     const rows = await this
