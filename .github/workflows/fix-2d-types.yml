@@ -32,3 +32,4 @@ jobs:
           git add src/paypal.ts
           git commit -m "fix(2d): satisfy exact optional property types"
           git push origin HEAD:milestone-2-durable-paypal
+# one-shot trigger
