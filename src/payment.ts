@@ -68,7 +68,9 @@ export class PayPalPaymentProvider implements PaymentProvider {
     void proposal;
     void authorization;
     return Promise.reject(
-      new Error("PayPal network execution intentionally deferred beyond Milestone 1"),
+      new Error(
+        "PayPal network execution intentionally deferred beyond Milestone 1",
+      ),
     );
   }
   captureOrder(
@@ -78,7 +80,9 @@ export class PayPalPaymentProvider implements PaymentProvider {
     void orderId;
     void authorization;
     return Promise.reject(
-      new Error("PayPal network execution intentionally deferred beyond Milestone 1"),
+      new Error(
+        "PayPal network execution intentionally deferred beyond Milestone 1",
+      ),
     );
   }
 }
