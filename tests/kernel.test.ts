@@ -88,6 +88,19 @@ describe("deterministic authorization kernel", () => {
         proposal({ amount: { currency: "USD", minor: 8000 } }),
       ).decision,
     ).toBe("ESCALATE"));
+  it("above human approval ceiling DENYs", () => {
+    const constrained: Mandate = {
+      ...mandate,
+      humanApprovalThresholdMinor: 9000,
+    };
+    const constrainedProposal: TransactionProposal = {
+      ...proposal({ amount: { currency: "USD", minor: 9500 } }),
+      mandateFingerprint: mandateFingerprint(constrained),
+    };
+    expect(auth(constrained, agent, constrainedProposal).reasonCodes).toContain(
+      "HUMAN_APPROVAL_LIMIT_EXCEEDED",
+    );
+  });
   it("wrong currency DENYs", () =>
     expect(
       auth(
@@ -169,14 +182,17 @@ describe("deterministic authorization kernel", () => {
 });
 
 describe("fingerprint security fields", () => {
-  for (const [name, changed] of [
+  const mutations: readonly (readonly [string, Mandate])[] = [
     ["amount", { ...mandate, maxSingleTransactionMinor: 9999 }],
     ["currency", { ...mandate, currency: "EUR" }],
     ["category", { ...mandate, category: "MOUSE" }],
     ["agent", { ...mandate, authorizedAgentId: "a2" }],
     ["expiration", { ...mandate, expiresAt: "2026-12-01T00:00:00.000Z" }],
     ["capability", { ...mandate, allowedCapabilities: ["CREATE_ORDER"] }],
-  ] as const)
+  ];
+
+  for (const [name, changed] of mutations) {
     it(`${name} changes fingerprint`, () =>
       expect(mandateFingerprint(changed)).not.toBe(fp));
+  }
 });
