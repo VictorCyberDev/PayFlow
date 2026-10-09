@@ -74,7 +74,9 @@ describe("authorization before financial side effects", () => {
     const p = make(12000);
     const r = service.evaluate(mandate, agent, p, { now, merchantRisk: "LOW" });
     expect(r.decision).toBe("DENY");
-    await expect(service.execute(p, r)).rejects.toThrow("PAYMENT_NOT_AUTHORIZED");
+    await expect(service.execute(p, r)).rejects.toThrow(
+      "PAYMENT_NOT_AUTHORIZED",
+    );
     expect(provider.createCalls).toBe(0);
   });
 
@@ -83,7 +85,9 @@ describe("authorization before financial side effects", () => {
     const p = make(8000);
     const r = service.evaluate(mandate, agent, p, { now, merchantRisk: "LOW" });
     expect(r.decision).toBe("ESCALATE");
-    await expect(service.execute(p, r)).rejects.toThrow("HUMAN_APPROVAL_REQUIRED");
+    await expect(service.execute(p, r)).rejects.toThrow(
+      "HUMAN_APPROVAL_REQUIRED",
+    );
     expect(provider.createCalls).toBe(0);
   });
 
@@ -153,7 +157,8 @@ describe("authorization before financial side effects", () => {
     const { service } = setup();
     const first = make(7000, "duplicate");
     expect(
-      service.evaluate(mandate, agent, first, { now, merchantRisk: "LOW" }).decision,
+      service.evaluate(mandate, agent, first, { now, merchantRisk: "LOW" })
+        .decision,
     ).toBe("ALLOW");
     const duplicate = { ...first, nonce: "different-nonce-0002" };
     expect(

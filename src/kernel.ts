@@ -116,7 +116,9 @@ export function authorize(
     agent.principalId === mandate.principalId &&
     proposal.agentId === agent.id;
   checks.agentAuthority =
-    agentMatches && agent.status === "ACTIVE" && now <= Date.parse(agent.expiresAt)
+    agentMatches &&
+    agent.status === "ACTIVE" &&
+    now <= Date.parse(agent.expiresAt)
       ? "PASS"
       : "FAIL";
   if (!agentMatches) fail("AGENT_UNAUTHORIZED");
@@ -132,7 +134,9 @@ export function authorize(
   if (!capabilityAllowed) fail("CAPABILITY_DENIED");
 
   checks.budget =
-    proposal.amount.minor <= mandate.maxSingleTransactionMinor ? "PASS" : "FAIL";
+    proposal.amount.minor <= mandate.maxSingleTransactionMinor
+      ? "PASS"
+      : "FAIL";
   if (checks.budget === "FAIL") fail("AMOUNT_EXCEEDS_LIMIT");
 
   checks.approvalCeiling =

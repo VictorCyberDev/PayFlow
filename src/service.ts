@@ -50,7 +50,8 @@ export class TrustKernelService {
       ...context,
       cumulativeSpentMinor: this.#spent.get(mandate.id) ?? 0,
       replaySeen:
-        this.#seenNonces.has(nonceKey) || this.#seenProposalIds.has(proposalKey),
+        this.#seenNonces.has(nonceKey) ||
+        this.#seenProposalIds.has(proposalKey),
     });
 
     this.#seenNonces.add(nonceKey);
