@@ -97,7 +97,9 @@ export class PostgresTrustRepository {
     await this.sql.end();
   }
   async migrate(sqlText: string): Promise<void> {
-    await this.sql.unsafe(sqlText);
+    await this.sql.begin(async (tx) => {
+      await tx.unsafe(sqlText);
+    });
   }
   async savePrincipal(p: Principal): Promise<void> {
     await this
