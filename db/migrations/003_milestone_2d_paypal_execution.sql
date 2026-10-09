@@ -3,7 +3,7 @@ ALTER TABLE payment_attempts ALTER COLUMN status TYPE text USING status::text;
 DROP TYPE payment_attempt_status;
 
 ALTER TABLE payment_attempts
-  ADD COLUMN grant_id uuid REFERENCES execution_grants(id),
+  ADD COLUMN grant_id text REFERENCES execution_grants(id),
   ADD COLUMN proposal_id text REFERENCES transaction_proposals(id),
   ADD COLUMN mandate_id text REFERENCES mandates(id),
   ADD COLUMN principal_id text REFERENCES principals(id),
