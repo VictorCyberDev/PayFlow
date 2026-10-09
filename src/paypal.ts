@@ -357,12 +357,29 @@ export class PayPalExecutionRail implements ExecutionSink {
       throw new ExecutionQuarantinedError("PAYMENT_REQUIRES_INVESTIGATION");
     }
   }
-  async reconcile(
-    attemptId: string,
-    now = new Date().toISOString(),
-  ): Promise<string> {
+  async reconcile(attemptId: string, now = this.clock()): Promise<string> {
     if (!Number.isFinite(Date.parse(now)))
       throw new Error("INVALID_RECONCILIATION_TIME");
+    const requestedAt = Date.parse(now),
+      clockOrigin = Date.parse(this.clock()),
+      elapsedOrigin = performance.now();
+    if (!Number.isFinite(clockOrigin))
+      throw new Error("INVALID_RECONCILIATION_CLOCK");
+    const currentTime = () => {
+      const clockNow = Date.parse(this.clock());
+      if (!Number.isFinite(clockNow))
+        throw new Error("INVALID_RECONCILIATION_CLOCK");
+      // An entry timestamp must not remain valid across a provider wait or a
+      // blocked lock. Monotonic elapsed time also protects against clock rollback.
+      return new Date(
+        requestedAt +
+          Math.max(
+            0,
+            clockNow - clockOrigin,
+            performance.now() - elapsedOrigin,
+          ),
+      ).toISOString();
+    };
     // Session-scoped serialization survives transaction boundaries, but never
     // holds a transaction across a provider request. Process death releases it.
     const db = await this.repo.sql.reserve();
@@ -407,7 +424,7 @@ export class PayPalExecutionRail implements ExecutionSink {
         )
           throw new Error("PAYMENT_ATTEMPT_ORDER_MISSING");
         if (!this.retryWindow(a, now)) return String(a.status);
-        await this.dispatch(db, a, "ORDER_CREATING", now);
+        await this.dispatch(db, a, "ORDER_CREATING", currentTime);
         a = { ...a, status: "ORDER_CREATING" };
         let created: PayPalOrderView;
         try {
@@ -425,13 +442,23 @@ export class PayPalExecutionRail implements ExecutionSink {
             ),
           });
         } catch {
-          await this.reconciliationState(db, a, "ORDER_CREATE_UNKNOWN", now);
+          await this.reconciliationState(
+            db,
+            a,
+            "ORDER_CREATE_UNKNOWN",
+            currentTime(),
+          );
           return "ORDER_CREATE_UNKNOWN";
         }
         try {
           this.assertOrder(a, created, true);
         } catch (error) {
-          await this.reconciliationState(db, a, "ORDER_CREATE_UNKNOWN", now);
+          await this.reconciliationState(
+            db,
+            a,
+            "ORDER_CREATE_UNKNOWN",
+            currentTime(),
+          );
           throw error;
         }
         const status =
@@ -446,8 +473,9 @@ export class PayPalExecutionRail implements ExecutionSink {
           const current = asRow(rows[0]);
           this.assertUnchanged(a, current);
           await this.assertAuthority(tx, current);
+          const observedAt = currentTime();
           const changed =
-            await tx`update payment_attempts set provider_order_id=${created.id},provider_status=${created.status},payer_action_url=${created.payerActionUrl ?? null},status=${status},last_reconciled_at=${now},updated_at=${now} where id=${attemptId} and status=${String(a.status)} returning id`;
+            await tx`update payment_attempts set provider_order_id=${created.id},provider_status=${created.status},payer_action_url=${created.payerActionUrl ?? null},status=${status},last_reconciled_at=${observedAt},updated_at=${observedAt} where id=${attemptId} and status=${String(a.status)} returning id`;
           if (changed.length !== 1)
             throw new Error("PAYMENT_FINALIZATION_STATE_INVALID");
           await this.repo.appendEvidenceInTransaction(
@@ -457,7 +485,7 @@ export class PayPalExecutionRail implements ExecutionSink {
               paymentAttemptId: attemptId,
               paypalOrderId: created.id,
             },
-            now,
+            observedAt,
           );
         });
         a = {
@@ -499,7 +527,7 @@ export class PayPalExecutionRail implements ExecutionSink {
           ].includes(String(a.status))
         )
           return String(a.status);
-        await this.dispatch(db, a, "CAPTURE_IN_FLIGHT", now);
+        await this.dispatch(db, a, "CAPTURE_IN_FLIGHT", currentTime);
         a = { ...a, status: "CAPTURE_IN_FLIGHT" };
         try {
           order = await this.provider.captureOrder(
@@ -507,19 +535,29 @@ export class PayPalExecutionRail implements ExecutionSink {
             requiredString(a.capture_request_id, "CAPTURE_REQUEST_ID"),
           );
         } catch {
-          await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", now);
+          await this.reconciliationState(
+            db,
+            a,
+            "CAPTURE_UNKNOWN",
+            currentTime(),
+          );
           return "CAPTURE_UNKNOWN";
         }
         try {
           this.assertOrder(a, order, false);
         } catch (error) {
-          await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", now);
+          await this.reconciliationState(
+            db,
+            a,
+            "CAPTURE_UNKNOWN",
+            currentTime(),
+          );
           throw error;
         }
       }
       const cap = order.captures[0];
       if (!cap || !["COMPLETED", "PENDING"].includes(cap.status)) {
-        await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", now);
+        await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", currentTime());
         return "CAPTURE_UNKNOWN";
       }
       this.assertBinding(a, cap);
@@ -528,13 +566,13 @@ export class PayPalExecutionRail implements ExecutionSink {
           db,
           a,
           "CAPTURE_PENDING_PROVIDER",
-          now,
+          currentTime(),
           cap,
         );
         return "CAPTURE_PENDING_PROVIDER";
       }
       if (order.status !== "COMPLETED") {
-        await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", now);
+        await this.reconciliationState(db, a, "CAPTURE_UNKNOWN", currentTime());
         throw new Error("PAYPAL_ORDER_STATUS_MISMATCH");
       }
       await this.reconciliationTransaction(db, async (tx) => {
@@ -554,12 +592,13 @@ export class PayPalExecutionRail implements ExecutionSink {
             throw new Error("PAYMENT_FINALIZATION_STATE_INVALID");
           return;
         }
+        const observedAt = currentTime();
         const attempt =
-          await tx`update payment_attempts set status='CAPTURED',provider_status=${order.status},provider_capture_id=${cap.id},provider_capture_status=${cap.status},captured_at=${now},last_reconciled_at=${now},updated_at=${now} where id=${attemptId} and status=${String(current.status)} returning id,status`;
+          await tx`update payment_attempts set status='CAPTURED',provider_status=${order.status},provider_capture_id=${cap.id},provider_capture_status=${cap.status},captured_at=${observedAt},last_reconciled_at=${observedAt},updated_at=${observedAt} where id=${attemptId} and status=${String(current.status)} returning id,status`;
         const grant =
-          await tx`update execution_grants set status='CONSUMED',consumed_at=${now} where id=${String(current.grant_id)} and status='CLAIMED' returning id,status`;
+          await tx`update execution_grants set status='CONSUMED',consumed_at=${observedAt} where id=${String(current.grant_id)} and status='CLAIMED' returning id,status`;
         const reservation =
-          await tx`update authorization_reservations set status='COMMITTED',updated_at=${now} where id=${String(current.reservation_id)} and status='EXECUTING' returning id,status`;
+          await tx`update authorization_reservations set status='COMMITTED',updated_at=${observedAt} where id=${String(current.reservation_id)} and status='EXECUTING' returning id,status`;
         if (
           attempt.length !== 1 ||
           grant.length !== 1 ||
@@ -579,7 +618,7 @@ export class PayPalExecutionRail implements ExecutionSink {
             paymentAttemptId: attemptId,
             paypalCaptureId: cap.id,
           },
-          now,
+          observedAt,
         );
         await this.repo.appendEvidenceInTransaction(
           tx,
@@ -588,7 +627,7 @@ export class PayPalExecutionRail implements ExecutionSink {
             paymentAttemptId: attemptId,
             paypalCaptureId: cap.id,
           },
-          now,
+          observedAt,
         );
       });
       return "CAPTURED";
@@ -605,7 +644,7 @@ export class PayPalExecutionRail implements ExecutionSink {
     db: Sql,
     a: Record<string, unknown>,
     status: string,
-    now: string,
+    currentTime: () => string,
   ): Promise<void> {
     await this.reconciliationTransaction(db, async (tx) => {
       const rows =
@@ -624,6 +663,25 @@ export class PayPalExecutionRail implements ExecutionSink {
       );
       const agent = await this.repo.getAgent(String(g.agent_id), tx);
       await this.repo.assertMandateActive(String(a.mandate_id), tx);
+      const receipt = await this.repo.getReceipt(String(g.receipt_id), tx);
+      const approval =
+        receipt?.decision === "ESCALATE"
+          ? await this.repo.getApprovalByReceipt(String(g.receipt_id), tx)
+          : null;
+      const reservations =
+        await tx`select expires_at from authorization_reservations where id=${String(a.reservation_id)}`;
+      const now = currentTime();
+      if (!this.retryWindow(a, now))
+        throw new Error("PAYPAL_RETRY_WINDOW_EXPIRED");
+      if (
+        receipt?.decision === "ESCALATE" &&
+        (!approval ||
+          approval.status !== "APPROVED" ||
+          Date.parse(approval.approvedAt) > Date.parse(now) ||
+          approval.principalId !== a.principal_id ||
+          approval.proposalId !== a.proposal_id)
+      )
+        throw new Error("VALID_APPROVAL_REQUIRED");
       if (
         !mandate ||
         !agent ||
@@ -636,31 +694,12 @@ export class PayPalExecutionRail implements ExecutionSink {
         Date.parse(now) < persistedDate(g.issued_at).getTime() ||
         Date.parse(now) >= persistedDate(g.expires_at).getTime() ||
         Date.parse(now) >=
-          persistedDate(
-            (
-              await tx`select expires_at from authorization_reservations where id=${String(a.reservation_id)}`
-            )[0]?.expires_at,
-          ).getTime() ||
+          persistedDate(reservations[0]?.expires_at).getTime() ||
         !agent.capabilities.includes(g.capability as never) ||
         !mandate.allowedCapabilities.includes(g.capability as never) ||
         mandateFingerprint(mandate) !== g.mandate_fingerprint
       )
         throw new Error("PAYMENT_AUTHORITY_NOT_CURRENT");
-      const receipt = await this.repo.getReceipt(String(g.receipt_id), tx);
-      if (receipt?.decision === "ESCALATE") {
-        const approval = await this.repo.getApprovalByReceipt(
-          String(g.receipt_id),
-          tx,
-        );
-        if (
-          !approval ||
-          approval.status !== "APPROVED" ||
-          Date.parse(approval.approvedAt) > Date.parse(now) ||
-          approval.principalId !== a.principal_id ||
-          approval.proposalId !== a.proposal_id
-        )
-          throw new Error("VALID_APPROVAL_REQUIRED");
-      }
       const changed =
         await tx`update payment_attempts set status=${status},updated_at=${now} where id=${String(a.id)} and status=${String(a.status)} returning id`;
       if (changed.length !== 1)

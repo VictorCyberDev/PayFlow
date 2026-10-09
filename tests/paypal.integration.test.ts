@@ -1728,4 +1728,46 @@ run("Milestone 2D durable PayPal execution", () => {
       ).toBe(true);
     },
   );
+
+  it("2E authority expiring during create cannot be captured using reconciliation's stale entry timestamp", async () => {
+    const token = await issued(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    let clock = now;
+    provider.afterCreate = () => {
+      clock = "2026-10-09T12:03:00.000Z";
+      return Promise.resolve();
+    };
+    const execution = new ExecutionBoundary(
+      repo,
+      new StaticPublicKeyRing(new Map([["2d-key", publicKey]])),
+      new PayPalExecutionRail(repo, provider, () => clock),
+    );
+    await expect(execution.execute(token, now)).rejects.toThrow(
+      "INVESTIGATION",
+    );
+    await states();
+    expect(provider.logicalOrders).toBe(1);
+    expect(provider.captureIds).toHaveLength(0);
+    expect(provider.financialSideEffects).toBe(0);
+  });
+  it("2E grant expiration during recovery GET prevents capture retry despite a valid entry timestamp", async () => {
+    const provider = new RecoveryProvider();
+    provider.captureDespiteLoss = false;
+    const { id } = await unknown(provider);
+    let clock = recoveryTime;
+    provider.afterGet = () => {
+      clock = "2026-10-09T12:03:00.000Z";
+      return Promise.resolve();
+    };
+    await expect(
+      new PayPalExecutionRail(repo, provider, () => clock).reconcile(
+        id,
+        recoveryTime,
+      ),
+    ).rejects.toThrow("PAYMENT_AUTHORITY_NOT_CURRENT");
+    await states();
+    expect(provider.captureIds).toHaveLength(1);
+    expect(provider.financialSideEffects).toBe(0);
+  });
 });

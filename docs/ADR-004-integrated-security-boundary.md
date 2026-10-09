@@ -53,7 +53,9 @@ A session advisory lock serializes a Payment Attempt across provider requests.
 OAuth and order HTTP requests have a 15-second deadline and no internal retry loop.
 Short local transactions validate and commit a dispatch intent, then commit or
 roll back before any network request. No PostgreSQL transaction spans PayPal.
-Dispatch rechecks passport suspension/revocation/expiration, mandate revocation/
+Dispatch samples fresh clock/monotonic elapsed time after provider waits and
+authority locks; the reconciliation entry timestamp cannot keep expired authority
+valid. Dispatch rechecks passport suspension/revocation/expiration, mandate revocation/
 expiration/fingerprint, grant and reservation expiration, capabilities, bindings,
 and approval state. Expiration is exclusive, including the exact boundary.
 
