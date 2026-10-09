@@ -1,4 +1,3 @@
-BEGIN;
 CREATE TYPE reservation_status AS ENUM ('PENDING','AUTHORIZED','EXECUTING','COMMITTED','RELEASED','EXPIRED','FAILED');
 CREATE TYPE payment_attempt_status AS ENUM ('NOT_STARTED','ORDER_CREATING','ORDER_CREATED','CAPTURE_PENDING','CAPTURED','FAILED','CANCELLED');
 
@@ -12,4 +11,3 @@ CREATE TABLE replay_keys (scope text NOT NULL, replay_key text NOT NULL, created
 CREATE TABLE authorization_reservations (id text PRIMARY KEY, mandate_id text NOT NULL REFERENCES mandates(id), proposal_id text NOT NULL UNIQUE REFERENCES transaction_proposals(id), receipt_id text NOT NULL UNIQUE REFERENCES decision_receipts(id), amount_minor bigint NOT NULL CHECK(amount_minor>0), currency char(3) NOT NULL CHECK(currency ~ '^[A-Z]{3}$'), status reservation_status NOT NULL, expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE payment_attempts (id text PRIMARY KEY, reservation_id text NOT NULL REFERENCES authorization_reservations(id), provider text NOT NULL, idempotency_key text NOT NULL UNIQUE, provider_order_id text UNIQUE, provider_status text, status payment_attempt_status NOT NULL DEFAULT 'NOT_STARTED', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE evidence_events (sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, id text NOT NULL UNIQUE, type text NOT NULL, occurred_at timestamptz NOT NULL, data jsonb NOT NULL, previous_hash char(64), hash char(64) NOT NULL UNIQUE, CHECK((sequence=1 AND previous_hash IS NULL) OR sequence>1));
-COMMIT;
