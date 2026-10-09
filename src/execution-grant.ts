@@ -6,6 +6,7 @@ import {
   type KeyObject,
 } from "node:crypto";
 import { z } from "zod";
+import { ExecutionQuarantinedError } from "./execution-outcome.js";
 import { mandateFingerprint, proposalDigest } from "./canonical.js";
 import { CapabilitySchema } from "./domain.js";
 import {
@@ -452,6 +453,14 @@ export class ExecutionBoundary {
       });
       return result;
     } catch (error) {
+      if (error instanceof ExecutionQuarantinedError) {
+        await this.repo.appendEvidence(
+          "PAYMENT_EXECUTION_QUARANTINED",
+          { grantId: claims.jti, reason: error.message },
+          now,
+        );
+        throw error;
+      }
       await this.repo.sql.begin(async (tx) => {
         await tx`update execution_grants set status='FAILED',failed_at=${now} where id=${claims.jti} and status='CLAIMED'`;
         await tx`update authorization_reservations set status='FAILED',updated_at=${now} where id=${claims.reservationId} and status='EXECUTING'`;
