@@ -3,24 +3,20 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
+  "engines": { "node": ">=20" },
   "scripts": {
     "dev": "tsx src/demo.ts",
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "vitest run tests/persistence.integration.test.ts tests/durable-authorization.integration.test.ts tests/execution-grant.integration.test.ts tests/execution-grant-state.integration.test.ts",
+    "test:integration": "vitest run tests/persistence.integration.test.ts tests/durable-authorization.integration.test.ts tests/execution-grant.integration.test.ts tests/execution-grant-state.integration.test.ts tests/paypal.integration.test.ts",
+    "test:paypal:sandbox": "vitest run tests/paypal.sandbox.test.ts",
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
-  "dependencies": {
-    "postgres": "3.4.7",
-    "zod": "^3.23.8"
-  },
+  "dependencies": { "postgres": "3.4.7", "zod": "^3.23.8" },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
     "@types/node": "^22.8.6",
