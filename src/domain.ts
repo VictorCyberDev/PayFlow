@@ -42,14 +42,7 @@ export const AgentPassportSchema = z
     status: z.enum(["ACTIVE", "SUSPENDED", "REVOKED"]),
     capabilities: z.array(CapabilitySchema).min(1),
   })
-  .strict()
-  .superRefine((agent, ctx) => {
-    if (Date.parse(agent.expiresAt) <= Date.parse(agent.issuedAt))
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "agent expiry must follow issuance",
-      });
-  });
+  .strict();
 export type AgentPassport = Readonly<z.infer<typeof AgentPassportSchema>>;
 
 export const MandateSchema = z
@@ -94,11 +87,6 @@ export const MandateSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "single maximum exceeds cumulative limit",
-      });
-    if (Date.parse(mandate.expiresAt) <= Date.parse(mandate.createdAt))
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "mandate expiry must follow creation",
       });
   });
 export type Mandate = Readonly<z.infer<typeof MandateSchema>>;
