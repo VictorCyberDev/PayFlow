@@ -6,9 +6,9 @@ import {
   type MerchantRisk,
 } from "./domain.js";
 import {
-  PostgresTrustRepository,
   ReservationStatusSchema,
   canTransitionReservation,
+  type PostgresTrustRepository,
   type DurableApproval,
   type Reservation,
   type ReservationStatus,
@@ -214,7 +214,8 @@ export class DurableAuthorizationService {
       const from = ReservationStatusSchema.parse(rows[0].status);
       if (!canTransitionReservation(from, to))
         throw new Error("INVALID_RESERVATION_TRANSITION");
-      await tx`select id from mandates where id=${rows[0].mandate_id} for update`;
+      const mandateId = String(rows[0].mandate_id);
+      await tx`select id from mandates where id=${mandateId} for update`;
       await tx`update authorization_reservations set status=${to},updated_at=${now} where id=${id}`;
       await this.repo.appendEvidenceInTransaction(
         tx,
@@ -232,12 +233,14 @@ export class DurableAuthorizationService {
       const rows =
         await tx`select id,mandate_id from authorization_reservations where status in ('PENDING','AUTHORIZED') and expires_at<=${now} order by id for update`;
       for (const item of rows) {
-        await tx`select id from mandates where id=${item.mandate_id} for update`;
-        await tx`update authorization_reservations set status='EXPIRED',updated_at=${now} where id=${item.id}`;
+        const mandateId = String(item.mandate_id);
+        const reservationId = String(item.id);
+        await tx`select id from mandates where id=${mandateId} for update`;
+        await tx`update authorization_reservations set status='EXPIRED',updated_at=${now} where id=${reservationId}`;
         await this.repo.appendEvidenceInTransaction(
           tx,
           "RESERVATION_EXPIRED",
-          { reservationId: String(item.id) },
+          { reservationId },
           now,
         );
       }
