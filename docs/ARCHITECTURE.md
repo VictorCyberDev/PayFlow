@@ -1,45 +1,59 @@
-# PayFlow Architecture — Milestone 2C
+# PayFlow Architecture — Milestone 2D
 
 ## Trusted path
 
 ```text
-Untrusted Agent -> TransactionProposal -> DurableAuthorizationService
- -> Trust Kernel -> DecisionReceipt -> Authority Reservation
- -> ExecutionGrantIssuer -> Ed25519 signed grant
- -> ExecutionBoundary -> signature + exact binding + durable revalidation
- -> AUTHORIZED -> EXECUTING -> fake execution sink
+Untrusted Agent -> TransactionProposal -> Trust Kernel -> DecisionReceipt
+ -> durable Authority Reservation -> Ed25519 Execution Grant
+ -> signature verification + immediate durable revalidation
+ -> one-time execution authority claim
+ -> durable Payment Attempt -> PayPal Sandbox Orders v2
+ -> capture verification/reconciliation -> COMMITTED
 ```
 
-The Trust Kernel remains deterministic and PostgreSQL-independent. Decision Receipt, Approval, Reservation, Execution Grant and future Payment Attempt are deliberately separate security concepts.
+The Trust Kernel remains deterministic and PostgreSQL-independent. PayPal does not decide whether a transaction is authorized.
 
-## Durable authorization foundation (2A/2B)
+## Durable authorization and execution authority
 
-PostgreSQL is authoritative for mandates, passports, proposals, receipts, approvals, replay keys, reservations and evidence. Per-mandate `SELECT ... FOR UPDATE` is the serialization point for authority acquisition under `READ COMMITTED`. Capacity is derived as committed plus active (`AUTHORIZED`/`EXECUTING`) reservations. `RELEASED`, `EXPIRED` and `FAILED` restore capacity. An `ESCALATE` receipt remains immutable; principal approval is a separate durable object that can create a reservation after revalidation.
+Milestones 2A/2B keep PostgreSQL authoritative for mandates, passports, proposals, receipts, approvals, replay keys, reservations and evidence. Per-mandate locking serializes authority acquisition. Milestone 2C binds exact execution authority into short-lived Ed25519 grants and atomically moves `ISSUED -> CLAIMED` with reservation `AUTHORIZED -> EXECUTING` after immediate revalidation.
 
-## Execution grants (2C)
+## Payment Attempts
 
-`ExecutionGrantIssuer` accepts only a reservation identifier, then derives every security-critical claim from authoritative persisted state while holding the reservation/mandate locks. A `DENY`, missing reservation or unapproved `ESCALATE` cannot produce a grant.
+2D evolves the existing Payment Attempt into the durable provider interaction record. One execution grant/reservation maps to one logical attempt. The attempt binds grant, reservation, proposal, mandate, principal, provider, operation, integer-minor amount/currency and merchant reference. It persists separate create-order/capture request IDs before network side effects and stores only structured provider identifiers/status needed for correctness.
 
-The versioned grant uses Ed25519 via Node `crypto`. Claims include JTI, `kid`, principal, agent, mandate/fingerprint, proposal/SHA-256 canonical digest, receipt, reservation, capability, amount in integer minor units, currency, merchant, issue/expiry times, authorization-engine version and audience. Default TTL is 120 seconds; maximum configured TTL is 300 seconds.
+The local state machine distinguishes no side effect, order creation in flight/unknown, order created, payer action required, capture in flight/unknown/provider-pending, captured and definitive failure. UNKNOWN is not FAILED.
 
-`proposalDigest` hashes deterministic canonical serialization of all execution-sensitive proposal fields, including metadata. It is a digest, not a signature.
+## PayPal provider boundary
 
-## Pre-execution transaction
+`PaymentProvider` keeps PayPal HTTP types outside the Trust Kernel. `PayPalPaymentProvider` uses native `fetch`, server-side OAuth and current PayPal REST endpoints in Sandbox only:
 
-`ExecutionBoundary` first verifies format/version, audience, expiry, `kid` and signature. It then begins a PostgreSQL transaction and locks the grant, mandate and reservation. It reloads and validates proposal, agent, receipt and approval when required. It compares persisted grant state and exact proposal digest/amount/currency/merchant/capability bindings, verifies mandate fingerprint/current expiry/agent authorization and verifies an approved escalation remains approved.
+- `POST /v1/oauth2/token`
+- `POST /v2/checkout/orders` with `intent=CAPTURE`
+- `GET /v2/checkout/orders/{id}`
+- `POST /v2/checkout/orders/{id}/capture`
 
-Only an `ISSUED` grant and `AUTHORIZED`, unexpired reservation can cross the boundary. Successful revalidation atomically changes grant `ISSUED -> CLAIMED` and reservation `AUTHORIZED -> EXECUTING`, with evidence in the same transaction. Concurrent replay contends on the grant row and only one caller can claim execution authority.
+OAuth tokens are cached only in memory until shortly before expiry; concurrent refreshes are coalesced. Non-sandbox configuration is rejected.
 
-The fake execution sink is called only after that transaction commits. Success finalizes `CLAIMED -> CONSUMED` and `EXECUTING -> COMMITTED`. Deterministic fake-sink failure finalizes grant and reservation as `FAILED`.
+## Money
+
+PayFlow remains integer-minor internally. A dedicated conversion layer emits PayPal decimal strings without binary floating point and rejects unsupported currencies/invalid values. Provider capture amount/currency must equal the authoritative Payment Attempt/execution authority.
+
+## Idempotency and crash recovery
+
+Create-order and capture use distinct stable `PayPal-Request-Id` values derived from the durable attempt identity. The same logical retry reuses the same persisted ID.
+
+PostgreSQL and PayPal cannot participate in one atomic transaction. Therefore capture timeout/reset/ambiguous 5xx is quarantined as `CAPTURE_UNKNOWN`. The grant stays `CLAIMED`; reservation stays `EXECUTING`; budget authority remains consumed until reconciliation resolves provider truth.
+
+Reconciliation starts from the persisted PayPal order ID and uses Show Order. A completed capture with exact amount/currency atomically finalizes Payment Attempt `CAPTURED`, grant `CONSUMED`, reservation `COMMITTED` and evidence. No second capture is sent merely because the original response was lost.
+
+Order creation ambiguity is handled separately: safe retries reuse the same create request ID. An existing order is resumed rather than replaced. Payer approval is represented explicitly and is not treated as payment success.
 
 ## Evidence
 
-2C adds `EXECUTION_GRANT_ISSUED`, `EXECUTION_GRANT_VERIFICATION_FAILED`, `EXECUTION_REVALIDATION_FAILED`, `EXECUTION_AUTHORITY_CLAIMED`, `PAYMENT_EXECUTION_STARTED`, `PAYMENT_EXECUTION_SUCCEEDED` and `PAYMENT_EXECUTION_FAILED`. Raw grant tokens and key material are not evidence payloads. Existing SHA-256 chaining remains tamper-evident, not immutable against a privileged database writer.
+2D extends the durable timeline with payment-attempt creation, order-create start/result, payer action, capture start/unknown/pending/confirmed, reconciliation and commit/failure events. Evidence never intentionally contains PayPal Client Secret, OAuth token, Authorization header or raw credentials.
 
-## Keys and rotation
+## Webhooks
 
-Private signing keys are runtime secrets and are not persisted. `kid` selects a public key from a verifier key ring, permitting overlap during rotation. 2C does not implement secret-manager/KMS/HSM integration or claim hardware-backed keys/non-repudiation. See `ADR-002-execution-grants.md`.
+2D does not expose an insecure placeholder webhook. Explicit reconciliation is authoritative. Verified, replay-protected webhook ingestion may be added later using PayPal-supported authenticity verification and the same provider/local bindings.
 
-## Remaining 2D boundary
-
-A real payment provider cannot join a PostgreSQL transaction. 2C intentionally commits the execution-authority claim before provider I/O rather than holding a transaction across a network call. Milestone 2D must use durable payment attempts, provider idempotency and reconciliation to handle ambiguous outcomes such as provider success with a lost response. PayPal is not implemented in 2C.
+See `ADR-002-execution-grants.md` and `ADR-003-paypal-execution-reconciliation.md`.
