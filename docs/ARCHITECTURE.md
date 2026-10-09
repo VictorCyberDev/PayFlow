@@ -1,58 +1,45 @@
-# PayFlow Architecture — Milestone 2B
+# PayFlow Architecture — Milestone 2C
 
-## Boundary
-
-```mermaid
-flowchart LR
-  U[Untrusted Agent / LLM] --> P[TransactionProposal]
-  P --> S[Durable Authorization Service]
-  M[Mandate] --> S
-  A[AgentPassport] --> S
-  S --> K[Deterministic Trust Kernel]
-  K --> R[DecisionReceipt]
-  S --> PG[(PostgreSQL)]
-  R --> X[Future execution boundary]
-```
-
-The deterministic Trust Kernel remains independent of PostgreSQL. The LLM/agent is an untrusted proposer and cannot authorize financial authority. `DurableAuthorizationService` is the production orchestration boundary for Milestone 2B.
-
-## ADR-013 — Per-mandate serialization point
-
-An authorization transaction first loads the proposal, then locks the authoritative mandate row with `SELECT ... FOR UPDATE`. Every path that can acquire or change financial authority for that mandate uses the same mandate-row serialization point before calculating capacity or creating a reservation.
-
-PostgreSQL's default `READ COMMITTED` isolation is used. The guarantee is deliberately narrower than serializable isolation: competing authority changes for one mandate serialize on that mandate row. PayFlow does not claim global serializability or distributed multi-database guarantees.
-
-Within the transaction PayFlow loads and runtime-validates the mandate, agent and proposal, derives current accounting from reservation rows, reruns the deterministic Trust Kernel, persists the Decision Receipt and evidence, and—only for an eligible ALLOW—claims replay identifiers and creates the reservation before commit. A rollback removes the receipt, replay claims, reservation and evidence written by that transaction.
-
-## ADR-014 — Derived cumulative authority
-
-`mandates.spent_minor` is not authoritative in 2B. Capacity is derived from durable reservation rows:
+## Trusted path
 
 ```text
-committed = SUM(amount) WHERE status = COMMITTED
-active_reserved = SUM(amount) WHERE status IN (AUTHORIZED, EXECUTING)
-consumed = committed + active_reserved
-available = cumulative_limit - consumed
+Untrusted Agent -> TransactionProposal -> DurableAuthorizationService
+ -> Trust Kernel -> DecisionReceipt -> Authority Reservation
+ -> ExecutionGrantIssuer -> Ed25519 signed grant
+ -> ExecutionBoundary -> signature + exact binding + durable revalidation
+ -> AUTHORIZED -> EXECUTING -> fake execution sink
 ```
 
-`RELEASED`, `EXPIRED`, `FAILED` and `PENDING` do not consume executable authority. Money remains integer minor units. Because calculation and reservation creation occur while holding the mandate lock, concurrent proposals cannot both observe the same unreserved capacity and acquire it.
+The Trust Kernel remains deterministic and PostgreSQL-independent. Decision Receipt, Approval, Reservation, Execution Grant and future Payment Attempt are deliberately separate security concepts.
 
-## ADR-015 — Escalation approval
+## Durable authorization foundation (2A/2B)
 
-An ESCALATE receipt remains unchanged. Approval is a separate durable record bound to receipt, proposal and principal. Approval takes the mandate lock, reloads and validates persisted state, recomputes accounting, reruns policy for current eligibility, claims replay identifiers, then creates an `AUTHORIZED` reservation in the same transaction. No production human-identity authentication claim is made; the service only enforces principal-ID binding supplied by its caller.
+PostgreSQL is authoritative for mandates, passports, proposals, receipts, approvals, replay keys, reservations and evidence. Per-mandate `SELECT ... FOR UPDATE` is the serialization point for authority acquisition under `READ COMMITTED`. Capacity is derived as committed plus active (`AUTHORIZED`/`EXECUTING`) reservations. `RELEASED`, `EXPIRED` and `FAILED` restore capacity. An `ESCALATE` receipt remains immutable; principal approval is a separate durable object that can create a reservation after revalidation.
 
-## ADR-016 — Reservation accounting and recovery
+## Execution grants (2C)
 
-The success lifecycle remains `AUTHORIZED → EXECUTING → COMMITTED`. `AUTHORIZED` and `EXECUTING` consume reserved authority. `COMMITTED` consumes committed authority. `RELEASED`, `EXPIRED` and `FAILED` restore capacity. Illegal transitions fail closed.
+`ExecutionGrantIssuer` accepts only a reservation identifier, then derives every security-critical claim from authoritative persisted state while holding the reservation/mandate locks. A `DENY`, missing reservation or unapproved `ESCALATE` cannot produce a grant.
 
-Stale `PENDING`/`AUTHORIZED` reservations can be expired deterministically. Expiry is durable and idempotent, never releases `COMMITTED` rows, and writes evidence in the same transaction. A background scheduler is not part of 2B.
+The versioned grant uses Ed25519 via Node `crypto`. Claims include JTI, `kid`, principal, agent, mandate/fingerprint, proposal/SHA-256 canonical digest, receipt, reservation, capability, amount in integer minor units, currency, merchant, issue/expiry times, authorization-engine version and audience. Default TTL is 120 seconds; maximum configured TTL is 300 seconds.
 
-## ADR-017 — Durable replay and evidence
+`proposalDigest` hashes deterministic canonical serialization of all execution-sensitive proposal fields, including metadata. It is a digest, not a signature.
 
-Proposal IDs are globally unique and proposal nonces are mandate-scoped unique at persistence. Executable ALLOW/approved-ESCALATE paths also claim both proposal ID and nonce in durable replay storage inside the authority transaction. Concurrent duplicates cannot both acquire authority.
+## Pre-execution transaction
 
-Evidence writes participate in the same database transaction as authorization state. A rolled-back authorization therefore cannot leave a durable success event. The SHA-256 previous-hash chain remains tamper-evident, not immutable; a privileged database writer can rewrite/re-hash/delete the chain.
+`ExecutionBoundary` first verifies format/version, audience, expiry, `kid` and signature. It then begins a PostgreSQL transaction and locks the grant, mandate and reservation. It reloads and validates proposal, agent, receipt and approval when required. It compares persisted grant state and exact proposal digest/amount/currency/merchant/capability bindings, verifies mandate fingerprint/current expiry/agent authorization and verifies an approved escalation remains approved.
 
-## Remaining execution TOCTOU boundary
+Only an `ISSUED` grant and `AUTHORIZED`, unexpired reservation can cross the boundary. Successful revalidation atomically changes grant `ISSUED -> CLAIMED` and reservation `AUTHORIZED -> EXECUTING`, with evidence in the same transaction. Concurrent replay contends on the grant row and only one caller can claim execution authority.
 
-Milestone 2B ends at durable authorization/reservation eligibility. It does not yet cryptographically bind a later payment execution to the exact authorized proposal/reservation, and it does not implement immediate pre-provider execution revalidation. Those controls are deferred to the cryptographic execution-grant milestone. PayPal, LLM functionality, product discovery and UI are not implemented here.
+The fake execution sink is called only after that transaction commits. Success finalizes `CLAIMED -> CONSUMED` and `EXECUTING -> COMMITTED`. Deterministic fake-sink failure finalizes grant and reservation as `FAILED`.
+
+## Evidence
+
+2C adds `EXECUTION_GRANT_ISSUED`, `EXECUTION_GRANT_VERIFICATION_FAILED`, `EXECUTION_REVALIDATION_FAILED`, `EXECUTION_AUTHORITY_CLAIMED`, `PAYMENT_EXECUTION_STARTED`, `PAYMENT_EXECUTION_SUCCEEDED` and `PAYMENT_EXECUTION_FAILED`. Raw grant tokens and key material are not evidence payloads. Existing SHA-256 chaining remains tamper-evident, not immutable against a privileged database writer.
+
+## Keys and rotation
+
+Private signing keys are runtime secrets and are not persisted. `kid` selects a public key from a verifier key ring, permitting overlap during rotation. 2C does not implement secret-manager/KMS/HSM integration or claim hardware-backed keys/non-repudiation. See `ADR-002-execution-grants.md`.
+
+## Remaining 2D boundary
+
+A real payment provider cannot join a PostgreSQL transaction. 2C intentionally commits the execution-authority claim before provider I/O rather than holding a transaction across a network call. Milestone 2D must use durable payment attempts, provider idempotency and reconciliation to handle ambiguous outcomes such as provider success with a lost response. PayPal is not implemented in 2C.
