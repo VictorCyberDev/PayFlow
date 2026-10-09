@@ -3,7 +3,9 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "tsx src/demo.ts",
     "build": "tsc -p tsconfig.build.json",
