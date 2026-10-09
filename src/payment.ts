@@ -34,10 +34,11 @@ export interface PaymentProvider {
 export class MockPaymentProvider implements PaymentProvider {
   createCalls = 0;
   captureCalls = 0;
-  async createOrder(
+  createOrder(
     proposal: TransactionProposal,
-    _authorization: AuthorizationArtifact,
+    authorization: AuthorizationArtifact,
   ): Promise<PaymentOrder> {
+    void authorization;
     this.createCalls++;
     return Promise.resolve({
       id: `mock-${randomUUID()}`,
@@ -45,10 +46,11 @@ export class MockPaymentProvider implements PaymentProvider {
       status: "CREATED",
     });
   }
-  async captureOrder(
+  captureOrder(
     orderId: string,
-    _authorization: AuthorizationArtifact,
+    authorization: AuthorizationArtifact,
   ): Promise<PaymentOrder> {
+    void authorization;
     this.captureCalls++;
     return Promise.resolve({
       id: orderId,
@@ -59,20 +61,24 @@ export class MockPaymentProvider implements PaymentProvider {
 }
 
 export class PayPalPaymentProvider implements PaymentProvider {
-  async createOrder(
-    _proposal: TransactionProposal,
-    _authorization: AuthorizationArtifact,
+  createOrder(
+    proposal: TransactionProposal,
+    authorization: AuthorizationArtifact,
   ): Promise<PaymentOrder> {
-    throw new Error(
-      "PayPal network execution intentionally deferred beyond Milestone 1",
+    void proposal;
+    void authorization;
+    return Promise.reject(
+      new Error("PayPal network execution intentionally deferred beyond Milestone 1"),
     );
   }
-  async captureOrder(
-    _orderId: string,
-    _authorization: AuthorizationArtifact,
+  captureOrder(
+    orderId: string,
+    authorization: AuthorizationArtifact,
   ): Promise<PaymentOrder> {
-    throw new Error(
-      "PayPal network execution intentionally deferred beyond Milestone 1",
+    void orderId;
+    void authorization;
+    return Promise.reject(
+      new Error("PayPal network execution intentionally deferred beyond Milestone 1"),
     );
   }
 }
