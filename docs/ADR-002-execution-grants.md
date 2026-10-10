@@ -12,7 +12,7 @@ The signed claims bind principal, agent, mandate and mandate fingerprint, propos
 
 ## One-use semantics
 
-Grant identity and lifecycle are durable: `ISSUED -> CLAIMED -> CONSUMED` on success, or `ISSUED -> CLAIMED -> FAILED` when the fake execution sink fails. A duplicate invocation is rejected rather than returning a cached result. PostgreSQL row locking makes concurrent replay contend for the same grant; only an `ISSUED` row may claim execution authority.
+Grant identity and lifecycle are durable: `ISSUED -> CLAIMED -> CONSUMED` on success, or `ISSUED -> CLAIMED -> FAILED` only when the fake execution sink reports a known no-effect rejection. Unclassified failure retains `CLAIMED`/`EXECUTING` authority in quarantine; provider success followed by failed local finalization does not release it. A duplicate invocation is rejected rather than returning a cached result. PostgreSQL row locking makes concurrent replay contend for the same grant; only an `ISSUED` row may claim execution authority.
 
 ## Pre-execution revalidation
 

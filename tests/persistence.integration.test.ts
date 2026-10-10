@@ -180,4 +180,76 @@ run("PostgreSQL durable foundation", () => {
     await repo.sql`update mandates set document=jsonb_set(document,'{currency}','\"usd\"'::jsonb) where id='m1'`;
     await expect(repo.getMandate("m1")).rejects.toThrow();
   });
+  it("upgrades populated 2A/2C/2D state through ordered forward migrations without rewriting evidence", async () => {
+    await repo.saveProposal(proposal);
+    await repo.saveReceipt(receipt);
+    await repo.appendEvidence(
+      "UPGRADE_FIXTURE",
+      { proposalId: proposal.id },
+      proposal.proposedAt,
+    );
+    const originalEvidence = await repo.evidence();
+    const migrations = await Promise.all(
+      [
+        "001_milestone_2a_durable_foundation.sql",
+        "002_milestone_2c_execution_grants.sql",
+        "003_milestone_2d_paypal_execution.sql",
+        "004_milestone_2e_security_boundary.sql",
+      ].map((file) => readFile(`db/migrations/${file}`, "utf8")),
+    );
+    // Isolated schema, real PostgreSQL, populated data between migration stages.
+    // The outer transaction removes the fixture even if an assertion fails.
+    await repo.sql.begin(async (tx) => {
+      await tx`create schema migration_upgrade_audit`;
+      await tx`set local search_path to migration_upgrade_audit`;
+      await tx.unsafe(migrations[0]!);
+      await tx`insert into principals select * from public.principals`;
+      await tx`insert into agent_passports select * from public.agent_passports`;
+      await tx`insert into mandates(id,principal_id,authorized_agent_id,fingerprint,document,nonce,cumulative_limit_minor,spent_minor,created_at,expires_at) select id,principal_id,authorized_agent_id,fingerprint,document,nonce,cumulative_limit_minor,spent_minor,created_at,expires_at from public.mandates`;
+      await tx`insert into transaction_proposals select * from public.transaction_proposals`;
+      await tx`insert into decision_receipts(id,proposal_id,mandate_id,agent_id,decision,document,evaluated_at) select id,proposal_id,mandate_id,agent_id,decision,document,evaluated_at from public.decision_receipts`;
+      await tx`insert into authorization_reservations(id,mandate_id,proposal_id,receipt_id,amount_minor,currency,status,expires_at) values('upgrade-res','m1','tx1','r1',7000,'USD','AUTHORIZED','2026-10-09T13:00:00Z')`;
+      await tx`insert into payment_attempts(id,reservation_id,provider,idempotency_key,status) values('legacy-attempt','upgrade-res','MOCK','legacy-key','NOT_STARTED')`;
+      await tx`insert into evidence_events overriding system value select * from public.evidence_events`;
+      await tx.unsafe(migrations[1]!);
+      await tx`insert into execution_grants(id,kid,version,audience,principal_id,agent_id,mandate_id,proposal_id,receipt_id,reservation_id,proposal_digest,mandate_fingerprint,capability,amount_minor,currency,merchant_id,issued_at,expires_at) values('upgrade-grant','test-key','payflow.execution-grant.v1','payflow.payment-execution','p1','a1','m1','tx1','r1','upgrade-res',${"a".repeat(64)},${mandateFingerprint(mandate)},'CREATE_ORDER',7000,'USD','shop','2026-10-09T12:00:00Z','2026-10-09T12:02:00Z')`;
+      await tx.unsafe(migrations[2]!);
+      await tx.unsafe(migrations[3]!);
+      const receipts =
+        await tx`select proposal_snapshot,document_hash,encode(sha256(convert_to(document::text,'UTF8')),'hex') actual_hash from decision_receipts`;
+      expect(receipts[0]?.proposal_snapshot).toEqual(proposal);
+      expect(receipts[0]?.document_hash).toBe(receipts[0]?.actual_hash);
+      const grants =
+        await tx`select authority_snapshot,to_jsonb(g)-ARRAY['status','claimed_at','consumed_at','failed_at','authority_snapshot'] expected_snapshot from execution_grants g`;
+      expect(grants[0]?.authority_snapshot).toEqual(
+        grants[0]?.expected_snapshot,
+      );
+      expect(grants[0]?.authority_snapshot).not.toBeNull();
+      const attempts =
+        await tx`select id,status,grant_id,create_order_request_id from payment_attempts`;
+      expect(attempts[0]).toMatchObject({
+        id: "legacy-attempt",
+        status: "NOT_STARTED",
+        grant_id: null,
+        create_order_request_id: null,
+      });
+      expect(
+        (await tx`select revoked_at from mandates`)[0]?.revoked_at,
+      ).toBeNull();
+      const evidence = await repo.evidence(tx);
+      expect(evidence).toEqual(originalEvidence);
+      expect(PostgresTrustRepository.verifyEvidence(evidence)).toBe(true);
+      await repo.appendEvidenceInTransaction(
+        tx,
+        "UPGRADE_VERIFIED",
+        { migration: "004" },
+        "2026-10-09T12:00:02.000Z",
+      );
+      expect((await repo.evidence(tx)).map((event) => event.sequence)).toEqual([
+        1, 2,
+      ]);
+      await tx`drop schema migration_upgrade_audit cascade`;
+    });
+    expect(await repo.evidence()).toEqual(originalEvidence);
+  });
 });

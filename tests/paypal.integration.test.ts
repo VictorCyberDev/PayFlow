@@ -320,11 +320,29 @@ run("Milestone 2D durable PayPal execution", () => {
 
   it("concurrent duplicate rail invocation creates one logical attempt", async () => {
     const { claims } = await claimed();
-    const provider = new LostResponseProvider();
+    const provider = new RecoveryProvider();
     const rail = new PayPalExecutionRail(repo, provider, () => now);
-    await Promise.allSettled([rail.execute(claims), rail.execute(claims)]);
-    const attempts = await repo.sql`select id from payment_attempts`;
+    const results = await Promise.allSettled([
+      rail.execute(claims),
+      rail.execute(claims),
+    ]);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+    const attempts = await repo.sql`select id,status from payment_attempts`;
     expect(attempts).toHaveLength(1);
+    expect(attempts[0]?.status).toBe("CAPTURED");
+    expect(provider.logicalOrders).toBe(1);
+    expect(provider.captureIds).toHaveLength(1);
+    expect(provider.financialSideEffects).toBe(1);
+    expect(
+      (await repo.evidence()).filter(
+        (event) => event.type === "PAYMENT_COMMITTED",
+      ),
+    ).toHaveLength(1);
   });
   const recoveryTime = "2026-10-09T12:01:00.000Z";
   async function unknown(provider: RecoveryProvider): Promise<{
