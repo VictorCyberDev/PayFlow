@@ -54,6 +54,14 @@ condition, not arbitrary natural-language product specifications or fulfillment.
    proves no side effect or permits authority release. GET/OAuth failures retain
    their existing non-financial failure classifications.
 
+4. **Unbounded caller grant token.** Before the guard, an 8,193-character token
+   entered ordinary decoding/parsing or full-token diagnostic hashing and returned
+   MALFORMED_EXECUTION_GRANT rather than early size rejection. The regression
+   failed before repair. ExecutionBoundary now rejects above 8,192 characters
+   before splitting, decoding or hashing, recording only reason and character
+   count. The exact size boundary still performs ordinary strict validation;
+   normal signed PostgreSQL flows continue through unchanged security checks.
+
 No migration, second grant lifecycle, separate order/capture attempts, automatic
 new grant, fresh recovery key or financial compensation path is introduced.
 

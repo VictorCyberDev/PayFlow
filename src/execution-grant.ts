@@ -23,6 +23,7 @@ import {
 export const EXECUTION_GRANT_VERSION = "payflow.execution-grant.v1" as const;
 export const DEFAULT_EXECUTION_GRANT_TTL_MS = 120_000;
 export const MAX_EXECUTION_GRANT_TTL_MS = 300_000;
+export const MAX_EXECUTION_GRANT_TOKEN_CHARACTERS = 8192;
 
 export const ExecutionGrantClaimsSchema = z
   .object({
@@ -301,6 +302,17 @@ export class ExecutionBoundary {
   ): Promise<{ readonly executionId: string }> {
     if (!Number.isFinite(Date.parse(now)))
       throw new Error("INVALID_EXECUTION_TIME");
+    if (token.length > MAX_EXECUTION_GRANT_TOKEN_CHARACTERS) {
+      await this.repo.appendEvidence(
+        "EXECUTION_GRANT_VERIFICATION_FAILED",
+        {
+          reason: "EXECUTION_GRANT_TOO_LARGE",
+          tokenCharacters: token.length,
+        },
+        now,
+      );
+      throw new Error("EXECUTION_GRANT_TOO_LARGE");
+    }
     const parts = token.split(".");
     if (parts.length !== 2)
       return this.verificationFailure(token, "MALFORMED_EXECUTION_GRANT", now);
