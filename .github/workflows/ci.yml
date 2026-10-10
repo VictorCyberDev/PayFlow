@@ -2,7 +2,10 @@ name: PayFlow CI
 on:
   pull_request:
   push:
-    branches: [milestone-2-durable-paypal, milestone-3-ai-intent]
+    branches:
+      - milestone-2-durable-paypal
+      - milestone-3-ai-intent
+      - pre-m4-vercel-deployment-shell
 permissions:
   contents: read
 jobs:
