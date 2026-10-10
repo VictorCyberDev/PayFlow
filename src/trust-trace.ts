@@ -66,6 +66,10 @@ export function verifyTrustTrace(
     reservations = new Set<string>();
   const grants = new Map<string, string>(),
     claimed = new Set<string>();
+  const grantedReservations = new Set<string>(),
+    attemptGrants = new Set<string>();
+  const captureOwners = new Map<string, string>(),
+    activatedMandates = new Set<string>();
   const attempts = new Map<string, string>(),
     resolved = new Map<string, string>();
   const committed = new Set<string>();
@@ -111,9 +115,15 @@ export function verifyTrustTrace(
         return invalid("CONFIRMATION_BINDING_INVALID");
       confirmed.add(review);
     } else if (e.type === "INTENT_MANDATE_ACTIVATED") {
-      if (!confirmed.has(review) || activated.has(review) || !id("mandateId"))
+      if (
+        !confirmed.has(review) ||
+        activated.has(review) ||
+        !id("mandateId") ||
+        activatedMandates.has(id("mandateId"))
+      )
         return invalid("ACTIVATION_ORDER_INVALID");
       activated.add(review);
+      activatedMandates.add(id("mandateId"));
     } else if (e.type === "RESERVATION_CREATED") {
       if (!reservation || reservations.has(reservation) || !id("proposalId"))
         return invalid("RESERVATION_TRACE_INVALID");
@@ -122,11 +132,13 @@ export function verifyTrustTrace(
       if (
         !grant ||
         grants.has(grant) ||
+        grantedReservations.has(reservation) ||
         !reservations.has(reservation) ||
         !id("proposalDigest")
       )
         return invalid("GRANT_TRACE_INVALID");
       grants.set(grant, reservation);
+      grantedReservations.add(reservation);
     } else if (e.type === "EXECUTION_AUTHORITY_CLAIMED") {
       if (grants.get(grant) !== reservation || claimed.has(grant))
         return invalid("CLAIM_TRACE_INVALID");
@@ -135,11 +147,13 @@ export function verifyTrustTrace(
       if (
         !attempt ||
         attempts.has(attempt) ||
+        attemptGrants.has(grant) ||
         !claimed.has(grant) ||
         grants.get(grant) !== reservation
       )
         return invalid("ATTEMPT_TRACE_INVALID");
       attempts.set(attempt, grant);
+      attemptGrants.add(grant);
       financialReservations.add(reservation);
     } else if (
       [
@@ -164,10 +178,12 @@ export function verifyTrustTrace(
       if (
         !attempts.has(attempt) ||
         !id("paypalCaptureId") ||
+        captureOwners.has(id("paypalCaptureId")) ||
         resolved.has(attempt)
       )
         return invalid("RESOLUTION_TRACE_INVALID");
       resolved.set(attempt, id("paypalCaptureId"));
+      captureOwners.set(id("paypalCaptureId"), attempt);
     } else if (e.type === "PAYMENT_COMMITTED") {
       if (
         resolved.get(attempt) !== id("paypalCaptureId") ||

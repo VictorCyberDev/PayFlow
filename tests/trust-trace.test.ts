@@ -160,6 +160,48 @@ describe("M3F independent read-only Trust Trace verification", () => {
       ).toBe(true);
     },
   );
+  it.each(["mandate", "reservation", "capture"])(
+    "detects impossible cross-flow reuse of %s",
+    (field) => {
+      const second = events.map(
+        ([type, data]): [string, DurableEvidence["data"]] => [
+          type,
+          Object.fromEntries(
+            Object.entries(data).map(([key, value]) => [
+              key,
+              typeof value === "string" && key !== "status"
+                ? `${value}-2`
+                : value,
+            ]),
+          ),
+        ],
+      );
+      if (field === "mandate")
+        second[2] = [second[2]![0], { ...second[2]![1], mandateId: "mandate" }];
+      if (field === "reservation")
+        second[4] = [
+          second[4]![0],
+          { ...second[4]![1], reservationId: "reservation" },
+        ];
+      if (field === "capture") {
+        second[9] = [
+          second[9]![0],
+          { ...second[9]![1], paypalCaptureId: "capture" },
+        ];
+        second[10] = [
+          second[10]![0],
+          { ...second[10]![1], paypalCaptureId: "capture" },
+        ];
+      }
+      expect(verifyTrustTrace(chain([...events, ...second])).issues).toEqual([
+        field === "mandate"
+          ? "ACTIVATION_ORDER_INVALID"
+          : field === "reservation"
+            ? "GRANT_TRACE_INVALID"
+            : "RESOLUTION_TRACE_INVALID",
+      ]);
+    },
+  );
   it("rejects malformed, oversized, reordered and tampered records", () => {
     expect(verifyTrustTrace(null).valid).toBe(false);
     expect(verifyTrustTrace(new Array(100001)).valid).toBe(false);

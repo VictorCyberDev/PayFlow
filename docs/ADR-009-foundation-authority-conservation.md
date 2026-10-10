@@ -203,7 +203,8 @@ strict event shape, bounded records/payloads, unique event IDs, contiguous seque
 previous hashes and the existing canonical SHA-256 hashes. It checks represented
 review/confirmation identity and exact draft/review hashes, one activation per
 review, reservation → issued grant → claim → attempt bindings, recognized dispatch
-states, capture-resolution identity and one logical commitment. Rehashed missing,
+states, unique capture-resolution identity, one grant per reservation, one attempt
+per grant and one logical commitment. Rehashed missing,
 duplicate, substituted or conflicting represented relationships fail verification.
 Actual committed PostgreSQL full-system evidence exercises this path.
 
