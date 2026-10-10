@@ -323,7 +323,13 @@ export class IntentActivationService {
       const context = await this.boundary.authenticate(assertion, binding);
       return await this.activateReviewedIntent(context, binding);
     } catch (error) {
-      return { status: "REJECTED", code: this.safeCode(error) };
+      const code = this.safeCode(error);
+      await this.repository.appendEvidence(
+        "INTENT_CONFIRMATION_REJECTED",
+        { code },
+        this.clock().toISOString(),
+      );
+      return { status: "REJECTED", code };
     }
   }
   async activateReviewedIntent(

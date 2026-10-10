@@ -891,4 +891,27 @@ run("3C durable human confirmation and commerce accounting", () => {
       expect(await repo.sql`select id from payment_attempts`).toHaveLength(0);
     },
   );
+  it("authentication failure records sanitized rejection without proof, nonce or source", async () => {
+    const r = await review(),
+      req = request(r);
+    const assertion = {
+      confirmed: true,
+      untrustedCredential: "DO_NOT_PERSIST_TEST_ASSERTION",
+    };
+    expect((await service.confirmReviewedIntent(req, assertion)).status).toBe(
+      "REJECTED",
+    );
+    const events = await repo.evidence();
+    const rejected = events.find(
+      (e) => e.type === "INTENT_CONFIRMATION_REJECTED",
+    );
+    expect(rejected?.data).toEqual({
+      code: "ACTIVATION_REQUIREMENTS_UNSATISFIED",
+    });
+    expect(JSON.stringify(events)).not.toContain(
+      "DO_NOT_PERSIST_TEST_ASSERTION",
+    );
+    expect(JSON.stringify(events)).not.toContain(r.challenge);
+    expect(await repo.sql`select id from mandates`).toHaveLength(0);
+  });
 });

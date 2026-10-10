@@ -14,7 +14,7 @@ A review retains the source/provenance and exact interpretation, compiler contex
 
 `HumanActionAuthenticator` is a trusted dependency supplied by the host application. There is deliberately no permissive production authenticator. Tests provide a deterministic authenticator; it is not exported as production authentication.
 
-The external boundary must verify an authenticated HUMAN, audience and session validity, explicit `CONFIRM_EXACT_TERMS` action, and the exact review ID, agent ID, fingerprint, reviewed hash and challenge hash. Its proof must be bound to these values, not merely authenticate a bearer while trusting an arbitrary request body. The future web layer must provide session authentication, CSRF/origin protection, account ownership, secure cookies/token handling, accessible presentation of all canonical terms and a separate explicit confirmation action. Agents and model output must never be accepted as human authentication. This domain milestone does not supply an identity provider, browser/session server or UI.
+The external boundary must verify an authenticated HUMAN, audience and session validity, explicit `CONFIRM_EXACT_TERMS` action, and the exact review ID, agent ID, fingerprint, reviewed hash and challenge hash. Its proof must be bound to these values, not merely authenticate a bearer while trusting an arbitrary request body. The future web layer must provide request rate limits, session authentication, CSRF/origin protection, account ownership, secure cookies/token handling, accessible presentation of all canonical terms and a separate explicit confirmation action. Agents and model output must never be accepted as human authentication. This domain milestone does not supply an identity provider, browser/session server or UI.
 
 `HumanConfirmationBoundary` validates the verifier result and seals an opaque, frozen context in a private per-instance WeakMap. Cloned, serialized, fabricated, cross-boundary and expired contexts fail. Principal identity comes only from the trusted verifier. Authentication may involve network requests; verification finishes before the PostgreSQL activation transaction starts. Possessing a review challenge alone is not authentication.
 
@@ -44,7 +44,7 @@ Migration 005 is additive. Historical mandates without these optional fields pre
 
 ## Evidence and model isolation
 
-`INTENT_REVIEW_CREATED`, `HUMAN_CONFIRMATION_ACCEPTED`, `INTENT_MANDATE_ACTIVATED` and `INTENT_ACTIVATION_REJECTED` extend the existing ledger. Rejection codes distinguish expiry, stale authority, replay, identity/binding failures and unsupported requirements. Existing policy receipts record quantity/merchant checks and denial reasons; reservation evidence includes quantity. A ledger is not tamper-proof against privileged database administrators.
+`INTENT_REVIEW_CREATED`, `HUMAN_CONFIRMATION_ACCEPTED`, `INTENT_MANDATE_ACTIVATED` and `INTENT_ACTIVATION_REJECTED` and `INTENT_CONFIRMATION_REJECTED` extend the existing ledger. Rejection codes distinguish expiry, stale authority, replay, identity/binding failures and unsupported requirements. Existing policy receipts record quantity/merchant checks and denial reasons; reservation evidence includes quantity. A ledger is not tamper-proof against privileged database administrators.
 
 The 3B model dependency graph remains isolated: no activation, authentication, accounting, grant, key or PayPal imports are reachable from model modules. No live model call is required for review or activation.
 
