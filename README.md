@@ -103,3 +103,21 @@ The server can now persist an intent review, present its exact draft, authentica
 ### Milestone 3D adversarial trust-boundary review
 
 The full interpretation → authenticated activation → quantity/merchant authorization → signed grant → PayPal/evidence path is exercised with deterministic adversarial inputs and real PostgreSQL concurrency. A reproduced rejection-evidence privacy defect is fixed without changing financial semantics. See [ADR-008](docs/ADR-008-adversarial-trust-boundary-hardening.md) for the attack matrix, executable controls and residual limits.
+
+### Live-provider smoke tests
+
+Provider credentials alone never enable live tests. Normal tests and CI use fake
+providers/mocked transport and consume no external-provider quota. Only the exact
+lowercase value `true` enables a live smoke switch; absent, `false`, `1`, `yes`
+and other values leave it disabled. Explicit opt-in without required configuration
+fails before a provider is constructed.
+
+- Groq: `RUN_GROQ_SMOKE_TEST=true npm run test:groq:smoke`, with external `GROQ_API_KEY`.
+- PayPal Sandbox: `RUN_PAYPAL_SANDBOX_SMOKE_TEST=true npm run test:paypal:sandbox`,
+  with external Sandbox client ID/secret and `PAYPAL_ENVIRONMENT=sandbox`.
+  This optional test obtains OAuth and creates an order; it must never run merely
+  because credentials are configured.
+- Channel3: `RUN_CHANNEL3_SMOKE_TEST=false` is reserved; no Channel3 live test or
+  provider is implemented yet.
+
+All switches default OFF. Never commit credentials or persist PayPal OAuth tokens.

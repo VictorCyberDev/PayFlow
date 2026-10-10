@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { paypalProviderFromEnv } from "../src/paypal.js";
 
-const enabled =
-  process.env.PAYPAL_CLIENT_ID &&
-  process.env.PAYPAL_CLIENT_SECRET &&
-  process.env.PAYPAL_ENVIRONMENT === "sandbox";
+import {
+  smokeTestEnabled,
+  requireSmokeConfiguration,
+} from "./provider-smoke-guard.js";
+
+const enabled = smokeTestEnabled("PAYPAL_SANDBOX", process.env);
 const run = enabled ? describe : describe.skip;
 
 run("PayPal Sandbox smoke (opt-in)", () => {
   it("acquires OAuth and creates a CAPTURE order without automating payer credentials", async () => {
+    requireSmokeConfiguration("PAYPAL_SANDBOX", process.env);
     const provider = paypalProviderFromEnv();
     const order = await provider.createOrder({
       amountValue: "1.00",
