@@ -839,6 +839,23 @@ run("Milestone 2D durable PayPal execution", () => {
       (await repo.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
     ).toHaveLength(0);
   }
+  it("M3F CREATE_ORDER-only signed authority cannot enter the combined financial rail", async () => {
+    const token = await issued();
+    const provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+      "PAYMENT_CAPABILITY_REQUIRED",
+    );
+    expect(provider.createIds).toHaveLength(0);
+    expect(provider.captureIds).toHaveLength(0);
+    expect(provider.financialSideEffects).toBe(0);
+    expect(await repo.sql`select id from payment_attempts`).toHaveLength(0);
+    expect(
+      (await repo.authorityAccounting(mandate.id, mandate.cumulativeLimitMinor))
+        .committedMinor,
+    ).toBe(0);
+  });
+
   it("2E complete signed flow commits all three objects once, including concurrent callers and post-response restart", async () => {
     const token = await issued(),
       provider = new RecoveryProvider();
