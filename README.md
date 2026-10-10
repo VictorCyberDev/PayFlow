@@ -121,3 +121,12 @@ fails before a provider is constructed.
   provider is implemented yet.
 
 All switches default OFF. Never commit credentials or persist PayPal OAuth tokens.
+
+### Minimal deployment shell (pre-M4)
+
+Vercel serves only `GET /api/health`, returning `{"status":"ok","service":"payflow"}`.
+This is process liveness, not a database or provider readiness check. Other methods
+return 405. The function has no domain imports, credentials, database access or
+provider calls. `public` is intentionally empty; compiled `dist` modules and source
+maps are not static deployment output. This shell exposes no financial API or UI.
+Provider smoke tests remain explicitly opt-in; deployment does not run them.

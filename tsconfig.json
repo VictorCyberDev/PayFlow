@@ -14,6 +14,7 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "api/**/*.ts",
     "src/**/*.ts",
     "tests/**/*.ts",
     "eslint.config.js",
