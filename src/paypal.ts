@@ -70,6 +70,40 @@ export interface PaymentProvider {
   captureOrder(orderId: string, requestId: string): Promise<PayPalOrderView>;
 }
 type FetchLike = typeof fetch;
+export const PAYPAL_RESPONSE_LIMITS = Object.freeze({
+  oauthBytes: 16384,
+  orderBytes: 262144,
+});
+
+async function boundedJson(
+  response: Response,
+  maximum: number,
+): Promise<unknown> {
+  if (!response.body) throw new Error("EMPTY_PROVIDER_BODY");
+  const reader = response.body.getReader();
+  let complete = false;
+  try {
+    const declared = response.headers.get("content-length");
+    if (declared && (!/^\d+$/.test(declared) || Number(declared) > maximum))
+      throw new Error("PROVIDER_BODY_LIMIT");
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    while (true) {
+      const part = await reader.read();
+      if (part.done) {
+        complete = true;
+        break;
+      }
+      bytes += part.value.byteLength;
+      if (bytes > maximum) throw new Error("PROVIDER_BODY_LIMIT");
+      chunks.push(part.value);
+    }
+    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+  } finally {
+    if (!complete) await reader.cancel();
+    reader.releaseLock();
+  }
+}
 const tokenSchema = z.object({
   access_token: z.string().min(1),
   expires_in: z.number().positive(),
@@ -154,7 +188,9 @@ export class PayPalOAuthClient {
       );
     let v: z.infer<typeof tokenSchema>;
     try {
-      v = tokenSchema.parse(await r.json());
+      v = tokenSchema.parse(
+        await boundedJson(r, PAYPAL_RESPONSE_LIMITS.oauthBytes),
+      );
     } catch {
       throw new PayPalProviderError(
         "MALFORMED",
@@ -260,7 +296,9 @@ export class PayPalPaymentProvider implements PaymentProvider {
     }
     let p: z.infer<typeof orderSchema>;
     try {
-      p = orderSchema.parse(await r.json());
+      p = orderSchema.parse(
+        await boundedJson(r, PAYPAL_RESPONSE_LIMITS.orderBytes),
+      );
     } catch {
       throw new PayPalProviderError(
         ambiguous ? "AMBIGUOUS" : "MALFORMED",
@@ -328,6 +366,7 @@ export class PayPalExecutionRail implements ExecutionSink {
     private readonly clock = () => new Date().toISOString(),
   ) {}
   readonly finalizesAuthority = true;
+  readonly requiredCapability = "CAPTURE_PAYMENT" as const;
   async execute(
     c: ExecutionGrantClaims,
   ): Promise<{ readonly executionId: string }> {
@@ -391,6 +430,7 @@ export class PayPalExecutionRail implements ExecutionSink {
         await db`select * from payment_attempts where id=${attemptId}`;
       if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
       let a = asRow(rows[0]);
+      let capability: unknown;
       if (["FAILED", "CANCELLED"].includes(String(a.status)))
         return String(a.status);
       await this.reconciliationTransaction(db, async (tx) => {
@@ -399,6 +439,9 @@ export class PayPalExecutionRail implements ExecutionSink {
         if (!attempts[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
         a = asRow(attempts[0]);
         await this.assertAuthority(tx, a, a.status === "CAPTURED");
+        const grants =
+          await tx`select capability from execution_grants where id=${String(a.grant_id)}`;
+        capability = grants[0]?.capability;
         if (
           a.status === "CAPTURED" &&
           (!a.provider_order_id ||
@@ -411,7 +454,12 @@ export class PayPalExecutionRail implements ExecutionSink {
         this.repo.appendEvidenceInTransaction(
           tx,
           "PAYPAL_RECONCILIATION_STARTED",
-          { paymentAttemptId: attemptId },
+          {
+            paymentAttemptId: attemptId,
+            requestedCapability: String(capability),
+            requiredCapability: this.requiredCapability,
+            observationOnly: capability !== this.requiredCapability,
+          },
           now,
         ),
       );
@@ -656,6 +704,8 @@ export class PayPalExecutionRail implements ExecutionSink {
       const grants =
         await tx`select * from execution_grants where id=${String(a.grant_id)}`;
       const g = asRow(grants[0]);
+      if (g.capability !== this.requiredCapability)
+        throw new ExecutionQuarantinedError("PAYMENT_CAPABILITY_REQUIRED");
       const mandate = await this.repo.getMandate(
         String(a.mandate_id),
         tx,
@@ -696,8 +746,8 @@ export class PayPalExecutionRail implements ExecutionSink {
         Date.parse(now) >= persistedDate(g.expires_at).getTime() ||
         Date.parse(now) >=
           persistedDate(reservations[0]?.expires_at).getTime() ||
-        !agent.capabilities.includes(g.capability as never) ||
-        !mandate.allowedCapabilities.includes(g.capability as never) ||
+        !agent.capabilities.includes(g.capability) ||
+        !mandate.allowedCapabilities.includes(g.capability) ||
         mandateFingerprint(mandate) !== g.mandate_fingerprint
       )
         throw new Error("PAYMENT_AUTHORITY_NOT_CURRENT");
@@ -1028,6 +1078,8 @@ export class PayPalExecutionRail implements ExecutionSink {
         return a;
       }
       if (g.status !== "CLAIMED") throw new Error("PAYMENT_AUTHORITY_MISSING");
+      if (c.capability !== this.requiredCapability)
+        throw new ExecutionQuarantinedError("PAYMENT_CAPABILITY_REQUIRED");
       const id = randomUUID(),
         create = requestId("create", id),
         capture = requestId("capture", id);

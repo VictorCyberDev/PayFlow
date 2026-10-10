@@ -141,6 +141,61 @@ run("Milestone 2C cryptographic execution grants", () => {
     );
   });
 
+  it.each([
+    "current",
+    "previous-overlap",
+    "revoked",
+    "expired-overlap",
+    "unknown",
+    "wrong-key-identity",
+  ])(
+    "M3F host key rotation policy %s is enforced before execution",
+    async (state) => {
+      const current = generateKeyPairSync("ed25519");
+      if (state === "current")
+        issuer = new ExecutionGrantIssuer(
+          repo,
+          "current-key",
+          current.privateKey,
+        );
+      const { token } = await authorizedToken();
+      const overlapEnd = Date.parse(now) + 60_000;
+      const verificationTime =
+        state === "expired-overlap"
+          ? new Date(overlapEnd).toISOString()
+          : later;
+      const resolver = {
+        resolve(kid: string) {
+          if (kid === "current-key") return current.publicKey;
+          if (
+            kid !== "test-key-1" ||
+            state === "unknown" ||
+            state === "revoked" ||
+            Date.parse(verificationTime) >= overlapEnd
+          )
+            return undefined;
+          return state === "wrong-key-identity" ? current.publicKey : publicKey;
+        },
+      };
+      const rotated = new ExecutionBoundary(repo, resolver, sink);
+      if (["current", "previous-overlap"].includes(state)) {
+        await rotated.execute(token, verificationTime);
+        expect(sink.calls).toBe(1);
+        await expect(rotated.execute(token, verificationTime)).rejects.toThrow(
+          "EXECUTION_GRANT_CONSUMED",
+        );
+        expect(sink.calls).toBe(1);
+      } else {
+        await expect(rotated.execute(token, verificationTime)).rejects.toThrow(
+          state === "wrong-key-identity"
+            ? "INVALID_GRANT_SIGNATURE"
+            : "UNKNOWN_GRANT_KID",
+        );
+        expect(sink.calls).toBe(0);
+      }
+    },
+  );
+
   it("issues a bounded Ed25519 grant bound to the canonical proposal", async () => {
     const { token } = await authorizedToken();
     const c = claims(token);

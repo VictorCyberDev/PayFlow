@@ -71,6 +71,21 @@ const auth = (
   });
 
 describe("deterministic authorization kernel", () => {
+  it.each([undefined, null, 0, "false"])(
+    "M3F ALLOW requires positive boolean replay-absence evidence %s",
+    (replaySeen) => {
+      const context = {
+        now,
+        merchantRisk: "LOW",
+        cumulativeSpentMinor: 0,
+        replaySeen,
+      } as unknown as Parameters<typeof authorize>[3];
+      expect(authorize(mandate, agent, proposal(), context).decision).toBe(
+        "DENY",
+      );
+    },
+  );
+
   it("valid purchase ALLOWs", () => expect(auth().decision).toBe("ALLOW"));
   it("hard maximum DENYs", () =>
     expect(

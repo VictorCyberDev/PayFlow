@@ -72,6 +72,7 @@ export function authorize(
     !mandateResult.success ||
     !agentResult.success ||
     !proposalResult.success ||
+    typeof context.replaySeen !== "boolean" ||
     !Number.isSafeInteger(context.cumulativeSpentMinor) ||
     context.cumulativeSpentMinor < 0 ||
     !MerchantRiskSchema.safeParse(context.merchantRisk).success ||

@@ -1,3 +1,4 @@
+import { assertPayPalTransitions } from "./helpers/paypal-state-oracle.js";
 import {
   afterAll,
   beforeAll,
@@ -7,7 +8,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, randomUUID, generateKeyPairSync } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { mandateFingerprint } from "../src/canonical.js";
 import { DurableAuthorizationService } from "../src/durable-service.js";
@@ -184,7 +185,7 @@ run("Milestone 2D durable PayPal execution", () => {
     issuedAt: "2026-10-01T00:00:00.000Z",
     expiresAt: "2026-11-01T00:00:00.000Z",
     status: "ACTIVE",
-    capabilities: ["CREATE_ORDER"],
+    capabilities: ["CAPTURE_PAYMENT"],
   };
   const mandate: Mandate = {
     id: "m2d",
@@ -199,7 +200,7 @@ run("Milestone 2D durable PayPal execution", () => {
     merchantRiskCeiling: "MEDIUM",
     autonomousPurchaseThresholdMinor: 10000,
     humanApprovalThresholdMinor: 10000,
-    allowedCapabilities: ["CREATE_ORDER"],
+    allowedCapabilities: ["CAPTURE_PAYMENT"],
     createdAt: "2026-10-01T00:00:00.000Z",
     expiresAt: "2026-11-01T00:00:00.000Z",
     version: 1,
@@ -214,7 +215,7 @@ run("Milestone 2D durable PayPal execution", () => {
     merchant: { id: "merchant-2d", displayName: "Merchant" },
     category: "KEYBOARD",
     condition: "NEW",
-    requestedCapability: "CREATE_ORDER",
+    requestedCapability: "CAPTURE_PAYMENT",
     proposedAt: now,
     nonce: "proposal-2d-nonce",
     metadata: { sku: "keyboard" },
@@ -257,12 +258,12 @@ run("Milestone 2D durable PayPal execution", () => {
     auth = new DurableAuthorizationService(repo, 15 * 60_000);
     issuer = new ExecutionGrantIssuer(repo, "2d-key", privateKey);
   });
-  async function claimed(): Promise<{
+  async function claimed(candidate = proposal): Promise<{
     claims: ExecutionGrantClaims;
     reservationId: string;
   }> {
-    await repo.saveProposal(proposal);
-    const decision = await auth.authorizeProposal(proposal.id, "LOW", now);
+    await repo.saveProposal(candidate);
+    const decision = await auth.authorizeProposal(candidate.id, "LOW", now);
     const reservationId = decision.reservation!.id;
     const token = await issuer.issue(reservationId, now);
     const claims = JSON.parse(
@@ -283,6 +284,41 @@ run("Milestone 2D durable PayPal execution", () => {
     );
     return { claims, reservationId };
   }
+
+  it("M3F oracle agrees with durable dispatch, lost capture and restart recovery", async () => {
+    const { claims } = await claimed();
+    const provider = new RecoveryProvider();
+    await expect(
+      new PayPalExecutionRail(repo, provider, () => now).execute(claims),
+    ).rejects.toThrow("PAYPAL_CAPTURE_UNKNOWN");
+    const [attempt] = await repo.sql`select id from payment_attempts`;
+    expect(await restartRecovery(provider, String(attempt!.id))).toBe(
+      "CAPTURED",
+    );
+    const states = ["NOT_STARTED"];
+    for (const e of await repo.evidence()) {
+      if (e.data.paymentAttemptId !== attempt!.id) continue;
+      if (
+        e.type === "PAYPAL_OPERATION_DISPATCHED" ||
+        e.type === "PAYPAL_RECONCILIATION_UNRESOLVED"
+      )
+        states.push(String(e.data.status));
+      if (e.type === "PAYPAL_ORDER_RECOVERED") states.push("ORDER_CREATED"); // this fake returns APPROVED with no payer action
+      if (e.type === "PAYMENT_COMMITTED") states.push("CAPTURED");
+    }
+    expect(states).toEqual([
+      "NOT_STARTED",
+      "ORDER_CREATING",
+      "ORDER_CREATED",
+      "CAPTURE_IN_FLIGHT",
+      "CAPTURE_UNKNOWN",
+      "CAPTURED",
+    ]);
+    assertPayPalTransitions(states);
+    expect(provider.createIds).toHaveLength(1);
+    expect(provider.captureIds).toHaveLength(1);
+    expect(provider.financialSideEffects).toBe(1);
+  });
 
   it("quarantines unknown capture and restart reconciliation discovers the existing capture exactly once", async () => {
     const { claims, reservationId } = await claimed();
@@ -813,9 +849,9 @@ run("Milestone 2D durable PayPal execution", () => {
     },
   );
 
-  async function issued(): Promise<string> {
-    await repo.saveProposal(proposal);
-    const result = await auth.authorizeProposal(proposal.id, "LOW", now);
+  async function issued(candidate = proposal): Promise<string> {
+    await repo.saveProposal(candidate);
+    const result = await auth.authorizeProposal(candidate.id, "LOW", now);
     return issuer.issue(result.reservation!.id, now);
   }
   function boundary(
@@ -839,6 +875,225 @@ run("Milestone 2D durable PayPal execution", () => {
       (await repo.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
     ).toHaveLength(0);
   }
+  async function orderOnlyProposal(): Promise<TransactionProposal> {
+    const orderAgent = {
+      ...agent,
+      id: "order-agent",
+      capabilities: ["CREATE_ORDER"] as AgentPassport["capabilities"],
+    };
+    const orderMandate = {
+      ...mandate,
+      id: "order-mandate",
+      authorizedAgentId: orderAgent.id,
+      allowedCapabilities: ["CREATE_ORDER"] as Mandate["allowedCapabilities"],
+    };
+    await repo.saveAgent(orderAgent);
+    await repo.saveMandate(orderMandate);
+    return {
+      ...proposal,
+      agentId: orderAgent.id,
+      mandateId: orderMandate.id,
+      mandateFingerprint: mandateFingerprint(orderMandate),
+      requestedCapability: "CREATE_ORDER" as const,
+    };
+  }
+
+  it("M3F CREATE_ORDER-only signed authority cannot enter the combined financial rail", async () => {
+    const token = await issued(await orderOnlyProposal());
+    const provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+      "PAYMENT_CAPABILITY_REQUIRED",
+    );
+    const peer = PostgresTrustRepository.connect(url!);
+    try {
+      const repeated = await Promise.allSettled([
+        boundary(provider).execute(token, now),
+        boundary(provider, peer).execute(token, now),
+      ]);
+      expect(repeated.map((r) => r.status)).toEqual(["rejected", "rejected"]);
+    } finally {
+      await peer.close();
+    }
+    expect(provider.createIds).toHaveLength(0);
+    expect(provider.captureIds).toHaveLength(0);
+    expect(provider.financialSideEffects).toBe(0);
+    expect(await repo.sql`select id from payment_attempts`).toHaveLength(0);
+    expect(
+      (await repo.authorityAccounting(mandate.id, mandate.cumulativeLimitMinor))
+        .committedMinor,
+    ).toBe(0);
+  });
+
+  it("M3F release racing capture cannot restore already claimed payment authority", async () => {
+    const { claims, reservationId } = await claimed(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    const peer = PostgresTrustRepository.connect(url!);
+    try {
+      const results = await Promise.allSettled([
+        new PayPalExecutionRail(repo, provider, () => now).execute(claims),
+        new DurableAuthorizationService(peer).transitionReservation(
+          reservationId,
+          "RELEASED",
+          now,
+        ),
+      ]);
+      expect(results[0].status).toBe("fulfilled");
+      expect(results[1].status).toBe("rejected");
+      expect(provider.createIds).toHaveLength(1);
+      expect(provider.captureIds).toHaveLength(1);
+      expect(provider.financialSideEffects).toBe(1);
+      const a = await peer.authorityAccounting(
+        mandate.id,
+        mandate.cumulativeLimitMinor,
+      );
+      expect(a.committedMinor).toBe(8900);
+      expect(a.availableMinor! + a.activeReservedMinor + a.committedMinor).toBe(
+        mandate.cumulativeLimitMinor,
+      );
+      expect(
+        (await peer.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
+      ).toHaveLength(1);
+    } finally {
+      await peer.close();
+    }
+  });
+
+  it("M3F direct rail entry cannot bypass capture capability and retains claimed authority conservatively", async () => {
+    const { claims } = await claimed(await orderOnlyProposal());
+    const provider = new RecoveryProvider();
+    await expect(
+      new PayPalExecutionRail(repo, provider, () => now).execute(claims),
+    ).rejects.toThrow("PAYMENT_CAPABILITY_REQUIRED");
+    expect(provider.createIds).toHaveLength(0);
+    expect(provider.captureIds).toHaveLength(0);
+    expect(provider.financialSideEffects).toBe(0);
+    expect(await repo.sql`select id from payment_attempts`).toHaveLength(0);
+    await states();
+  });
+
+  it.each(["order", "mandate", "proposal", "capture", "capture-only"])(
+    "M3F capability conservation matrix %s",
+    async (shape) => {
+      const matrixAgent: AgentPassport = {
+        ...agent,
+        id: "matrix-agent",
+        capabilities:
+          shape === "order"
+            ? ["CREATE_ORDER"]
+            : shape === "capture-only"
+              ? ["CAPTURE_PAYMENT"]
+              : ["CREATE_ORDER", "CAPTURE_PAYMENT"],
+      };
+      const matrixMandate: Mandate = {
+        ...mandate,
+        id: "matrix-mandate",
+        authorizedAgentId: matrixAgent.id,
+        allowedCapabilities: ["order", "mandate"].includes(shape)
+          ? ["CREATE_ORDER"]
+          : shape === "capture-only"
+            ? ["CAPTURE_PAYMENT"]
+            : ["CREATE_ORDER", "CAPTURE_PAYMENT"],
+      };
+      await repo.saveAgent(matrixAgent);
+      await repo.saveMandate(matrixMandate);
+      const candidate: TransactionProposal = {
+        ...proposal,
+        agentId: matrixAgent.id,
+        mandateId: matrixMandate.id,
+        mandateFingerprint: mandateFingerprint(matrixMandate),
+        requestedCapability: shape.startsWith("capture")
+          ? "CAPTURE_PAYMENT"
+          : "CREATE_ORDER",
+      };
+      const provider = new RecoveryProvider();
+      provider.captureLosses = 0;
+      const token = await issued(candidate);
+      if (shape.startsWith("capture")) {
+        expect(await boundary(provider).execute(token, now)).toEqual({
+          executionId: "RECOVERED-CAPTURE",
+        });
+        expect(provider.createIds).toHaveLength(1);
+        expect(provider.captureIds).toHaveLength(1);
+        expect(provider.financialSideEffects).toBe(1);
+      } else {
+        await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+          "PAYMENT_CAPABILITY_REQUIRED",
+        );
+        expect(provider.createIds).toHaveLength(0);
+        expect(provider.captureIds).toHaveLength(0);
+        expect(provider.financialSideEffects).toBe(0);
+        const [state] =
+          await repo.sql`select g.status grant_status,r.status reservation_status from execution_grants g join authorization_reservations r on r.id=g.reservation_id`;
+        expect(state).toMatchObject({
+          grant_status: "ISSUED",
+          reservation_status: "AUTHORIZED",
+        });
+      }
+    },
+  );
+
+  // Durable fixtures reproduce the former lifecycle; they never invoke the
+  // repaired rail to create an unauthorized historical provider operation.
+  it.each(["ORDER_CREATE_UNKNOWN", "CAPTURE_UNKNOWN", "completed"])(
+    "M3F historical order-only %s remains observation-only after restart",
+    async (outcome) => {
+      const { claims } = await claimed(await orderOnlyProposal());
+      const id = randomUUID();
+      const key = (kind: string) =>
+        `payflow-${kind}-${createHash("sha256").update(id).digest("hex").slice(0, 40)}`;
+      const create = key("create"),
+        capture = key("capture");
+      const status =
+        outcome === "ORDER_CREATE_UNKNOWN" ? outcome : "CAPTURE_UNKNOWN";
+      await repo.sql`insert into payment_attempts(id,reservation_id,grant_id,proposal_id,mandate_id,principal_id,provider,operation,amount_minor,currency,merchant_reference,idempotency_key,create_order_request_id,capture_request_id,status,provider_order_id,created_at,updated_at) values(${id},${claims.reservationId},${claims.jti},${claims.proposalId},${claims.mandateId},${claims.principalId},'PAYPAL','CAPTURE',${claims.amountMinor},${claims.currency},${claims.merchantId},${create},${create},${capture},${status},${outcome === "ORDER_CREATE_UNKNOWN" ? null : "RECOVERED-ORDER"},${now},${now})`;
+      const provider = new RecoveryProvider();
+      if (outcome !== "ORDER_CREATE_UNKNOWN")
+        provider.order = {
+          id: "RECOVERED-ORDER",
+          status: outcome === "completed" ? "COMPLETED" : "APPROVED",
+          purchaseUnits: [
+            {
+              referenceId: claims.proposalId,
+              amountValue: "89.00",
+              currency: "USD",
+            },
+          ],
+          captures:
+            outcome === "completed"
+              ? [
+                  {
+                    id: "RECOVERED-CAPTURE",
+                    status: "COMPLETED",
+                    amountValue: "89.00",
+                    currency: "USD",
+                  },
+                ]
+              : [],
+        };
+      if (outcome === "completed") {
+        provider.financialSideEffects = 1; // existing external effect, not a new dispatch
+        expect(await restartRecovery(provider, id)).toBe("CAPTURED");
+        expect(await restartRecovery(provider, id)).toBe("CAPTURED");
+        expect(
+          (await repo.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
+        ).toHaveLength(1);
+        expect(provider.financialSideEffects).toBe(1);
+      } else {
+        await expect(restartRecovery(provider, id)).rejects.toThrow(
+          "PAYMENT_CAPABILITY_REQUIRED",
+        );
+        const [attempt] =
+          await repo.sql`select status from payment_attempts where id=${id}`;
+        expect(attempt?.status).toBe(status);
+        await states();
+      }
+      expect(provider.createIds).toHaveLength(0);
+      expect(provider.captureIds).toHaveLength(0);
+      expect(provider.calls.every((call) => call === "GET")).toBe(true);
+    },
+  );
   it("2E complete signed flow commits all three objects once, including concurrent callers and post-response restart", async () => {
     const token = await issued(),
       provider = new RecoveryProvider();
@@ -1296,7 +1551,7 @@ run("Milestone 2D durable PayPal execution", () => {
       field === "amountMinor"
         ? 1
         : field === "capability"
-          ? "CAPTURE_PAYMENT"
+          ? "CREATE_ORDER"
           : field === "currency"
             ? "EUR"
             : field.endsWith("Digest") || field.endsWith("Fingerprint")
@@ -1442,8 +1697,7 @@ run("Milestone 2D durable PayPal execution", () => {
         altered.amount = { ...altered.amount, currency: "EUR" };
       if (change === "merchant")
         altered.merchant = { ...altered.merchant, id: "OTHER" };
-      if (change === "capability")
-        altered.requestedCapability = "CAPTURE_PAYMENT";
+      if (change === "capability") altered.requestedCapability = "CREATE_ORDER";
       await repo.sql`update transaction_proposals set document=${repo.sql.json(altered)},amount_minor=${altered.amount.minor},currency=${altered.amount.currency} where id=${p.id}`;
       await expect(issuer.issue(approved.reservation.id, now)).rejects.toThrow(
         "AUTHORIZATION_PROPOSAL_CHANGED",

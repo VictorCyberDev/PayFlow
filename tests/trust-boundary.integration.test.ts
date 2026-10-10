@@ -1,3 +1,4 @@
+import { verifyTrustTrace } from "../src/trust-trace.js";
 import {
   beforeAll,
   afterAll,
@@ -193,7 +194,7 @@ run("3D adversarial end-to-end trust boundary", () => {
       },
       category: "KEYBOARD",
       condition: "NEW",
-      requestedCapability: "CREATE_ORDER",
+      requestedCapability: "CAPTURE_PAYMENT",
       proposedAt: clock().toISOString(),
       nonce: `proposal-nonce-${id}`,
       metadata: {},
@@ -322,6 +323,9 @@ run("3D adversarial end-to-end trust boundary", () => {
       1,
     );
     expect(PostgresTrustRepository.verifyEvidence(events)).toBe(true);
+    const trace = await repo.evidence();
+    expect(trace.some((e) => e.type === "PAYMENT_COMMITTED")).toBe(true);
+    expect(verifyTrustTrace(trace).valid).toBe(true);
   });
   it("forged-context rejection never persists client-controlled credentials disguised as review IDs", async () => {
     await review();
@@ -523,7 +527,7 @@ run("3D adversarial end-to-end trust boundary", () => {
     [
       "capability",
       (p) => {
-        p.requestedCapability = "CAPTURE_PAYMENT";
+        p.requestedCapability = "CREATE_ORDER";
       },
     ],
     [
@@ -784,6 +788,71 @@ run("3D adversarial end-to-end trust boundary", () => {
       ).toHaveLength(0);
     },
   );
+  it("M3F money and quantity conservation survive release rollback and repeated delivery", async () => {
+    const m = await activate(),
+      p = proposal(m, "conservation");
+    p.amount.minor = 100;
+    await repo.saveProposal(p);
+    const service = new DurableAuthorizationService(repo);
+    const result = await service.authorizeProposal(
+      p.id,
+      "LOW",
+      clock().toISOString(),
+    );
+    const conserved = async (used: number, usedQuantity: number) => {
+      const a = await peer.authorityAccounting(m.id, m.cumulativeLimitMinor);
+      expect(a.consumedMinor).toBe(used);
+      expect(a.availableMinor! + a.activeReservedMinor + a.committedMinor).toBe(
+        m.cumulativeLimitMinor,
+      );
+      const q = await peer.quantityAccounting(m, peer.sql);
+      if (q === undefined) throw new Error("EXPECTED_QUANTITY_AUTHORITY");
+      expect(q).toBe(usedQuantity);
+      expect(m.quantityLimit! - q).toBe(m.quantityLimit! - usedQuantity);
+    };
+    await conserved(100, 1);
+    const original = repo.appendEvidenceInTransaction.bind(repo);
+    const fault = vi
+      .spyOn(repo, "appendEvidenceInTransaction")
+      .mockImplementation((tx, type, data, at) => {
+        if (type === "RESERVATION_RELEASED")
+          throw new Error("TEST_RELEASE_ROLLBACK");
+        return original(tx, type, data, at);
+      });
+    try {
+      await expect(
+        service.transitionReservation(
+          result.reservation!.id,
+          "RELEASED",
+          clock().toISOString(),
+        ),
+      ).rejects.toThrow("TEST_RELEASE_ROLLBACK");
+    } finally {
+      fault.mockRestore();
+    }
+    await conserved(100, 1);
+    expect(
+      (await repo.evidence()).some((e) => e.type === "RESERVATION_RELEASED"),
+    ).toBe(false);
+    await service.transitionReservation(
+      result.reservation!.id,
+      "RELEASED",
+      clock().toISOString(),
+    );
+    await conserved(0, 0);
+    await expect(
+      service.transitionReservation(
+        result.reservation!.id,
+        "RELEASED",
+        clock().toISOString(),
+      ),
+    ).rejects.toThrow("INVALID_RESERVATION_TRANSITION");
+    await conserved(0, 0);
+    expect(PostgresTrustRepository.verifyEvidence(await repo.evidence())).toBe(
+      true,
+    );
+  });
+
   it("UNKNOWN cannot be released or expired to restore quantity", async () => {
     const m = await activate(),
       issued = await issue(m),
