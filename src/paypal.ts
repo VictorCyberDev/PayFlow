@@ -70,6 +70,40 @@ export interface PaymentProvider {
   captureOrder(orderId: string, requestId: string): Promise<PayPalOrderView>;
 }
 type FetchLike = typeof fetch;
+export const PAYPAL_RESPONSE_LIMITS = Object.freeze({
+  oauthBytes: 16384,
+  orderBytes: 262144,
+});
+
+async function boundedJson(
+  response: Response,
+  maximum: number,
+): Promise<unknown> {
+  if (!response.body) throw new Error("EMPTY_PROVIDER_BODY");
+  const reader = response.body.getReader();
+  let complete = false;
+  try {
+    const declared = response.headers.get("content-length");
+    if (declared && (!/^\d+$/.test(declared) || Number(declared) > maximum))
+      throw new Error("PROVIDER_BODY_LIMIT");
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    while (true) {
+      const part = await reader.read();
+      if (part.done) {
+        complete = true;
+        break;
+      }
+      bytes += part.value.byteLength;
+      if (bytes > maximum) throw new Error("PROVIDER_BODY_LIMIT");
+      chunks.push(part.value);
+    }
+    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+  } finally {
+    if (!complete) await reader.cancel();
+    reader.releaseLock();
+  }
+}
 const tokenSchema = z.object({
   access_token: z.string().min(1),
   expires_in: z.number().positive(),
@@ -154,7 +188,9 @@ export class PayPalOAuthClient {
       );
     let v: z.infer<typeof tokenSchema>;
     try {
-      v = tokenSchema.parse(await r.json());
+      v = tokenSchema.parse(
+        await boundedJson(r, PAYPAL_RESPONSE_LIMITS.oauthBytes),
+      );
     } catch {
       throw new PayPalProviderError(
         "MALFORMED",
@@ -260,7 +296,9 @@ export class PayPalPaymentProvider implements PaymentProvider {
     }
     let p: z.infer<typeof orderSchema>;
     try {
-      p = orderSchema.parse(await r.json());
+      p = orderSchema.parse(
+        await boundedJson(r, PAYPAL_RESPONSE_LIMITS.orderBytes),
+      );
     } catch {
       throw new PayPalProviderError(
         ambiguous ? "AMBIGUOUS" : "MALFORMED",

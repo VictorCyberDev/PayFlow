@@ -113,3 +113,17 @@ for limits and the distinction between exact provenance and semantic proof.
 ## Milestone 3D integrated boundary verification
 
 The adversarial full-chain suite reuses the production interpreter/compiler, activation, durable authorization, grant and payment paths. The model dependency boundary remains unchanged. Activation rejection evidence now uses only sanitized codes and authenticated owner-bound durable review IDs. [ADR-008](ADR-008-adversarial-trust-boundary-hardening.md) maps attacks to controls and documents why the short demo request still requires explicit clarification.
+
+## M3F capability and authority conservation
+
+The current PayPal rail is a combined capture-capable lifecycle: fresh entry
+requires explicit CAPTURE_PAYMENT throughout upstream authority and the signed
+grant. CREATE_ORDER alone cannot dispatch create or capture. Historical external
+effects remain truthfully observable/finalizable; insufficient-capability recovery
+cannot dispatch a new provider operation or release uncertainty.
+
+See [ADR-009](ADR-009-foundation-authority-conservation.md) for the bounded conservation audit, read-only Trust Trace verifier,
+positive replay-absence validation, response limits, deployment assumptions and
+M4 entry contract. The AI interprets your intention. It does not grant itself
+permission. This does not claim production login, verified PayPal payee routing,
+privileged-administrator-proof evidence or exactly-once distributed execution.

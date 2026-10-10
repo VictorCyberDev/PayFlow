@@ -4,10 +4,111 @@ import {
   PayPalPaymentProvider,
   PayPalProviderError,
   paypalMoney,
+  PAYPAL_RESPONSE_LIMITS,
   withinPayPalRetryWindow,
 } from "../src/paypal.js";
 
 describe("Milestone 2D PayPal provider", () => {
+  it("M3F bounds an oversized provider response before accepting an order", async () => {
+    const oauth = new PayPalOAuthClient(
+      "client",
+      "test-secret",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ access_token: "test-token", expires_in: 60 }),
+          ),
+        ),
+    );
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "order",
+          status: "APPROVED",
+          padding: "x".repeat(300000),
+        }),
+      ),
+    );
+    const provider = new PayPalPaymentProvider(oauth, fetcher);
+    await expect(
+      provider.createOrder({
+        amountValue: "1.00",
+        currency: "USD",
+        merchantReference: "proposal",
+        requestId: "request",
+      }),
+    ).rejects.toThrow("PAYPAL_MALFORMED_RESPONSE");
+  });
+
+  it("M3F oversized capture is ambiguous and cancels its response stream", async () => {
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new Uint8Array(PAYPAL_RESPONSE_LIMITS.orderBytes + 1),
+          );
+        },
+        cancel,
+      }),
+    );
+    const oauth = new PayPalOAuthClient(
+      "client",
+      "fixture-secret",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ access_token: "fixture-token", expires_in: 60 }),
+          ),
+        ),
+    );
+    const provider = new PayPalPaymentProvider(
+      oauth,
+      vi.fn().mockResolvedValue(response),
+    );
+    await expect(
+      provider.captureOrder("order", "same-key"),
+    ).rejects.toMatchObject({
+      classification: "AMBIGUOUS",
+      message: "PAYPAL_MALFORMED_RESPONSE",
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+  it.each(["declared", "streamed", "missing-body"])(
+    "M3F OAuth response limit fails closed: %s",
+    async (mode) => {
+      const response =
+        mode === "missing-body"
+          ? new Response(null, { status: 204 })
+          : new Response(
+              JSON.stringify({
+                access_token: "x".repeat(PAYPAL_RESPONSE_LIMITS.oauthBytes),
+                expires_in: 60,
+              }),
+              mode === "declared"
+                ? {
+                    headers: {
+                      "content-length": String(
+                        PAYPAL_RESPONSE_LIMITS.oauthBytes + 1,
+                      ),
+                    },
+                  }
+                : undefined,
+            );
+      const oauth = new PayPalOAuthClient(
+        "client",
+        "fixture-secret",
+        vi.fn().mockResolvedValue(response),
+      );
+      await expect(oauth.accessToken()).rejects.toMatchObject({
+        classification: "MALFORMED",
+        message: "PAYPAL_OAUTH_MALFORMED_RESPONSE",
+      });
+    },
+  );
+
   it("serializes integer minor units without floating point", () => {
     expect(paypalMoney(8900, "USD")).toBe("89.00");
     expect(paypalMoney(89, "JPY")).toBe("89");

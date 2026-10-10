@@ -1,3 +1,4 @@
+import { assertPayPalTransitions } from "./helpers/paypal-state-oracle.js";
 import {
   afterAll,
   beforeAll,
@@ -283,6 +284,41 @@ run("Milestone 2D durable PayPal execution", () => {
     );
     return { claims, reservationId };
   }
+
+  it("M3F oracle agrees with durable dispatch, lost capture and restart recovery", async () => {
+    const { claims } = await claimed();
+    const provider = new RecoveryProvider();
+    await expect(
+      new PayPalExecutionRail(repo, provider, () => now).execute(claims),
+    ).rejects.toThrow("PAYPAL_CAPTURE_UNKNOWN");
+    const [attempt] = await repo.sql`select id from payment_attempts`;
+    expect(await restartRecovery(provider, String(attempt!.id))).toBe(
+      "CAPTURED",
+    );
+    const states = ["NOT_STARTED"];
+    for (const e of await repo.evidence()) {
+      if (e.data.paymentAttemptId !== attempt!.id) continue;
+      if (
+        e.type === "PAYPAL_OPERATION_DISPATCHED" ||
+        e.type === "PAYPAL_RECONCILIATION_UNRESOLVED"
+      )
+        states.push(String(e.data.status));
+      if (e.type === "PAYPAL_ORDER_RECOVERED") states.push("ORDER_CREATED"); // this fake returns APPROVED with no payer action
+      if (e.type === "PAYMENT_COMMITTED") states.push("CAPTURED");
+    }
+    expect(states).toEqual([
+      "NOT_STARTED",
+      "ORDER_CREATING",
+      "ORDER_CREATED",
+      "CAPTURE_IN_FLIGHT",
+      "CAPTURE_UNKNOWN",
+      "CAPTURED",
+    ]);
+    assertPayPalTransitions(states);
+    expect(provider.createIds).toHaveLength(1);
+    expect(provider.captureIds).toHaveLength(1);
+    expect(provider.financialSideEffects).toBe(1);
+  });
 
   it("quarantines unknown capture and restart reconciliation discovers the existing capture exactly once", async () => {
     const { claims, reservationId } = await claimed();
@@ -869,6 +905,16 @@ run("Milestone 2D durable PayPal execution", () => {
     await expect(boundary(provider).execute(token, now)).rejects.toThrow(
       "PAYMENT_CAPABILITY_REQUIRED",
     );
+    const peer = PostgresTrustRepository.connect(url!);
+    try {
+      const repeated = await Promise.allSettled([
+        boundary(provider).execute(token, now),
+        boundary(provider, peer).execute(token, now),
+      ]);
+      expect(repeated.map((r) => r.status)).toEqual(["rejected", "rejected"]);
+    } finally {
+      await peer.close();
+    }
     expect(provider.createIds).toHaveLength(0);
     expect(provider.captureIds).toHaveLength(0);
     expect(provider.financialSideEffects).toBe(0);
@@ -877,6 +923,54 @@ run("Milestone 2D durable PayPal execution", () => {
       (await repo.authorityAccounting(mandate.id, mandate.cumulativeLimitMinor))
         .committedMinor,
     ).toBe(0);
+  });
+
+  it("M3F release racing capture cannot restore already claimed payment authority", async () => {
+    const { claims, reservationId } = await claimed(),
+      provider = new RecoveryProvider();
+    provider.captureLosses = 0;
+    const peer = PostgresTrustRepository.connect(url!);
+    try {
+      const results = await Promise.allSettled([
+        new PayPalExecutionRail(repo, provider, () => now).execute(claims),
+        new DurableAuthorizationService(peer).transitionReservation(
+          reservationId,
+          "RELEASED",
+          now,
+        ),
+      ]);
+      expect(results[0].status).toBe("fulfilled");
+      expect(results[1].status).toBe("rejected");
+      expect(provider.createIds).toHaveLength(1);
+      expect(provider.captureIds).toHaveLength(1);
+      expect(provider.financialSideEffects).toBe(1);
+      const a = await peer.authorityAccounting(
+        mandate.id,
+        mandate.cumulativeLimitMinor,
+      );
+      expect(a.committedMinor).toBe(8900);
+      expect(a.availableMinor! + a.activeReservedMinor + a.committedMinor).toBe(
+        mandate.cumulativeLimitMinor,
+      );
+      expect(
+        (await peer.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
+      ).toHaveLength(1);
+    } finally {
+      await peer.close();
+    }
+  });
+
+  it("M3F direct rail entry cannot bypass capture capability and retains claimed authority conservatively", async () => {
+    const { claims } = await claimed(await orderOnlyProposal());
+    const provider = new RecoveryProvider();
+    await expect(
+      new PayPalExecutionRail(repo, provider, () => now).execute(claims),
+    ).rejects.toThrow("PAYMENT_CAPABILITY_REQUIRED");
+    expect(provider.createIds).toHaveLength(0);
+    expect(provider.captureIds).toHaveLength(0);
+    expect(provider.financialSideEffects).toBe(0);
+    expect(await repo.sql`select id from payment_attempts`).toHaveLength(0);
+    await states();
   });
 
   it.each(["order", "mandate", "proposal", "capture", "capture-only"])(

@@ -32,7 +32,7 @@ Receipt snapshots detect mutation before grant issuance or human approval. Grant
 snapshots detect mutation of immutable persisted claims, including lifetime.
 Relational shadow fields are checked against documents. Accounting refuses inconsistent
 reservation/receipt/grant bindings and impossible claimed/committed lifecycle pairs. The financial rail admits
-only CREATE_ORDER/CAPTURE_PAYMENT and checks principal, agent, mandate, proposal,
+CAPTURE_PAYMENT for fresh combined financial execution and checks principal, agent, mandate, proposal,
 receipt, reservation, grant, capability, logical merchant, amount and currency.
 Provider verification checks order ID, one purchase-unit reference, money,
 currency, status, one capture and previously observed capture ID. The adapter

@@ -127,3 +127,17 @@ Model output, `confirmed: true`, client principal IDs, forged context objects, d
 ## Milestone 3D adversarial verification
 
 Unauthenticated rejection payloads are attacker-controlled too: activation must not log client-supplied review IDs before authenticating and verifying durable ownership. Regression tests cover this privacy defect alongside generated budget/quantity/merchant attacks, mutation at downstream boundaries, two-pool concurrency and provider effect counters. See [ADR-008](ADR-008-adversarial-trust-boundary-hardening.md); bounded tests do not prove arbitrary language fidelity, host authentication correctness or perfect distributed exactly-once behavior.
+
+## M3F capability and authority conservation
+
+The current PayPal rail is a combined capture-capable lifecycle: fresh entry
+requires explicit CAPTURE_PAYMENT throughout upstream authority and the signed
+grant. CREATE_ORDER alone cannot dispatch create or capture. Historical external
+effects remain truthfully observable/finalizable; insufficient-capability recovery
+cannot dispatch a new provider operation or release uncertainty.
+
+See [ADR-009](ADR-009-foundation-authority-conservation.md) for the bounded conservation audit, read-only Trust Trace verifier,
+positive replay-absence validation, response limits, deployment assumptions and
+M4 entry contract. The AI interprets your intention. It does not grant itself
+permission. This does not claim production login, verified PayPal payee routing,
+privileged-administrator-proof evidence or exactly-once distributed execution.
