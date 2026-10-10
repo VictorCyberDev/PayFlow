@@ -60,3 +60,13 @@ revocation/expiration and reuses persisted provider keys. Apply the forward
 `db/migrations/004_milestone_2e_security_boundary.sql` after migrations 001–003.
 See [ADR 004](docs/ADR-004-integrated-security-boundary.md) for crash windows,
 revocation handoff, evidence semantics, recovery APIs and residual dependencies.
+
+## Milestone 3A — intent contract and draft compiler
+
+`src/intent.ts` accepts an untrusted structured interpretation and independently
+supplied source/review bounds. It returns `VALID_DRAFT`, `NEEDS_CLARIFICATION` or
+`REJECTED`. A draft is never a trusted mandate; explicit human confirmation is
+still required. No LLM provider, activation/persistence operation or payment route
+is added. Quantity and merchant restrictions remain visible activation blockers
+where M2 lacks enforcement. See [ADR-005](docs/ADR-005-ai-intent-trust-boundary.md)
+for provenance, widening protections and semantic-verification limitations.

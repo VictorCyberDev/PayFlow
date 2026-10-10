@@ -2,7 +2,7 @@ name: PayFlow CI
 on:
   pull_request:
   push:
-    branches: [milestone-2-durable-paypal]
+    branches: [milestone-2-durable-paypal, milestone-3-ai-intent]
 permissions:
   contents: read
 jobs:

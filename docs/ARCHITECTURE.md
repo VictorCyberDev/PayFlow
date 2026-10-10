@@ -83,3 +83,13 @@ durable rows reread after handoff. PostgreSQL and PayPal have no shared atomic
 transaction; GET plus retry is not atomic and distributed exactly-once execution
 is not claimed. See [ADR-004](ADR-004-integrated-security-boundary.md#formal-revocation-linearization-point)
 for the lock, snapshot, race-test and crash-recovery guarantees.
+
+## Milestone 3A untrusted intent boundary
+
+A separate pure compiler accepts typed untrusted interpretation plus authoritative
+source/review context and produces a non-authoritative mandate draft or explicit
+clarification/rejection. It imports only schema definitions and hashing utilities;
+it cannot persist authority, authorize transactions, issue grants or invoke PayPal.
+Human confirmation/activation is separately deferred. M2 has no quantity or
+merchant-allowlist enforcement, so these remain explicit activation requirements,
+not silently omitted constraints. See [ADR-005](ADR-005-ai-intent-trust-boundary.md).

@@ -87,3 +87,16 @@ durable rows reread after handoff. PostgreSQL and PayPal have no shared atomic
 transaction; GET plus retry is not atomic and distributed exactly-once execution
 is not claimed. See [ADR-004](ADR-004-integrated-security-boundary.md#formal-revocation-linearization-point)
 for the lock, snapshot, race-test and crash-recovery guarantees.
+
+## Milestone 3A interpretation attacks
+
+Model output and source instructions are untrusted data. Strict schemas reject
+unknown authority fields; proposed/missing/ambiguous constraints and assumptions
+require clarification. Independent structured bounds prevent authority widening.
+Quoted spans preserve provenance but cannot prove arbitrary-language meaning;
+a lying EXPLICIT interpretation still requires authenticated human review before
+activation. Drafts have no identity, signing or persistence/execution capability.
+Quantity/merchant restrictions cannot be dropped into unenforced M2 authority.
+No model provider or human-confirmation endpoint exists yet. Source and summaries
+are returned only, not logged/persisted into evidence; future storage requires
+secret redaction and data minimization. See [ADR-005](ADR-005-ai-intent-trust-boundary.md).
