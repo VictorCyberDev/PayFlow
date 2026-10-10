@@ -14,7 +14,7 @@ export type Capability = z.infer<typeof CapabilitySchema>;
 export const MoneySchema = z
   .object({
     currency: z.string().regex(/^[A-Z]{3}$/),
-    minor: z.number().int().nonnegative(),
+    minor: z.number().int().safe().nonnegative(),
   })
   .strict();
 export type Money = Readonly<z.infer<typeof MoneySchema>>;
@@ -53,16 +53,16 @@ export const MandateSchema = z
     purpose: z.string().min(1),
     category: z.string().min(1),
     currency: z.string().regex(/^[A-Z]{3}$/),
-    maxSingleTransactionMinor: z.number().int().positive(),
-    cumulativeLimitMinor: z.number().int().positive().optional(),
+    maxSingleTransactionMinor: z.number().int().safe().positive(),
+    cumulativeLimitMinor: z.number().int().safe().positive().optional(),
     allowedConditions: z.array(ProductConditionSchema).min(1),
     merchantRiskCeiling: MerchantRiskSchema,
-    autonomousPurchaseThresholdMinor: z.number().int().nonnegative(),
-    humanApprovalThresholdMinor: z.number().int().positive(),
+    autonomousPurchaseThresholdMinor: z.number().int().safe().nonnegative(),
+    humanApprovalThresholdMinor: z.number().int().safe().positive(),
     allowedCapabilities: z.array(CapabilitySchema).min(1),
     expiresAt: z.string().datetime(),
     createdAt: z.string().datetime(),
-    version: z.number().int().positive(),
+    version: z.number().int().safe().positive(),
     nonce: z.string().min(16),
   })
   .strict()
@@ -70,29 +70,24 @@ export const MandateSchema = z
     if (
       mandate.autonomousPurchaseThresholdMinor >
       mandate.humanApprovalThresholdMinor
-    ) {
+    )
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "autonomous threshold exceeds human approval threshold",
       });
-    }
-    if (
-      mandate.humanApprovalThresholdMinor > mandate.maxSingleTransactionMinor
-    ) {
+    if (mandate.humanApprovalThresholdMinor > mandate.maxSingleTransactionMinor)
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "human approval threshold exceeds hard maximum",
       });
-    }
     if (
       mandate.cumulativeLimitMinor !== undefined &&
       mandate.maxSingleTransactionMinor > mandate.cumulativeLimitMinor
-    ) {
+    )
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "single maximum exceeds cumulative limit",
       });
-    }
   });
 export type Mandate = Readonly<z.infer<typeof MandateSchema>>;
 
@@ -118,38 +113,54 @@ export type TransactionProposal = Readonly<
   z.infer<typeof TransactionProposalSchema>
 >;
 
-export type AuthorizationDecision = "ALLOW" | "DENY" | "ESCALATE";
-export type DecisionCode =
-  | "ALLOWED"
-  | "MALFORMED_INPUT"
-  | "MANDATE_EXPIRED"
-  | "MANDATE_INVALID"
-  | "MANDATE_INTEGRITY_FAILURE"
-  | "AGENT_UNAUTHORIZED"
-  | "AGENT_EXPIRED"
-  | "AGENT_SUSPENDED"
-  | "CAPABILITY_DENIED"
-  | "AMOUNT_EXCEEDS_LIMIT"
-  | "HUMAN_APPROVAL_LIMIT_EXCEEDED"
-  | "CUMULATIVE_LIMIT_EXCEEDED"
-  | "HUMAN_APPROVAL_REQUIRED"
-  | "CURRENCY_MISMATCH"
-  | "CATEGORY_DENIED"
-  | "CONDITION_DENIED"
-  | "MERCHANT_RISK_TOO_HIGH"
-  | "REPLAY_DETECTED";
-export type CheckResult = "PASS" | "FAIL" | "ESCALATE" | "NOT_EVALUATED";
+export const AuthorizationDecisionSchema = z.enum([
+  "ALLOW",
+  "DENY",
+  "ESCALATE",
+]);
+export type AuthorizationDecision = z.infer<typeof AuthorizationDecisionSchema>;
+export const DecisionCodeSchema = z.enum([
+  "ALLOWED",
+  "MALFORMED_INPUT",
+  "MANDATE_EXPIRED",
+  "MANDATE_INVALID",
+  "MANDATE_INTEGRITY_FAILURE",
+  "AGENT_UNAUTHORIZED",
+  "AGENT_EXPIRED",
+  "AGENT_SUSPENDED",
+  "CAPABILITY_DENIED",
+  "AMOUNT_EXCEEDS_LIMIT",
+  "HUMAN_APPROVAL_LIMIT_EXCEEDED",
+  "CUMULATIVE_LIMIT_EXCEEDED",
+  "HUMAN_APPROVAL_REQUIRED",
+  "CURRENCY_MISMATCH",
+  "CATEGORY_DENIED",
+  "CONDITION_DENIED",
+  "MERCHANT_RISK_TOO_HIGH",
+  "REPLAY_DETECTED",
+]);
+export type DecisionCode = z.infer<typeof DecisionCodeSchema>;
+export const CheckResultSchema = z.enum([
+  "PASS",
+  "FAIL",
+  "ESCALATE",
+  "NOT_EVALUATED",
+]);
+export type CheckResult = z.infer<typeof CheckResultSchema>;
 
-export interface DecisionReceipt {
-  readonly receiptId: string;
-  readonly decision: AuthorizationDecision;
-  readonly reasonCodes: readonly DecisionCode[];
-  readonly mandateId: string;
-  readonly mandateFingerprint: string;
-  readonly agentId: string;
-  readonly proposalId: string;
-  readonly amount: Money;
-  readonly checks: Readonly<Record<string, CheckResult>>;
-  readonly evaluatedAt: string;
-  readonly authorizationEngineVersion: string;
-}
+export const DecisionReceiptSchema = z
+  .object({
+    receiptId: z.string().min(1),
+    decision: AuthorizationDecisionSchema,
+    reasonCodes: z.array(DecisionCodeSchema).min(1),
+    mandateId: z.string().min(1),
+    mandateFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    agentId: z.string().min(1),
+    proposalId: z.string().min(1),
+    amount: MoneySchema,
+    checks: z.record(z.string(), CheckResultSchema),
+    evaluatedAt: z.string().datetime(),
+    authorizationEngineVersion: z.string().min(1),
+  })
+  .strict();
+export type DecisionReceipt = Readonly<z.infer<typeof DecisionReceiptSchema>>;

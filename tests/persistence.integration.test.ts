@@ -1,0 +1,255 @@
+import { beforeAll, afterAll, beforeEach, describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { mandateFingerprint } from "../src/canonical.js";
+import type {
+  AgentPassport,
+  DecisionReceipt,
+  Mandate,
+  Principal,
+  TransactionProposal,
+} from "../src/domain.js";
+import { PostgresTrustRepository } from "../src/persistence.js";
+
+const url = process.env.TEST_DATABASE_URL;
+const run = url ? describe : describe.skip;
+run("PostgreSQL durable foundation", () => {
+  let repo: PostgresTrustRepository;
+  const principal: Principal = { id: "p1", displayName: "Principal" };
+  const agent: AgentPassport = {
+    id: "a1",
+    principalId: "p1",
+    displayName: "Agent",
+    issuedAt: "2026-10-01T00:00:00.000Z",
+    expiresAt: "2026-11-01T00:00:00.000Z",
+    status: "ACTIVE",
+    capabilities: ["CREATE_ORDER"],
+  };
+  const mandate: Mandate = {
+    id: "m1",
+    principalId: "p1",
+    authorizedAgentId: "a1",
+    purpose: "keyboard",
+    category: "KEYBOARD",
+    currency: "USD",
+    maxSingleTransactionMinor: 10000,
+    cumulativeLimitMinor: 10000,
+    allowedConditions: ["NEW"],
+    merchantRiskCeiling: "MEDIUM",
+    autonomousPurchaseThresholdMinor: 7500,
+    humanApprovalThresholdMinor: 10000,
+    allowedCapabilities: ["CREATE_ORDER"],
+    createdAt: "2026-10-01T00:00:00.000Z",
+    expiresAt: "2026-11-01T00:00:00.000Z",
+    version: 1,
+    nonce: "mandate-nonce-0001",
+  };
+  const proposal: TransactionProposal = {
+    id: "tx1",
+    agentId: "a1",
+    mandateId: "m1",
+    mandateFingerprint: mandateFingerprint(mandate),
+    amount: { currency: "USD", minor: 7000 },
+    merchant: { id: "shop", displayName: "Shop" },
+    category: "KEYBOARD",
+    condition: "NEW",
+    requestedCapability: "CREATE_ORDER",
+    proposedAt: "2026-10-09T12:00:00.000Z",
+    nonce: "proposal-nonce-0001",
+    metadata: {},
+  };
+  const receipt: DecisionReceipt = {
+    receiptId: "r1",
+    decision: "ALLOW",
+    reasonCodes: ["ALLOWED"],
+    mandateId: "m1",
+    mandateFingerprint: mandateFingerprint(mandate),
+    agentId: "a1",
+    proposalId: "tx1",
+    amount: { currency: "USD", minor: 7000 },
+    checks: { mandate: "PASS" },
+    evaluatedAt: "2026-10-09T12:00:01.000Z",
+    authorizationEngineVersion: "1",
+  };
+  beforeAll(async () => {
+    repo = PostgresTrustRepository.connect(url!);
+    await repo.sql`drop schema public cascade`;
+    await repo.sql`create schema public`;
+    const migration = await readFile(
+      "db/migrations/001_milestone_2a_durable_foundation.sql",
+      "utf8",
+    );
+    await repo.migrate(migration);
+    await repo.migrate(
+      await readFile(
+        "db/migrations/004_milestone_2e_security_boundary.sql",
+        "utf8",
+      ),
+    );
+  });
+  afterAll(async () => repo.close());
+  beforeEach(async () => {
+    await repo.sql`truncate evidence_events,payment_attempts,authorization_reservations,approvals,decision_receipts,transaction_proposals,replay_keys,mandates,agent_passports,principals restart identity cascade`;
+    await repo.savePrincipal(principal);
+    await repo.saveAgent(agent);
+    await repo.saveMandate(mandate);
+  });
+  it("persists and validates agent passports and mandates", async () => {
+    expect(await repo.getAgent("a1")).toEqual(agent);
+    expect(await repo.getMandate("m1")).toEqual(mandate);
+  });
+  it("persists proposals and receipts", async () => {
+    await repo.saveProposal(proposal);
+    await repo.saveReceipt(receipt);
+    expect(await repo.getProposal("tx1")).toEqual(proposal);
+    expect(await repo.getReceipt("r1")).toMatchObject({
+      receiptId: "r1",
+      decision: "ALLOW",
+    });
+  });
+  it("rejects duplicate proposal IDs and nonces", async () => {
+    await repo.saveProposal(proposal);
+    await expect(repo.saveProposal(proposal)).rejects.toThrow();
+    await expect(
+      repo.saveProposal({ ...proposal, id: "tx2" }),
+    ).rejects.toThrow();
+  });
+  it("durably rejects replay keys", async () => {
+    expect(await repo.claimReplay("m1", "nonce-x")).toBe(true);
+    expect(await repo.claimReplay("m1", "nonce-x")).toBe(false);
+  });
+  it("binds approvals to the mandate principal", async () => {
+    await repo.saveProposal(proposal);
+    await repo.saveReceipt(receipt);
+    await expect(
+      repo.saveApproval({
+        id: "ap1",
+        receiptId: "r1",
+        proposalId: "tx1",
+        principalId: "evil",
+        status: "APPROVED",
+        approvedAt: "2026-10-09T12:01:00.000Z",
+      }),
+    ).rejects.toThrow("APPROVAL_BINDING_MISMATCH");
+    await expect(
+      repo.saveApproval({
+        id: "ap2",
+        receiptId: "r1",
+        proposalId: "tx1",
+        principalId: "p1",
+        status: "APPROVED",
+        approvedAt: "2026-10-09T12:01:00.000Z",
+      }),
+    ).resolves.toBeUndefined();
+  });
+  it("enforces reservation lifecycle", async () => {
+    await repo.saveProposal(proposal);
+    await repo.saveReceipt(receipt);
+    await repo.createReservation({
+      id: "res1",
+      mandateId: "m1",
+      proposalId: "tx1",
+      receiptId: "r1",
+      amountMinor: 7000,
+      currency: "USD",
+      status: "PENDING",
+      expiresAt: "2026-10-09T13:00:00.000Z",
+    });
+    await repo.transitionReservation("res1", "AUTHORIZED");
+    await repo.transitionReservation("res1", "EXECUTING");
+    await repo.transitionReservation("res1", "COMMITTED");
+    await expect(
+      repo.transitionReservation("res1", "RELEASED"),
+    ).rejects.toThrow("INVALID_RESERVATION_TRANSITION");
+  });
+  it("persists evidence across repository recreation and verifies chain", async () => {
+    await repo.appendEvidence("A", { x: 1 }, "2026-10-09T12:00:00.000Z");
+    await repo.appendEvidence("B", { x: 2 }, "2026-10-09T12:00:01.000Z");
+    const second = PostgresTrustRepository.connect(url!);
+    const entries = await second.evidence();
+    await second.close();
+    expect(PostgresTrustRepository.verifyEvidence(entries)).toBe(true);
+    const tampered = entries.map((e, i) =>
+      i === 0 ? { ...e, data: { x: 99 } } : e,
+    );
+    expect(PostgresTrustRepository.verifyEvidence(tampered)).toBe(false);
+    expect(PostgresTrustRepository.verifyEvidence([...entries].reverse())).toBe(
+      false,
+    );
+  });
+  it("fails closed on malformed persisted critical data", async () => {
+    await repo.sql`update mandates set document=jsonb_set(document,'{currency}','\"usd\"'::jsonb) where id='m1'`;
+    await expect(repo.getMandate("m1")).rejects.toThrow();
+  });
+  it("upgrades populated 2A/2C/2D state through ordered forward migrations without rewriting evidence", async () => {
+    await repo.saveProposal(proposal);
+    await repo.saveReceipt(receipt);
+    await repo.appendEvidence(
+      "UPGRADE_FIXTURE",
+      { proposalId: proposal.id },
+      proposal.proposedAt,
+    );
+    const originalEvidence = await repo.evidence();
+    const migrations = await Promise.all(
+      [
+        "001_milestone_2a_durable_foundation.sql",
+        "002_milestone_2c_execution_grants.sql",
+        "003_milestone_2d_paypal_execution.sql",
+        "004_milestone_2e_security_boundary.sql",
+      ].map((file) => readFile(`db/migrations/${file}`, "utf8")),
+    );
+    // Isolated schema, real PostgreSQL, populated data between migration stages.
+    // The outer transaction removes the fixture even if an assertion fails.
+    await repo.sql.begin(async (tx) => {
+      await tx`create schema migration_upgrade_audit`;
+      await tx`set local search_path to migration_upgrade_audit`;
+      await tx.unsafe(migrations[0]!);
+      await tx`insert into principals select * from public.principals`;
+      await tx`insert into agent_passports select * from public.agent_passports`;
+      await tx`insert into mandates(id,principal_id,authorized_agent_id,fingerprint,document,nonce,cumulative_limit_minor,spent_minor,created_at,expires_at) select id,principal_id,authorized_agent_id,fingerprint,document,nonce,cumulative_limit_minor,spent_minor,created_at,expires_at from public.mandates`;
+      await tx`insert into transaction_proposals select * from public.transaction_proposals`;
+      await tx`insert into decision_receipts(id,proposal_id,mandate_id,agent_id,decision,document,evaluated_at) select id,proposal_id,mandate_id,agent_id,decision,document,evaluated_at from public.decision_receipts`;
+      await tx`insert into authorization_reservations(id,mandate_id,proposal_id,receipt_id,amount_minor,currency,status,expires_at) values('upgrade-res','m1','tx1','r1',7000,'USD','AUTHORIZED','2026-10-09T13:00:00Z')`;
+      await tx`insert into payment_attempts(id,reservation_id,provider,idempotency_key,status) values('legacy-attempt','upgrade-res','MOCK','legacy-key','NOT_STARTED')`;
+      await tx`insert into evidence_events overriding system value select * from public.evidence_events`;
+      await tx.unsafe(migrations[1]!);
+      await tx`insert into execution_grants(id,kid,version,audience,principal_id,agent_id,mandate_id,proposal_id,receipt_id,reservation_id,proposal_digest,mandate_fingerprint,capability,amount_minor,currency,merchant_id,issued_at,expires_at) values('upgrade-grant','test-key','payflow.execution-grant.v1','payflow.payment-execution','p1','a1','m1','tx1','r1','upgrade-res',${"a".repeat(64)},${mandateFingerprint(mandate)},'CREATE_ORDER',7000,'USD','shop','2026-10-09T12:00:00Z','2026-10-09T12:02:00Z')`;
+      await tx.unsafe(migrations[2]!);
+      await tx.unsafe(migrations[3]!);
+      const receipts =
+        await tx`select proposal_snapshot,document_hash,encode(sha256(convert_to(document::text,'UTF8')),'hex') actual_hash from decision_receipts`;
+      expect(receipts[0]?.proposal_snapshot).toEqual(proposal);
+      expect(receipts[0]?.document_hash).toBe(receipts[0]?.actual_hash);
+      const grants =
+        await tx`select authority_snapshot,to_jsonb(g)-ARRAY['status','claimed_at','consumed_at','failed_at','authority_snapshot'] expected_snapshot from execution_grants g`;
+      expect(grants[0]?.authority_snapshot).toEqual(
+        grants[0]?.expected_snapshot,
+      );
+      expect(grants[0]?.authority_snapshot).not.toBeNull();
+      const attempts =
+        await tx`select id,status,grant_id,create_order_request_id from payment_attempts`;
+      expect(attempts[0]).toMatchObject({
+        id: "legacy-attempt",
+        status: "NOT_STARTED",
+        grant_id: null,
+        create_order_request_id: null,
+      });
+      expect(
+        (await tx`select revoked_at from mandates`)[0]?.revoked_at,
+      ).toBeNull();
+      const evidence = await repo.evidence(tx);
+      expect(evidence).toEqual(originalEvidence);
+      expect(PostgresTrustRepository.verifyEvidence(evidence)).toBe(true);
+      await repo.appendEvidenceInTransaction(
+        tx,
+        "UPGRADE_VERIFIED",
+        { migration: "004" },
+        "2026-10-09T12:00:02.000Z",
+      );
+      expect((await repo.evidence(tx)).map((event) => event.sequence)).toEqual([
+        1, 2,
+      ]);
+      await tx`drop schema migration_upgrade_audit cascade`;
+    });
+    expect(await repo.evidence()).toEqual(originalEvidence);
+  });
+});

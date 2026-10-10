@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Mandate } from "./domain.js";
+import type { Mandate, TransactionProposal } from "./domain.js";
 
 function stable(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stable);
@@ -39,5 +39,31 @@ export function canonicalMandate(mandate: Mandate): string {
 export function mandateFingerprint(mandate: Mandate): string {
   return createHash("sha256")
     .update(canonicalMandate(mandate), "utf8")
+    .digest("hex");
+}
+
+/** Deterministic digest of every proposal field that can affect execution. */
+export function canonicalProposal(proposal: TransactionProposal): string {
+  return JSON.stringify(
+    stable({
+      id: proposal.id,
+      agentId: proposal.agentId,
+      mandateId: proposal.mandateId,
+      mandateFingerprint: proposal.mandateFingerprint,
+      amount: proposal.amount,
+      merchant: proposal.merchant,
+      category: proposal.category,
+      condition: proposal.condition,
+      requestedCapability: proposal.requestedCapability,
+      proposedAt: proposal.proposedAt,
+      nonce: proposal.nonce,
+      metadata: proposal.metadata,
+    }),
+  );
+}
+
+export function proposalDigest(proposal: TransactionProposal): string {
+  return createHash("sha256")
+    .update(canonicalProposal(proposal), "utf8")
     .digest("hex");
 }

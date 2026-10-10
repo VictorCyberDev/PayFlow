@@ -167,3 +167,66 @@ describe("authorization before financial side effects", () => {
     ).toContain("REPLAY_DETECTED");
   });
 });
+
+describe("2E original mock boundary hardening", () => {
+  it("issued receipts are recursively immutable", () => {
+    const { service } = setup(),
+      p = make(7000),
+      r = service.evaluate(mandate, agent, p, { now, merchantRisk: "LOW" });
+    expect(() => {
+      (r.amount as { minor: number }).minor = 1;
+    }).toThrow();
+    expect(() => {
+      (r as { decision: string }).decision = "ALLOW";
+    }).toThrow();
+  });
+  it("mutating the original proposal does not mutate its authorization snapshot", async () => {
+    const { service, provider } = setup(),
+      p = make(7000),
+      r = service.evaluate(mandate, agent, p, { now, merchantRisk: "LOW" });
+    (p.merchant as { id: string }).id = "OTHER";
+    await expect(service.execute(p, r)).rejects.toThrow("SUBSTITUTION");
+    expect(provider.createCalls).toBe(0);
+  });
+  it("concurrent and repeated execution consume the receipt once", async () => {
+    const { service, provider } = setup(),
+      p = make(7000),
+      r = service.evaluate(mandate, agent, p, { now, merchantRisk: "LOW" });
+    const results = await Promise.allSettled([
+      service.execute(p, r),
+      service.execute(p, r),
+    ]);
+    expect(results.filter((v) => v.status === "fulfilled")).toHaveLength(1);
+    expect(provider.createCalls).toBe(1);
+    await expect(service.execute(p, r)).rejects.toThrow("REPLAY");
+  });
+  it("outstanding evaluated decisions cannot overspend the cumulative budget concurrently", async () => {
+    const { service, provider } = setup();
+    const proposals = [
+      make(7000, "one"),
+      make(7000, "two"),
+      make(7000, "three"),
+    ];
+    const receipts = proposals.map((p) =>
+      service.evaluate(mandate, agent, p, { now, merchantRisk: "LOW" }),
+    );
+    expect(receipts.map((r) => r.decision)).toEqual([
+      "ALLOW",
+      "ALLOW",
+      "ALLOW",
+    ]);
+    const results = await Promise.allSettled(
+      proposals.map((p, i) => service.execute(p, receipts[i]!)),
+    );
+    expect(results.filter((v) => v.status === "fulfilled")).toHaveLength(2);
+    expect(provider.createCalls).toBe(2);
+  });
+  it("duplicate human approval is rejected without rewriting the receipt", () => {
+    const { service } = setup(),
+      p = make(8000),
+      r = service.evaluate(mandate, agent, p, { now, merchantRisk: "LOW" });
+    service.approve(r, "p", now);
+    expect(() => service.approve(r, "p", now)).toThrow("ALREADY_RECORDED");
+    expect(r.decision).toBe("ESCALATE");
+  });
+});

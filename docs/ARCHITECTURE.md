@@ -1,72 +1,85 @@
-# PayFlow Trust Kernel Architecture
+# PayFlow Architecture — Milestone 2D
 
-## Security boundary
+## Trusted path
 
-PayFlow treats an AI agent as an untrusted proposer, not a financial authority. The agent may discover, reason and propose. It cannot determine that its own proposal is authorized.
-
-```mermaid
-flowchart LR
-  H[Principal] --> M[Mandate]
-  H --> A[AgentPassport]
-  A --> P[TransactionProposal]
-  M --> K[AuthorizationKernel]
-  A --> K
-  P --> K
-  C[Trusted server context] --> K
-  K --> R[DecisionReceipt]
-  R --> X[AuthorizedPaymentExecution]
-  AP[Explicit Human Approval] --> X
-  X --> PP[PaymentProvider]
-  PP --> PY[PayPal boundary]
-  K --> E[EvidenceLedger]
-  X --> E
-  LLM[LLM / Agent reasoning] -. untrusted proposal .-> P
+```text
+Untrusted Agent -> TransactionProposal -> Trust Kernel -> DecisionReceipt
+ -> durable Authority Reservation -> Ed25519 Execution Grant
+ -> signature verification + immediate durable revalidation
+ -> one-time execution authority claim
+ -> durable Payment Attempt -> PayPal Sandbox Orders v2
+ -> capture verification/reconciliation -> COMMITTED
 ```
 
-The LLM is outside the trusted boundary because probabilistic model output is not an authorization primitive. Security policy is explicit, typed and deterministic.
+The Trust Kernel remains deterministic and PostgreSQL-independent. PayPal does not decide whether a transaction is authorized.
 
-## Domain flow
+## Durable authorization and execution authority
 
-`Principal → Mandate → AgentPassport → TransactionProposal → AuthorizationKernel → DecisionReceipt → AuthorizedPaymentExecution → PaymentProvider → EvidenceLedger`
+Milestones 2A/2B keep PostgreSQL authoritative for mandates, passports, proposals, receipts, approvals, replay keys, reservations and evidence. Per-mandate locking serializes authority acquisition. Milestone 2C binds exact execution authority into short-lived Ed25519 grants and atomically moves `ISSUED -> CLAIMED` with reservation `AUTHORIZED -> EXECUTING` after immediate revalidation.
 
-A principal authors authority. A mandate binds scope, budget, category, conditions, risk ceiling, capabilities, expiry and replay material. An AgentPassport identifies the delegate and its independent capability ceiling. A proposal asks for an action but contains no trusted authorization decision. Server context supplies merchant risk, cumulative spend and replay state. The kernel produces a receipt with stable reason codes and check outcomes.
+## Payment Attempts
 
-The in-process service records every issued Decision Receipt together with the exact evaluated mandate and proposal. The normal execution path rejects receipts that were not issued by that service instance and rejects proposal substitution after authorization. This is deliberately an in-process Milestone 1 boundary, not a claim of distributed cryptographic authorization.
+2D evolves the existing Payment Attempt into the durable provider interaction record. One execution grant/reservation maps to one logical attempt. The attempt binds grant, reservation, proposal, mandate, principal, provider, operation, integer-minor amount/currency and merchant reference. It persists separate create-order/capture request IDs before network side effects and stores only structured provider identifiers/status needed for correctness.
 
-## Architectural decisions
+The local state machine distinguishes no side effect, order creation in flight/unknown, order created, payer action required, capture in flight/unknown/provider-pending, captured and definitive failure. UNKNOWN is not FAILED.
 
-### ADR-001 — Hash, do not claim signature
+## PayPal provider boundary
 
-`mandateFingerprint` is SHA-256 over canonical security-critical mandate fields. It detects substitution against the fingerprint supplied with the original proposal. It is not an asymmetric signature and does not prove who authored a mandate.
+`PaymentProvider` keeps PayPal HTTP types outside the Trust Kernel. `PayPalPaymentProvider` uses native `fetch`, server-side OAuth and current PayPal REST endpoints in Sandbox only:
 
-### ADR-002 — Capabilities intersect
+- `POST /v1/oauth2/token`
+- `POST /v2/checkout/orders` with `intent=CAPTURE`
+- `GET /v2/checkout/orders/{id}`
+- `POST /v2/checkout/orders/{id}/capture`
 
-A capability must exist in both the mandate and AgentPassport. Capabilities do not imply one another.
+OAuth tokens are cached only in memory until shortly before expiry; concurrent refreshes are coalesced. Non-sandbox configuration is rejected.
 
-### ADR-003 — Fail closed
+## Money
 
-Schema failures and contradictory threshold configuration deny authorization. Unknown critical state never becomes `ALLOW`.
+PayFlow remains integer-minor internally. A dedicated conversion layer emits PayPal decimal strings without binary floating point and rejects unsupported currencies/invalid values. Provider capture amount/currency must equal the authoritative Payment Attempt/execution authority.
 
-### ADR-004 — Escalation preserves history
+## Idempotency and crash recovery
 
-`ESCALATE` remains the original authorization result. Human approval is a separate object and evidence event; the mandate and Decision Receipt are not rewritten. Approval is accepted only for a kernel-issued escalation and must name the mandate principal. Authentication of the human/session supplying that identity remains future work.
+Create-order and capture use distinct stable `PayPal-Request-Id` values derived from the durable attempt identity. The same logical retry reuses the same persisted ID.
 
-### ADR-005 — Payment dependency inversion
+PostgreSQL and PayPal cannot participate in one atomic transaction. Therefore capture timeout/reset/ambiguous 5xx is quarantined as `CAPTURE_UNKNOWN`. The grant stays `CLAIMED`; reservation stays `EXECUTING`; budget authority remains consumed until reconciliation resolves provider truth.
 
-Application code targets `PaymentProvider`; `MockPaymentProvider` proves orchestration without money movement. `PayPalPaymentProvider` deliberately throws in Milestone 1 rather than pretending a network integration exists.
+Reconciliation starts from the persisted PayPal order ID and uses Show Order. A completed capture with exact amount/currency atomically finalizes Payment Attempt `CAPTURED`, grant `CONSUMED`, reservation `COMMITTED` and evidence. No second capture is sent merely because the original response was lost.
 
-### ADR-006 — Tamper evidence, not immutable storage
+Order creation ambiguity is handled separately: safe retries reuse the same create request ID. An existing order is resumed rather than replaced. Payer approval is represented explicitly and is not treated as payment success.
 
-Evidence entries form a SHA-256 hash chain including sequence and previous hash. Verification detects modification/reordering. In-memory storage can still be deleted or replaced wholesale, so this is not immutable storage or a blockchain.
+## Evidence
 
-### ADR-007 — In-process authorization artifact
+2D extends the durable timeline with payment-attempt creation, order-create start/result, payer action, capture start/unknown/pending/confirmed, reconciliation and commit/failure events. Evidence never intentionally contains PayPal Client Secret, OAuth token, Authorization header or raw credentials.
 
-The normal payment path requires an opaque symbol-branded authorization artifact minted by `AuthorizedPaymentExecutor`, and the service will only request that artifact for a Decision Receipt it previously issued. This is a useful module boundary, not a cross-process security credential. Milestone 2 should replace/augment it with short-lived signed grants and transactional persistence.
+## Webhooks
 
-### ADR-008 — Replay state is fail-closed but process-local
+2D does not expose an insecure placeholder webhook. Explicit reconciliation is authoritative. Verified, replay-protected webhook ingestion may be added later using PayPal-supported authenticity verification and the same provider/local bindings.
 
-A mandate-scoped proposal nonce or proposal ID that has already been evaluated is treated as replay and denied, including retries of previously denied proposals. Durable atomic uniqueness is intentionally deferred.
+See `ADR-002-execution-grants.md` and `ADR-003-paypal-execution-reconciliation.md`.
 
-## TOCTOU and state
+## Integrated Milestone 2E review
 
-Cumulative spend, replay state, issued receipts and approvals are in-memory in Milestone 1. This proves semantics but is not concurrency-safe across processes. Production execution requires an atomic reservation/commit transaction so authorization state cannot change between evaluation and payment side effect.
+[ADR 004](ADR-004-integrated-security-boundary.md) documents the integrated trust
+boundary, current-authority dispatch checks, fail-closed finalization, rollback-safe
+evidence, corruption detection, reconciliation discovery and adversarial matrices.
+The dispatch handoff is the revocation cutoff; GET plus retry is not atomic, and
+provider idempotency/retention remain external dependencies. Unknown authority is
+never released merely because a response or local commit failed.
+
+## Formal revocation linearization point
+
+The successful transaction COMMIT that revalidates locked authority, moves the
+attempt to ORDER_CREATING or CAPTURE_IN_FLIGHT and appends
+PAYPAL_OPERATION_DISPATCHED is the revocation linearization point. Revocation,
+suspension or expiration before this handoff prevents the operation. After
+handoff the specific validated operation may proceed, even before physical
+network transmission; it cannot be recalled by local revocation. Subsequent
+independent operations require fresh authority checks. Completed provider effects
+remain truthfully reconcilable after revocation or expiration.
+
+Request material comes from the private validated attempt snapshot, not mutable
+durable rows reread after handoff. PostgreSQL and PayPal have no shared atomic
+transaction; GET plus retry is not atomic and distributed exactly-once execution
+is not claimed. See [ADR-004](ADR-004-integrated-security-boundary.md#formal-revocation-linearization-point)
+for the lock, snapshot, race-test and crash-recovery guarantees.
