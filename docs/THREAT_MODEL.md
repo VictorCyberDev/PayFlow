@@ -123,3 +123,7 @@ idempotency and financial finalization remain unchanged.
 ## Authenticated intent activation (3C)
 
 Model output, `confirmed: true`, client principal IDs, forged context objects, draft hashes and challenges cannot independently activate authority. A trusted external authenticator must verify an explicit human action bound to exact reviewed terms; the domain has no permissive production authentication implementation. Review row locks, one-time lifecycle and security epochs prevent replay and stale activation across instances. Quantity and merchant restrictions are enforced deterministically and included in signed execution bindings. UNKNOWN reservations keep consuming quantity and money. Raw source/provenance in review storage requires deployment access/retention controls. Logical merchant allowlisting does not prove PayPal payee routing. See ADR-007 for external session/CSRF requirements and residual privileged-database risks.
+
+## Milestone 3D adversarial verification
+
+Unauthenticated rejection payloads are attacker-controlled too: activation must not log client-supplied review IDs before authenticating and verifying durable ownership. Regression tests cover this privacy defect alongside generated budget/quantity/merchant attacks, mutation at downstream boundaries, two-pool concurrency and provider effect counters. See [ADR-008](ADR-008-adversarial-trust-boundary-hardening.md); bounded tests do not prove arbitrary language fidelity, host authentication correctness or perfect distributed exactly-once behavior.

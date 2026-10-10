@@ -109,3 +109,7 @@ for limits and the distinction between exact provenance and semantic proof.
 ## Milestone 3C: explicit authenticated activation
 
 `IntentActivationService` persists exact untrusted drafts for review and accepts confirmation only through a configured `HumanActionAuthenticator` and sealed human context. A fingerprint is review binding, not authentication. Five-minute durable reviews, one-time challenge hashes, current security snapshots and atomic mandate creation separate interpretation from authority. New mandates enforce quantity through PostgreSQL reservations and logical merchant allowlists at authorization and execution. Historical mandates retain their existing semantics. See [ADR-007](ADR-007-authenticated-intent-activation.md) for host authentication obligations and lock/expiry boundaries.
+
+## Milestone 3D integrated boundary verification
+
+The adversarial full-chain suite reuses the production interpreter/compiler, activation, durable authorization, grant and payment paths. The model dependency boundary remains unchanged. Activation rejection evidence now uses only sanitized codes and authenticated owner-bound durable review IDs. [ADR-008](ADR-008-adversarial-trust-boundary-hardening.md) maps attacks to controls and documents why the short demo request still requires explicit clarification.

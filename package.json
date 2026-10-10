@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "vitest run tests/persistence.integration.test.ts tests/durable-authorization.integration.test.ts tests/execution-grant.integration.test.ts tests/execution-grant-state.integration.test.ts tests/paypal.integration.test.ts tests/intent-activation.integration.test.ts",
+    "test:integration": "vitest run tests/persistence.integration.test.ts tests/durable-authorization.integration.test.ts tests/execution-grant.integration.test.ts tests/execution-grant-state.integration.test.ts tests/paypal.integration.test.ts tests/intent-activation.integration.test.ts tests/trust-boundary.integration.test.ts",
     "test:paypal:sandbox": "vitest run tests/paypal.sandbox.test.ts",
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",

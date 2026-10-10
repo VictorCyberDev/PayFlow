@@ -347,7 +347,6 @@ export class IntentActivationService {
         !binding.challengeHash
       )
         throw new Error("AUTHENTICATION_REQUIRED");
-      reviewId = binding.reviewId;
       const verified = this.boundary.require(context, binding);
       const mandate = await this.repository.sql.begin(async (tx) => {
         const [review] =
@@ -357,6 +356,8 @@ export class IntentActivationService {
           throw new Error("PRINCIPAL_MISMATCH");
         if (review.agent_id !== binding.agentId)
           throw new Error("PASSPORT_MISMATCH");
+        // Only authenticated, owner-bound durable identifiers may enter rejection evidence.
+        reviewId = String(review.id);
         if (review.status !== "PENDING") throw new Error("CONFIRMATION_REPLAY");
         if (
           this.clock().getTime() >= persistedDate(review.expires_at).getTime()
@@ -492,12 +493,11 @@ export class IntentActivationService {
       return { status: "ACTIVATED", mandate };
     } catch (error) {
       const code = this.safeCode(error);
-      if (reviewId)
-        await this.repository.appendEvidence(
-          "INTENT_ACTIVATION_REJECTED",
-          { reviewId, code },
-          this.clock().toISOString(),
-        );
+      await this.repository.appendEvidence(
+        "INTENT_ACTIVATION_REJECTED",
+        { code, ...(reviewId ? { reviewId } : {}) },
+        this.clock().toISOString(),
+      );
       return { status: "REJECTED", code };
     }
   }

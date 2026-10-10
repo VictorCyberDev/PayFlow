@@ -99,3 +99,7 @@ been verified without a runtime credential. Milestone 3C adds the separate authe
 “The AI interprets your intention. It does not grant itself permission.”
 
 The server can now persist an intent review, present its exact draft, authenticate an explicit human confirmation through a host-supplied verifier, and atomically activate a trusted mandate. Reviews expire within five minutes and are durably single-use. New activated mandates enforce quantity reservations and exact logical merchant allowlists. No web authentication server or final UI is included; a production host must implement the authentication guarantees in [ADR-007](docs/ADR-007-authenticated-intent-activation.md). Normal tests require no Groq or PayPal credentials. Migration 005 preserves legacy mandate semantics.
+
+### Milestone 3D adversarial trust-boundary review
+
+The full interpretation → authenticated activation → quantity/merchant authorization → signed grant → PayPal/evidence path is exercised with deterministic adversarial inputs and real PostgreSQL concurrency. A reproduced rejection-evidence privacy defect is fixed without changing financial semantics. See [ADR-008](docs/ADR-008-adversarial-trust-boundary-hardening.md) for the attack matrix, executable controls and residual limits.
