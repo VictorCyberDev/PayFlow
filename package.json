@@ -16,7 +16,8 @@
     "test:paypal:sandbox": "vitest run tests/paypal.sandbox.test.ts",
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:groq:smoke": "vitest run tests/groq.smoke.test.ts"
   },
   "dependencies": {
     "postgres": "3.4.7",

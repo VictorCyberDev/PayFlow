@@ -70,3 +70,27 @@ still required. No LLM provider, activation/persistence operation or payment rou
 is added. Quantity and merchant restrictions remain visible activation blockers
 where M2 lacks enforcement. See [ADR-005](docs/ADR-005-ai-intent-trust-boundary.md)
 for provenance, widening protections and semantic-verification limitations.
+
+## Milestone 3B — Groq interpretation, never authorization
+
+`src/intent-model.ts` connects natural-language source to Groq strict JSON Schema
+output, local 3A validation/compiler, conservative semantic checks and deterministic
+clarification. The model receives only the current source/reference; independent
+review bounds stay local. The output remains an untrusted draft for human review,
+with quantity/merchant activation blockers intact. No confirmation/activation or
+financial route exists. The AI interprets your intention. It does not grant itself
+permission.
+
+Configure server-side `INTENT_MODEL_PROVIDER=groq`,
+`INTENT_MODEL_NAME=openai/gpt-oss-20b` and an external `GROQ_API_KEY`.
+Standard tests/CI use fake providers or mocked HTTP, require no key and make no
+Groq requests. Optional live interpretation smoke (no payment):
+
+```bash
+RUN_GROQ_SMOKE_TEST=true npm run test:groq:smoke
+```
+
+See [ADR-006](docs/ADR-006-model-intent-integration.md) for the checked free-tier
+model, resource limits, safe failures and semantic limitations. Live smoke has not
+been verified without a runtime credential. Authenticated confirmation and
+activation remain deferred; Milestone 3C has not started.

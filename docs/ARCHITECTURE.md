@@ -93,3 +93,15 @@ it cannot persist authority, authorize transactions, issue grants or invoke PayP
 Human confirmation/activation is separately deferred. M2 has no quantity or
 merchant-allowlist enforcement, so these remain explicit activation requirements,
 not silently omitted constraints. See [ADR-005](ADR-005-ai-intent-trust-boundary.md).
+
+## Milestone 3B model boundary
+
+`IntentModelProvider` accepts only source/reference. The Groq adapter performs one
+bounded native-fetch request with strict JSON Schema and a static versioned system
+instruction; source is separate user-role data. The shared service locally validates
+unknown output, invokes the unchanged 3A compiler with independently supplied
+review bounds and adds conservative semantic-support checks and fixed clarification
+questions. Fake providers exercise this same path. Transitive dependency tests
+keep the model layer outside persistence, authorization, grants and PayPal.
+No trusted activation or confirmation endpoint is added. See [ADR-006](ADR-006-model-intent-integration.md)
+for limits and the distinction between exact provenance and semantic proof.

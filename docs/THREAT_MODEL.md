@@ -97,6 +97,25 @@ Quoted spans preserve provenance but cannot prove arbitrary-language meaning;
 a lying EXPLICIT interpretation still requires authenticated human review before
 activation. Drafts have no identity, signing or persistence/execution capability.
 Quantity/merchant restrictions cannot be dropped into unenforced M2 authority.
-No model provider or human-confirmation endpoint exists yet. Source and summaries
+The 3B model provider remains outside authority; no human-confirmation endpoint exists. Source and summaries
 are returned only, not logged/persisted into evidence; future storage requires
 secret redaction and data minimization. See [ADR-005](ADR-005-ai-intent-trust-boundary.md).
+
+## Milestone 3B hostile models and source injection
+
+Groq may ignore instructions, hallucinate explicit support, return malformed or
+schema-shaped unsafe content, refuse or become unavailable. Static system/user
+role separation is a reliability measure; security rests on strict local schema,
+source-span checks, independent review bounds, unchanged deterministic compiler,
+limited semantic checks, required human review and no activation API. Fake policy,
+role injection, hidden authority fields and confidence cannot authorize money.
+
+Bounded input/output/time/token/call limits prevent recursive model repair and
+unbounded response buffering. Fixed failure states avoid raw-error/secret leakage;
+keys stay in server-side private memory, redirects are rejected and hidden
+reasoning is neither requested nor retained. Only current source/reference goes
+to Groq; secret minimization in arbitrary human text and provider retention remain
+operational responsibilities. Exact quotes and small English checks are not proof
+of arbitrary semantic faithfulness. Normal CI makes no real model requests.
+See [ADR-006](ADR-006-model-intent-integration.md). M2 revocation, quarantine,
+idempotency and financial finalization remain unchanged.
