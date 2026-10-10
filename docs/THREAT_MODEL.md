@@ -107,7 +107,7 @@ Groq may ignore instructions, hallucinate explicit support, return malformed or
 schema-shaped unsafe content, refuse or become unavailable. Static system/user
 role separation is a reliability measure; security rests on strict local schema,
 source-span checks, independent review bounds, unchanged deterministic compiler,
-limited semantic checks, required human review and no activation API. Fake policy,
+limited semantic checks, required human review and no model-accessible activation API. Fake policy,
 role injection, hidden authority fields and confidence cannot authorize money.
 
 Bounded input/output/time/token/call limits prevent recursive model repair and
@@ -119,3 +119,7 @@ operational responsibilities. Exact quotes and small English checks are not proo
 of arbitrary semantic faithfulness. Normal CI makes no real model requests.
 See [ADR-006](ADR-006-model-intent-integration.md). M2 revocation, quarantine,
 idempotency and financial finalization remain unchanged.
+
+## Authenticated intent activation (3C)
+
+Model output, `confirmed: true`, client principal IDs, forged context objects, draft hashes and challenges cannot independently activate authority. A trusted external authenticator must verify an explicit human action bound to exact reviewed terms; the domain has no permissive production authentication implementation. Review row locks, one-time lifecycle and security epochs prevent replay and stale activation across instances. Quantity and merchant restrictions are enforced deterministically and included in signed execution bindings. UNKNOWN reservations keep consuming quantity and money. Raw source/provenance in review storage requires deployment access/retention controls. Logical merchant allowlisting does not prove PayPal payee routing. See ADR-007 for external session/CSRF requirements and residual privileged-database risks.

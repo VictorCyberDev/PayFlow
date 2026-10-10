@@ -170,6 +170,13 @@ export class ExecutionGrantIssuer {
       await this.repo.assertReceiptProposal(receipt.receiptId, proposal, tx);
       const agent = await this.repo.getAgent(proposal.agentId, tx);
       if (!agent) throw new Error("AGENT_NOT_FOUND");
+      await this.repo.assertPrincipalActive(mandate.principalId, tx);
+      await this.repo.assertCommerceRestrictions(
+        mandate,
+        proposal,
+        reservation.id,
+        tx,
+      );
       if (
         Date.parse(mandate.createdAt) > Date.parse(now) ||
         Date.parse(mandate.expiresAt) <= Date.parse(now)
@@ -389,6 +396,13 @@ export class ExecutionBoundary {
         const receipt = await this.repo.getReceipt(claims.receiptId, tx);
         if (!mandate || !proposal || !agent || !receipt)
           throw new Error("EXECUTION_STATE_MISSING");
+        await this.repo.assertPrincipalActive(mandate.principalId, tx);
+        await this.repo.assertCommerceRestrictions(
+          mandate,
+          proposal,
+          reservation.id,
+          tx,
+        );
         if (
           mandateFingerprint(mandate) !== claims.mandateFingerprint ||
           proposalDigest(proposal) !== claims.proposalDigest

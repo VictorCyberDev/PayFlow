@@ -77,8 +77,8 @@ for provenance, widening protections and semantic-verification limitations.
 output, local 3A validation/compiler, conservative semantic checks and deterministic
 clarification. The model receives only the current source/reference; independent
 review bounds stay local. The output remains an untrusted draft for human review,
-with quantity/merchant activation blockers intact. No confirmation/activation or
-financial route exists. The AI interprets your intention. It does not grant itself
+with quantity/merchant activation requirements intact. The model has no
+confirmation/activation or financial route. The AI interprets your intention. It does not grant itself
 permission.
 
 Configure server-side `INTENT_MODEL_PROVIDER=groq`,
@@ -92,5 +92,10 @@ RUN_GROQ_SMOKE_TEST=true npm run test:groq:smoke
 
 See [ADR-006](docs/ADR-006-model-intent-integration.md) for the checked free-tier
 model, resource limits, safe failures and semantic limitations. Live smoke has not
-been verified without a runtime credential. Authenticated confirmation and
-activation remain deferred; Milestone 3C has not started.
+been verified without a runtime credential. Milestone 3C adds the separate authenticated activation boundary described below.
+
+### Milestone 3C domain boundary
+
+“The AI interprets your intention. It does not grant itself permission.”
+
+The server can now persist an intent review, present its exact draft, authenticate an explicit human confirmation through a host-supplied verifier, and atomically activate a trusted mandate. Reviews expire within five minutes and are durably single-use. New activated mandates enforce quantity reservations and exact logical merchant allowlists. No web authentication server or final UI is included; a production host must implement the authentication guarantees in [ADR-007](docs/ADR-007-authenticated-intent-activation.md). Normal tests require no Groq or PayPal credentials. Migration 005 preserves legacy mandate semantics.

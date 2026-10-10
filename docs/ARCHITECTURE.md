@@ -90,9 +90,9 @@ A separate pure compiler accepts typed untrusted interpretation plus authoritati
 source/review context and produces a non-authoritative mandate draft or explicit
 clarification/rejection. It imports only schema definitions and hashing utilities;
 it cannot persist authority, authorize transactions, issue grants or invoke PayPal.
-Human confirmation/activation is separately deferred. M2 has no quantity or
-merchant-allowlist enforcement, so these remain explicit activation requirements,
-not silently omitted constraints. See [ADR-005](ADR-005-ai-intent-trust-boundary.md).
+Human confirmation/activation is a separate 3C boundary. Quantity and
+merchant-allowlist requirements remain explicit in drafts; 3C satisfies them
+through deterministic reservation and execution checks rather than omitting constraints. See [ADR-005](ADR-005-ai-intent-trust-boundary.md).
 
 ## Milestone 3B model boundary
 
@@ -105,3 +105,7 @@ questions. Fake providers exercise this same path. Transitive dependency tests
 keep the model layer outside persistence, authorization, grants and PayPal.
 No trusted activation or confirmation endpoint is added. See [ADR-006](ADR-006-model-intent-integration.md)
 for limits and the distinction between exact provenance and semantic proof.
+
+## Milestone 3C: explicit authenticated activation
+
+`IntentActivationService` persists exact untrusted drafts for review and accepts confirmation only through a configured `HumanActionAuthenticator` and sealed human context. A fingerprint is review binding, not authentication. Five-minute durable reviews, one-time challenge hashes, current security snapshots and atomic mandate creation separate interpretation from authority. New mandates enforce quantity through PostgreSQL reservations and logical merchant allowlists at authorization and execution. Historical mandates retain their existing semantics. See [ADR-007](ADR-007-authenticated-intent-activation.md) for host authentication obligations and lock/expiry boundaries.
