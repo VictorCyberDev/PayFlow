@@ -4,13 +4,17 @@ import {
   interpretIntent,
 } from "../src/intent-model.js";
 
+import {
+  smokeTestEnabled,
+  requireSmokeConfiguration,
+} from "./provider-smoke-guard.js";
+
 // Explicit opt-in only: normal test/CI evaluation constructs no real provider.
-const enabled = process.env.RUN_GROQ_SMOKE_TEST === "true";
+const enabled = smokeTestEnabled("GROQ", process.env);
 it.skipIf(!enabled)(
   "opt-in real Groq interpretation, strict validation and safe compiler result",
   async () => {
-    if (!process.env.GROQ_API_KEY)
-      throw new Error("GROQ_SMOKE_CREDENTIAL_UNAVAILABLE");
+    requireSmokeConfiguration("GROQ", process.env);
     const result = await interpretIntent(
       GroqIntentModelProvider.fromEnvironment(),
       {
