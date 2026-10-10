@@ -27,6 +27,7 @@ export interface AuthorizationContext {
   readonly merchantRisk: MerchantRisk;
   readonly cumulativeSpentMinor: number;
   readonly replaySeen: boolean;
+  readonly consumedQuantity?: number;
 }
 
 const checkNames = [
@@ -42,6 +43,8 @@ const checkNames = [
   "condition",
   "merchantRisk",
   "replay",
+  "quantity",
+  "merchantScope",
 ] as const;
 
 function blankChecks(): Record<(typeof checkNames)[number], CheckResult> {
@@ -181,6 +184,27 @@ export function authorize(
       ? "PASS"
       : "FAIL";
   if (checks.merchantRisk === "FAIL") fail("MERCHANT_RISK_TOO_HIGH");
+
+  if (mandate.quantityLimit !== undefined) {
+    const consumed = context.consumedQuantity;
+    const requested = proposal.quantity;
+    const valid =
+      consumed !== undefined &&
+      Number.isSafeInteger(consumed) &&
+      consumed >= 0 &&
+      requested !== undefined &&
+      Number.isSafeInteger(consumed + requested) &&
+      consumed + requested <= mandate.quantityLimit;
+    checks.quantity = valid ? "PASS" : "FAIL";
+    if (!valid) fail("QUANTITY_EXHAUSTED");
+  }
+  if (mandate.merchantScope) {
+    const scope = mandate.merchantScope;
+    const valid =
+      scope.mode === "ANY" || scope.ids.includes(proposal.merchant.id);
+    checks.merchantScope = valid ? "PASS" : "FAIL";
+    if (!valid) fail("MERCHANT_NOT_ALLOWED");
+  }
 
   checks.replay = context.replaySeen ? "FAIL" : "PASS";
   if (context.replaySeen) fail("REPLAY_DETECTED");

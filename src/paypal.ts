@@ -662,6 +662,7 @@ export class PayPalExecutionRail implements ExecutionSink {
         true,
       );
       const agent = await this.repo.getAgent(String(g.agent_id), tx);
+      await this.repo.assertPrincipalActive(String(a.principal_id), tx);
       await this.repo.assertMandateActive(String(a.mandate_id), tx);
       const receipt = await this.repo.getReceipt(String(g.receipt_id), tx);
       const approval =
@@ -892,6 +893,12 @@ export class PayPalExecutionRail implements ExecutionSink {
       !["CREATE_ORDER", "CAPTURE_PAYMENT"].includes(String(g.capability))
     )
       throw new Error("PAYMENT_AUTHORITY_BINDING_MISMATCH");
+    await this.repo.assertCommerceRestrictions(
+      mandate,
+      proposal,
+      String(r.id),
+      tx,
+    );
     await this.repo.assertReceiptProposal(String(g.receipt_id), proposal, tx);
     await this.repo.assertGrantSnapshot(String(g.id), tx);
     const claim =

@@ -53,6 +53,7 @@ export class DurableAuthorizationService {
         throw new Error("PROPOSAL_BINDING_MISMATCH");
       const agent = await this.repo.getAgent(proposal.agentId, tx);
       if (!agent) throw new Error("AGENT_NOT_FOUND");
+      await this.repo.assertPrincipalActive(mandate.principalId, tx);
       const prior =
         await tx`select id from decision_receipts where proposal_id=${proposal.id}`;
       if (prior.length) throw new Error("AUTHORIZATION_ALREADY_EVALUATED");
@@ -64,10 +65,12 @@ export class DurableAuthorizationService {
       );
       const replayRows =
         await tx`select 1 from replay_keys where scope=${mandate.id} and replay_key in (${proposal.id},${proposal.nonce}) limit 1`;
+      const consumedQuantity = await this.repo.quantityAccounting(mandate, tx);
       const receipt = authorize(mandate, agent, proposal, {
         now,
         merchantRisk,
         cumulativeSpentMinor: accounting.consumedMinor,
+        ...(consumedQuantity === undefined ? {} : { consumedQuantity }),
         replaySeen: replayRows.length > 0,
       });
 
@@ -107,7 +110,11 @@ export class DurableAuthorizationService {
         !(await this.repo.claimReplay(mandate.id, proposal.nonce, tx))
       )
         throw new Error("REPLAY_DETECTED_DURING_COMMIT");
-      const reservation = this.reservation(receipt, now);
+      const reservation = this.reservation(
+        receipt,
+        now,
+        mandate.quantityLimit === undefined ? undefined : proposal.quantity,
+      );
       await this.repo.createReservation(reservation, tx);
       await this.repo.appendEvidenceInTransaction(
         tx,
@@ -122,6 +129,9 @@ export class DurableAuthorizationService {
           reservationId: reservation.id,
           proposalId: proposal.id,
           amountMinor: reservation.amountMinor,
+          ...(reservation.quantity === undefined
+            ? {}
+            : { quantity: reservation.quantity }),
         },
         now,
       );
@@ -159,15 +169,18 @@ export class DurableAuthorizationService {
         throw new Error("APPROVAL_ALREADY_RECORDED");
       const agent = await this.repo.getAgent(receipt.agentId, tx);
       if (!agent) throw new Error("AGENT_NOT_FOUND");
+      await this.repo.assertPrincipalActive(mandate.principalId, tx);
       const accounting = await this.repo.authorityAccounting(
         mandate.id,
         mandate.cumulativeLimitMinor,
         tx,
       );
+      const consumedQuantity = await this.repo.quantityAccounting(mandate, tx);
       const revalidated = authorize(mandate, agent, proposal, {
         now,
         merchantRisk: mandate.merchantRiskCeiling,
         cumulativeSpentMinor: accounting.consumedMinor,
+        ...(consumedQuantity === undefined ? {} : { consumedQuantity }),
         replaySeen: false,
       });
       if (revalidated.decision !== "ESCALATE")
@@ -189,7 +202,11 @@ export class DurableAuthorizationService {
         approvedAt: now,
       });
       await this.repo.saveApproval(approval, tx);
-      const reservation = this.reservation(receipt, now);
+      const reservation = this.reservation(
+        receipt,
+        now,
+        mandate.quantityLimit === undefined ? undefined : proposal.quantity,
+      );
       await this.repo.createReservation(reservation, tx);
       await this.repo.appendEvidenceInTransaction(
         tx,
@@ -204,6 +221,9 @@ export class DurableAuthorizationService {
           reservationId: reservation.id,
           proposalId: proposal.id,
           amountMinor: reservation.amountMinor,
+          ...(reservation.quantity === undefined
+            ? {}
+            : { quantity: reservation.quantity }),
         },
         now,
       );
@@ -262,7 +282,11 @@ export class DurableAuthorizationService {
     });
   }
 
-  private reservation(receipt: DecisionReceipt, now: string): Reservation {
+  private reservation(
+    receipt: DecisionReceipt,
+    now: string,
+    quantity?: number,
+  ): Reservation {
     return Object.freeze({
       id: randomUUID(),
       mandateId: receipt.mandateId,
@@ -270,6 +294,7 @@ export class DurableAuthorizationService {
       receiptId: receipt.receiptId,
       amountMinor: receipt.amount.minor,
       currency: receipt.amount.currency,
+      ...(quantity === undefined ? {} : { quantity }),
       status: "AUTHORIZED" as const,
       expiresAt: new Date(
         Date.parse(now) + this.reservationTtlMs,

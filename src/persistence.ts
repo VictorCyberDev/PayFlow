@@ -51,6 +51,7 @@ export const ReservationSchema = z
     receiptId: z.string().min(1),
     amountMinor: z.number().int().safe().positive(),
     currency: z.string().regex(/^[A-Z]{3}$/),
+    quantity: z.number().int().safe().positive().max(1000).optional(),
     status: ReservationStatusSchema,
     expiresAt: z.string().datetime(),
   })
@@ -155,10 +156,9 @@ export class PostgresTrustRepository {
       capabilities: r.capabilities,
     });
   }
-  async saveMandate(m: Mandate): Promise<void> {
+  async saveMandate(m: Mandate, db: Sql = this.sql): Promise<void> {
     const v = MandateSchema.parse(m);
-    await this
-      .sql`insert into mandates(id,principal_id,authorized_agent_id,fingerprint,document,nonce,cumulative_limit_minor,created_at,expires_at) values(${v.id},${v.principalId},${v.authorizedAgentId},${mandateFingerprint(v)},${this.sql.json(v)},${v.nonce},${v.cumulativeLimitMinor ?? null},${v.createdAt},${v.expiresAt})`;
+    await db`insert into mandates(id,principal_id,authorized_agent_id,fingerprint,document,nonce,cumulative_limit_minor,created_at,expires_at) values(${v.id},${v.principalId},${v.authorizedAgentId},${mandateFingerprint(v)},${db.json(v)},${v.nonce},${v.cumulativeLimitMinor ?? null},${v.createdAt},${v.expiresAt})`;
   }
   async getMandate(
     id: string,
@@ -321,6 +321,10 @@ export class PostgresTrustRepository {
   }
   async createReservation(r: Reservation, db: Sql = this.sql): Promise<void> {
     const v = ReservationSchema.parse(r);
+    if (v.quantity !== undefined) {
+      await db`insert into authorization_reservations(id,mandate_id,proposal_id,receipt_id,amount_minor,currency,status,expires_at,quantity) values(${v.id},${v.mandateId},${v.proposalId},${v.receiptId},${v.amountMinor},${v.currency},${v.status},${v.expiresAt},${v.quantity})`;
+      return;
+    }
     await db`insert into authorization_reservations(id,mandate_id,proposal_id,receipt_id,amount_minor,currency,status,expires_at) values(${v.id},${v.mandateId},${v.proposalId},${v.receiptId},${v.amountMinor},${v.currency},${v.status},${v.expiresAt})`;
   }
   async getReservationByProposal(
@@ -328,7 +332,7 @@ export class PostgresTrustRepository {
     db: Sql = this.sql,
   ): Promise<Reservation | null> {
     const rows =
-      await db`select id,mandate_id,proposal_id,receipt_id,amount_minor,currency,status,expires_at from authorization_reservations where proposal_id=${proposalId}`;
+      await db`select * from authorization_reservations where proposal_id=${proposalId}`;
     if (!rows[0]) return null;
     const r = row(rows[0]);
     return ReservationSchema.parse({
@@ -338,6 +342,7 @@ export class PostgresTrustRepository {
       receiptId: r.receipt_id,
       amountMinor: asNumber(r.amount_minor),
       currency: r.currency,
+      ...(r.quantity == null ? {} : { quantity: asNumber(r.quantity) }),
       status: r.status,
       expiresAt: persistedDate(r.expires_at).toISOString(),
     });
@@ -379,6 +384,65 @@ export class PostgresTrustRepository {
           ? null
           : Math.max(0, cumulativeLimitMinor - consumedMinor),
     });
+  }
+  /** Caller holds the mandate lock when acquiring/reserving authority. */
+  async quantityAccounting(
+    mandate: Mandate,
+    db: Sql = this.sql,
+  ): Promise<number | undefined> {
+    if (mandate.quantityLimit === undefined) return undefined;
+    const rows =
+      await db`select r.quantity,p.document->'quantity' proposed,r.status from authorization_reservations r join transaction_proposals p on p.id=r.proposal_id where r.mandate_id=${mandate.id}`;
+    let consumed = 0;
+    for (const value of rows) {
+      const r = row(value);
+      const q = z
+        .number()
+        .int()
+        .safe()
+        .positive()
+        .max(1000)
+        .parse(asNumber(r.quantity));
+      if (q !== r.proposed) throw new Error("CORRUPT_QUANTITY_ACCOUNTING");
+      const status = ReservationStatusSchema.parse(r.status);
+      if (["AUTHORIZED", "EXECUTING", "COMMITTED"].includes(status))
+        consumed += q;
+      if (!Number.isSafeInteger(consumed) || consumed > mandate.quantityLimit)
+        throw new Error("CORRUPT_QUANTITY_ACCOUNTING");
+    }
+    return consumed;
+  }
+  async assertCommerceRestrictions(
+    m: Mandate,
+    p: TransactionProposal,
+    reservationId: string,
+    db: Sql,
+  ): Promise<void> {
+    if (
+      m.merchantScope?.mode === "ONLY" &&
+      !m.merchantScope.ids.includes(p.merchant.id)
+    )
+      throw new Error("MERCHANT_NOT_ALLOWED");
+    if (m.quantityLimit !== undefined) {
+      const rows =
+        await db`select quantity from authorization_reservations where id=${reservationId}`;
+      if (
+        !rows[0] ||
+        p.quantity === undefined ||
+        asNumber(rows[0].quantity) !== p.quantity
+      )
+        throw new Error("QUANTITY_BINDING_MISMATCH");
+      await this.quantityAccounting(m, db);
+    }
+  }
+  async assertPrincipalActive(id: string, db: Sql): Promise<void> {
+    // SELECT * supports unupgraded M2 test installations. New installs have status.
+    const rows = await db`select * from principals where id=${id} for update`;
+    if (
+      !rows[0] ||
+      (rows[0].status !== undefined && rows[0].status !== "ACTIVE")
+    )
+      throw new Error("PRINCIPAL_INACTIVE");
   }
   async assertManualTransition(
     id: string,
@@ -459,6 +523,24 @@ export class PostgresTrustRepository {
         await db`select id from evidence_events where type='PAYMENT_COMMITTED' and data->>'paymentAttemptId'=${data.paymentAttemptId}`;
       if (state.length !== 1 || existing.length !== 0)
         throw new Error("PAYMENT_EVIDENCE_STATE_INVALID");
+      const mandate = await this.getMandate(mandateId, db);
+      if (
+        mandate &&
+        (mandate.quantityLimit !== undefined ||
+          mandate.merchantScope !== undefined)
+      ) {
+        const proposal = await this.getProposal(
+          z.string().min(1).parse(attempt.proposal_id),
+          db,
+        );
+        if (!proposal) throw new Error("PAYMENT_EVIDENCE_STATE_INVALID");
+        await this.assertCommerceRestrictions(
+          mandate,
+          proposal,
+          reservationId,
+          db,
+        );
+      }
     }
     occurredAt = persistedDate(occurredAt).toISOString();
     z.record(

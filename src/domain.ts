@@ -45,6 +45,19 @@ export const AgentPassportSchema = z
   .strict();
 export type AgentPassport = Readonly<z.infer<typeof AgentPassportSchema>>;
 
+// Exact case-sensitive logical merchant identifiers; never display-name folding.
+export const MerchantScopeSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("ANY") }).strict(),
+  z
+    .object({
+      mode: z.literal("ONLY"),
+      ids: z
+        .array(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/))
+        .min(1)
+        .max(100),
+    })
+    .strict(),
+]);
 export const MandateSchema = z
   .object({
     id: z.string().min(1),
@@ -55,6 +68,8 @@ export const MandateSchema = z
     currency: z.string().regex(/^[A-Z]{3}$/),
     maxSingleTransactionMinor: z.number().int().safe().positive(),
     cumulativeLimitMinor: z.number().int().safe().positive().optional(),
+    quantityLimit: z.number().int().safe().positive().max(1000).optional(),
+    merchantScope: MerchantScopeSchema.optional(),
     allowedConditions: z.array(ProductConditionSchema).min(1),
     merchantRiskCeiling: MerchantRiskSchema,
     autonomousPurchaseThresholdMinor: z.number().int().safe().nonnegative(),
@@ -98,6 +113,7 @@ export const TransactionProposalSchema = z
     mandateId: z.string().min(1),
     mandateFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     amount: MoneySchema,
+    quantity: z.number().int().safe().positive().max(1000).optional(),
     merchant: z
       .object({ id: z.string().min(1), displayName: z.string().min(1) })
       .strict(),
@@ -138,6 +154,8 @@ export const DecisionCodeSchema = z.enum([
   "CONDITION_DENIED",
   "MERCHANT_RISK_TOO_HIGH",
   "REPLAY_DETECTED",
+  "QUANTITY_EXHAUSTED",
+  "MERCHANT_NOT_ALLOWED",
 ]);
 export type DecisionCode = z.infer<typeof DecisionCodeSchema>;
 export const CheckResultSchema = z.enum([

@@ -60,3 +60,46 @@ revocation/expiration and reuses persisted provider keys. Apply the forward
 `db/migrations/004_milestone_2e_security_boundary.sql` after migrations 001–003.
 See [ADR 004](docs/ADR-004-integrated-security-boundary.md) for crash windows,
 revocation handoff, evidence semantics, recovery APIs and residual dependencies.
+
+## Milestone 3A — intent contract and draft compiler
+
+`src/intent.ts` accepts an untrusted structured interpretation and independently
+supplied source/review bounds. It returns `VALID_DRAFT`, `NEEDS_CLARIFICATION` or
+`REJECTED`. A draft is never a trusted mandate; explicit human confirmation is
+still required. No LLM provider, activation/persistence operation or payment route
+is added. Quantity and merchant restrictions remain visible activation blockers
+where M2 lacks enforcement. See [ADR-005](docs/ADR-005-ai-intent-trust-boundary.md)
+for provenance, widening protections and semantic-verification limitations.
+
+## Milestone 3B — Groq interpretation, never authorization
+
+`src/intent-model.ts` connects natural-language source to Groq strict JSON Schema
+output, local 3A validation/compiler, conservative semantic checks and deterministic
+clarification. The model receives only the current source/reference; independent
+review bounds stay local. The output remains an untrusted draft for human review,
+with quantity/merchant activation requirements intact. The model has no
+confirmation/activation or financial route. The AI interprets your intention. It does not grant itself
+permission.
+
+Configure server-side `INTENT_MODEL_PROVIDER=groq`,
+`INTENT_MODEL_NAME=openai/gpt-oss-20b` and an external `GROQ_API_KEY`.
+Standard tests/CI use fake providers or mocked HTTP, require no key and make no
+Groq requests. Optional live interpretation smoke (no payment):
+
+```bash
+RUN_GROQ_SMOKE_TEST=true npm run test:groq:smoke
+```
+
+See [ADR-006](docs/ADR-006-model-intent-integration.md) for the checked free-tier
+model, resource limits, safe failures and semantic limitations. Live smoke has not
+been verified without a runtime credential. Milestone 3C adds the separate authenticated activation boundary described below.
+
+### Milestone 3C domain boundary
+
+“The AI interprets your intention. It does not grant itself permission.”
+
+The server can now persist an intent review, present its exact draft, authenticate an explicit human confirmation through a host-supplied verifier, and atomically activate a trusted mandate. Reviews expire within five minutes and are durably single-use. New activated mandates enforce quantity reservations and exact logical merchant allowlists. No web authentication server or final UI is included; a production host must implement the authentication guarantees in [ADR-007](docs/ADR-007-authenticated-intent-activation.md). Normal tests require no Groq or PayPal credentials. Migration 005 preserves legacy mandate semantics.
+
+### Milestone 3D adversarial trust-boundary review
+
+The full interpretation → authenticated activation → quantity/merchant authorization → signed grant → PayPal/evidence path is exercised with deterministic adversarial inputs and real PostgreSQL concurrency. A reproduced rejection-evidence privacy defect is fixed without changing financial semantics. See [ADR-008](docs/ADR-008-adversarial-trust-boundary-hardening.md) for the attack matrix, executable controls and residual limits.

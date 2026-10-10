@@ -32,6 +32,17 @@ export function canonicalMandate(mandate: Mandate): string {
     createdAt: mandate.createdAt,
     version: mandate.version,
     nonce: mandate.nonce,
+    ...(mandate.quantityLimit === undefined
+      ? {}
+      : { quantityLimit: mandate.quantityLimit }),
+    ...(mandate.merchantScope === undefined
+      ? {}
+      : {
+          merchantScope:
+            mandate.merchantScope.mode === "ANY"
+              ? mandate.merchantScope
+              : { mode: "ONLY", ids: [...mandate.merchantScope.ids].sort() },
+        }),
   };
   return JSON.stringify(stable(securityCritical));
 }
@@ -58,6 +69,9 @@ export function canonicalProposal(proposal: TransactionProposal): string {
       proposedAt: proposal.proposedAt,
       nonce: proposal.nonce,
       metadata: proposal.metadata,
+      ...(proposal.quantity === undefined
+        ? {}
+        : { quantity: proposal.quantity }),
     }),
   );
 }

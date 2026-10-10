@@ -87,3 +87,43 @@ durable rows reread after handoff. PostgreSQL and PayPal have no shared atomic
 transaction; GET plus retry is not atomic and distributed exactly-once execution
 is not claimed. See [ADR-004](ADR-004-integrated-security-boundary.md#formal-revocation-linearization-point)
 for the lock, snapshot, race-test and crash-recovery guarantees.
+
+## Milestone 3A interpretation attacks
+
+Model output and source instructions are untrusted data. Strict schemas reject
+unknown authority fields; proposed/missing/ambiguous constraints and assumptions
+require clarification. Independent structured bounds prevent authority widening.
+Quoted spans preserve provenance but cannot prove arbitrary-language meaning;
+a lying EXPLICIT interpretation still requires authenticated human review before
+activation. Drafts have no identity, signing or persistence/execution capability.
+Quantity/merchant restrictions cannot be dropped into unenforced M2 authority.
+The 3B model provider remains outside authority; no human-confirmation endpoint exists. Source and summaries
+are returned only, not logged/persisted into evidence; future storage requires
+secret redaction and data minimization. See [ADR-005](ADR-005-ai-intent-trust-boundary.md).
+
+## Milestone 3B hostile models and source injection
+
+Groq may ignore instructions, hallucinate explicit support, return malformed or
+schema-shaped unsafe content, refuse or become unavailable. Static system/user
+role separation is a reliability measure; security rests on strict local schema,
+source-span checks, independent review bounds, unchanged deterministic compiler,
+limited semantic checks, required human review and no model-accessible activation API. Fake policy,
+role injection, hidden authority fields and confidence cannot authorize money.
+
+Bounded input/output/time/token/call limits prevent recursive model repair and
+unbounded response buffering. Fixed failure states avoid raw-error/secret leakage;
+keys stay in server-side private memory, redirects are rejected and hidden
+reasoning is neither requested nor retained. Only current source/reference goes
+to Groq; secret minimization in arbitrary human text and provider retention remain
+operational responsibilities. Exact quotes and small English checks are not proof
+of arbitrary semantic faithfulness. Normal CI makes no real model requests.
+See [ADR-006](ADR-006-model-intent-integration.md). M2 revocation, quarantine,
+idempotency and financial finalization remain unchanged.
+
+## Authenticated intent activation (3C)
+
+Model output, `confirmed: true`, client principal IDs, forged context objects, draft hashes and challenges cannot independently activate authority. A trusted external authenticator must verify an explicit human action bound to exact reviewed terms; the domain has no permissive production authentication implementation. Review row locks, one-time lifecycle and security epochs prevent replay and stale activation across instances. Quantity and merchant restrictions are enforced deterministically and included in signed execution bindings. UNKNOWN reservations keep consuming quantity and money. Raw source/provenance in review storage requires deployment access/retention controls. Logical merchant allowlisting does not prove PayPal payee routing. See ADR-007 for external session/CSRF requirements and residual privileged-database risks.
+
+## Milestone 3D adversarial verification
+
+Unauthenticated rejection payloads are attacker-controlled too: activation must not log client-supplied review IDs before authenticating and verifying durable ownership. Regression tests cover this privacy defect alongside generated budget/quantity/merchant attacks, mutation at downstream boundaries, two-pool concurrency and provider effect counters. See [ADR-008](ADR-008-adversarial-trust-boundary-hardening.md); bounded tests do not prove arbitrary language fidelity, host authentication correctness or perfect distributed exactly-once behavior.
