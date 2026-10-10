@@ -131,7 +131,7 @@ run("3C durable human confirmation and commerce accounting", () => {
       merchant: { id: merchantId, displayName: merchantId },
       category: "KEYBOARD",
       condition: "NEW",
-      requestedCapability: "CREATE_ORDER",
+      requestedCapability: "CAPTURE_PAYMENT",
       quantity,
       proposedAt: clock().toISOString(),
       nonce: `proposal-nonce-${id}`,

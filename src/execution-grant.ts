@@ -103,6 +103,7 @@ export class StaticPublicKeyRing implements PublicKeyResolver {
 }
 export interface ExecutionSink {
   readonly finalizesAuthority?: boolean;
+  readonly requiredCapability?: ExecutionGrantClaims["capability"];
   execute(
     claims: ExecutionGrantClaims,
   ): Promise<{ readonly executionId: string }>;
@@ -331,6 +332,24 @@ export class ExecutionBoundary {
       );
     if (!verify(null, Buffer.from(stable(claims)), publicKey, signature))
       return this.verificationFailure(token, "INVALID_GRANT_SIGNATURE", now);
+
+    if (
+      this.sink.requiredCapability &&
+      claims.capability !== this.sink.requiredCapability
+    ) {
+      await this.repo.appendEvidence(
+        "EXECUTION_CAPABILITY_REJECTED",
+        {
+          grantId: claims.jti,
+          reservationId: claims.reservationId,
+          requestedCapability: claims.capability,
+          requiredCapability: this.sink.requiredCapability,
+          reason: "PAYMENT_CAPABILITY_REQUIRED",
+        },
+        now,
+      );
+      throw new Error("PAYMENT_CAPABILITY_REQUIRED");
+    }
 
     try {
       await this.repo.sql.begin(async (tx) => {

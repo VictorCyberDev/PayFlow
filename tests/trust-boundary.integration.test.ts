@@ -193,7 +193,7 @@ run("3D adversarial end-to-end trust boundary", () => {
       },
       category: "KEYBOARD",
       condition: "NEW",
-      requestedCapability: "CREATE_ORDER",
+      requestedCapability: "CAPTURE_PAYMENT",
       proposedAt: clock().toISOString(),
       nonce: `proposal-nonce-${id}`,
       metadata: {},
@@ -523,7 +523,7 @@ run("3D adversarial end-to-end trust boundary", () => {
     [
       "capability",
       (p) => {
-        p.requestedCapability = "CAPTURE_PAYMENT";
+        p.requestedCapability = "CREATE_ORDER";
       },
     ],
     [
