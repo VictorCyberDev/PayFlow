@@ -597,14 +597,30 @@ run("M4B immutable durable commerce (real PostgreSQL)", () => {
     expect(await repo.sql`select * from transaction_proposals`).toHaveLength(1);
   });
   it("single-column quote corruption cannot become financial authorization", async () => {
-    const {q,m} = await sealed(); const p = await service.compileManifestProposal(m.manifestId);
+    const { q, m } = await sealed();
+    const p = await service.compileManifestProposal(m.manifestId);
     await repo.sql`alter table commerce_quotes disable trigger immutable_commerce_quote`;
-    try {await repo.sql`update commerce_quotes set shipping_minor=1,total_minor=8401 where id=${q.quoteId}`;}
-    finally {await repo.sql`alter table commerce_quotes enable trigger immutable_commerce_quote`;}
-    await expect(service.getQuote(q.quoteId)).rejects.toThrow("COMMERCE_QUOTE_CORRUPT");
-    await expect(repo.getProposal(p.id)).rejects.toThrow("COMMERCE_PROPOSAL_LINK_INVALID");
-    await expect(new DurableAuthorizationService(repo).authorizeProposal(p.id,"LOW",checkoutNow)).rejects.toThrow("COMMERCE_PROPOSAL_LINK_INVALID");
-    expect(await repo.sql`select * from authorization_reservations`).toHaveLength(0);
+    try {
+      await repo.sql`update commerce_quotes set shipping_minor=1,total_minor=8401 where id=${q.quoteId}`;
+    } finally {
+      await repo.sql`alter table commerce_quotes enable trigger immutable_commerce_quote`;
+    }
+    await expect(service.getQuote(q.quoteId)).rejects.toThrow(
+      "COMMERCE_QUOTE_CORRUPT",
+    );
+    await expect(repo.getProposal(p.id)).rejects.toThrow(
+      "COMMERCE_PROPOSAL_LINK_INVALID",
+    );
+    await expect(
+      new DurableAuthorizationService(repo).authorizeProposal(
+        p.id,
+        "LOW",
+        checkoutNow,
+      ),
+    ).rejects.toThrow("COMMERCE_PROPOSAL_LINK_INVALID");
+    expect(
+      await repo.sql`select * from authorization_reservations`,
+    ).toHaveLength(0);
   });
   it.each([
     "recipient",
