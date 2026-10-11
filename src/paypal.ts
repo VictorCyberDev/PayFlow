@@ -594,8 +594,8 @@ export class PayPalExecutionRail implements ExecutionSink {
           return "ORDER_CREATE_UNKNOWN";
         }
         try {
-          this.assertOrder(a, created, true);
           if (dispatchCommerce) verifyPayPalCommerce(dispatchCommerce, created);
+          this.assertOrder(a, created, true);
         } catch (error) {
           if (dispatchCommerce)
             await this.commerceMismatch(
@@ -674,13 +674,13 @@ export class PayPalExecutionRail implements ExecutionSink {
       }
       const observedCommerce = await this.commerceTerms(db, a);
       try {
-        this.assertOrder(a, order, true);
         if (observedCommerce)
           verifyPayPalCommerce(
             observedCommerce,
             order,
             order.captures.length > 0,
           );
+        this.assertOrder(a, order, true);
       } catch (error) {
         if (observedCommerce)
           await this.commerceMismatch(db, a, error, currentTime(), order.id);
@@ -721,9 +721,9 @@ export class PayPalExecutionRail implements ExecutionSink {
           return "CAPTURE_UNKNOWN";
         }
         try {
-          this.assertOrder(a, order, false);
           if (observedCommerce)
             verifyPayPalCommerce(observedCommerce, order, true);
+          this.assertOrder(a, order, false);
         } catch (error) {
           if (observedCommerce)
             await this.commerceMismatch(db, a, error, currentTime(), order.id);

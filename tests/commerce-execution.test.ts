@@ -3,6 +3,8 @@ import {
   paypalCommerceRequest,
   verifyPayPalCommerce,
 } from "../src/paypal-commerce.js";
+import { PayPalOAuthClient, PayPalPaymentProvider } from "../src/paypal.js";
+import { vi } from "vitest";
 import type { PayPalOrderView } from "../src/paypal.js";
 import { checkoutFixture } from "./checkout-fixture.js";
 import { proposalDigest } from "../src/canonical.js";
@@ -122,6 +124,78 @@ describe("M4C provider conformance", () => {
       ).toThrow();
     },
   );
+  it("real adapter serializes exact fields and retains provider-attested item/payee data", async () => {
+    const m = checkoutFixture().manifest,
+      request = paypalCommerceRequest(m);
+    let body: Record<string, unknown> | undefined;
+    const fetcher = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        await Promise.resolve();
+        if (
+          (typeof url === "string"
+            ? url
+            : url instanceof URL
+              ? url.href
+              : url.url
+          ).includes("oauth2")
+        )
+          return new Response(
+            JSON.stringify({ access_token: "test-token", expires_in: 3600 }),
+          );
+        if (typeof init?.body !== "string")
+          throw new Error("EXPECTED_JSON_BODY");
+        body = JSON.parse(init.body) as Record<string, unknown>;
+        return new Response(
+          JSON.stringify({
+            id: "ORDER-1",
+            status: "APPROVED",
+            purchase_units: [
+              {
+                reference_id: "proposal",
+                amount: {
+                  value: "84.00",
+                  currency_code: "USD",
+                  breakdown: request.breakdown,
+                },
+                payee: request.payee,
+                custom_id: request.custom_id,
+                items: request.items,
+              },
+            ],
+          }),
+        );
+      },
+    );
+    const provider = new PayPalPaymentProvider(
+      new PayPalOAuthClient("test-client", "test-secret", fetcher),
+      fetcher,
+    );
+    const view = await provider.createOrder({
+      amountValue: "84.00",
+      currency: "USD",
+      merchantReference: "proposal",
+      requestId: "stable-key",
+      commerce: request,
+    });
+    expect(body).toEqual({
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          reference_id: "proposal",
+          amount: {
+            value: "84.00",
+            currency_code: "USD",
+            breakdown: request.breakdown,
+          },
+          payee: request.payee,
+          custom_id: request.custom_id,
+          items: request.items,
+        },
+      ],
+    });
+    expect(() => verifyPayPalCommerce(m, view)).not.toThrow();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it("proposal digest cryptographically includes reserved metadata", () => {
     const { manifest: m } = checkoutFixture();
     const p: TransactionProposal = {

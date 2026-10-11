@@ -435,6 +435,80 @@ class Provider implements PaymentProvider {
       expect(provider.createCalls).toBe(1);
       expect(provider.captureCalls).toBe(1);
     });
+    it("two PostgreSQL recovery workers serialize the same lost capture", async () => {
+      provider.loseCapture = true;
+      await expect(boundary.execute(token, time)).rejects.toThrow();
+      const a = (await repo.sql`select id from payment_attempts`)[0]!;
+      const results = await Promise.all([
+        rail.reconcile(String(a.id), time),
+        new PayPalExecutionRail(other, provider, clock).reconcile(
+          String(a.id),
+          time,
+        ),
+      ]);
+      expect(results).toEqual(["CAPTURED", "CAPTURED"]);
+      expect(provider.createCalls).toBe(1);
+      expect(provider.captureCalls).toBe(1);
+      expect(
+        (await repo.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),
+      ).toHaveLength(1);
+    });
+    it("direct claimed-grant continuation cannot skip corrupt commerce checks", async () => {
+      const append = repo.appendEvidenceInTransaction.bind(repo);
+      vi.spyOn(repo, "appendEvidenceInTransaction").mockImplementation(
+        async (...args) => {
+          if (args[1] === "PAYMENT_ATTEMPT_CREATED") throw new Error("restart");
+          return append(...args);
+        },
+      );
+      await expect(boundary.execute(token, time)).rejects.toThrow();
+      vi.restoreAllMocks();
+      await repo.sql.begin(async (tx) => {
+        await tx`set local session_replication_role='replica'`;
+        await tx`update checkout_manifest_proposals set proposal_digest=${"e".repeat(64)}`;
+      });
+      const claims = JSON.parse(
+        Buffer.from(token.split(".")[0]!, "base64url").toString(),
+      ) as ExecutionGrantClaims;
+      await expect(
+        new PayPalExecutionRail(other, provider, clock).execute(claims),
+      ).rejects.toThrow();
+      expect(provider.createCalls).toBe(0);
+      expect(provider.captureCalls).toBe(0);
+    });
+    it("Show Order cannot substitute a different provider order before capture", async () => {
+      vi.spyOn(provider, "getOrder").mockImplementation(async () => {
+        await Promise.resolve();
+        return { ...provider.order!, id: "ORDER-2" };
+      });
+      await expect(boundary.execute(token, time)).rejects.toThrow();
+      expect(provider.createCalls).toBe(1);
+      expect(provider.captureCalls).toBe(0);
+      expect(
+        String(
+          (
+            await repo.sql`select failure_classification from payment_attempts`
+          )[0]!.failure_classification,
+        ),
+      ).toMatch(/^COMMERCE_/);
+    });
+    it("capture returning a different order never commits success", async () => {
+      const original = provider.captureOrder.bind(provider);
+      vi.spyOn(provider, "captureOrder").mockImplementation(async (id) => ({
+        ...(await original(id)),
+        id: "ORDER-2",
+      }));
+      await expect(boundary.execute(token, time)).rejects.toThrow();
+      expect(provider.createCalls).toBe(1);
+      expect(provider.captureCalls).toBe(1);
+      expect(
+        (await repo.sql`select status from authorization_reservations`)[0]!
+          .status,
+      ).toBe("EXECUTING");
+      expect(
+        (await repo.evidence()).some((e) => e.type === "PAYMENT_COMMITTED"),
+      ).toBe(false);
+    });
     it("direct rail invocation cannot fabricate the durable claim", async () => {
       const claims = JSON.parse(
         Buffer.from(token.split(".")[0]!, "base64url").toString(),

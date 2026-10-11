@@ -72,11 +72,16 @@ export async function commerceExecutionTerms(
     throw new Error("COMMERCE_PROVIDER_RESPONSE_INVALID");
   if (freshAt !== undefined) {
     const head =
-      await db`select h.revision,b.document,b.fingerprint from commerce_merchant_heads h join commerce_merchant_bindings b on b.merchant_id=h.merchant_id and b.revision=h.revision where h.merchant_id=${m.logicalMerchantId} for update of h`;
+      await db`select h.revision,b.*,encode(sha256(convert_to(b.document::text,'UTF8')),'hex') actual_hash from commerce_merchant_heads h join commerce_merchant_bindings b on b.merchant_id=h.merchant_id and b.revision=h.revision where h.merchant_id=${m.logicalMerchantId} for update of h`;
     if (head.length !== 1) throw new Error("COMMERCE_BINDING_STALE");
     const b = MerchantBindingSchema.parse(head[0]!.document);
     if (
       !b.active ||
+      head[0]!.document_hash !== head[0]!.actual_hash ||
+      head[0]!.active !== b.active ||
+      head[0]!.expected_recipient !== b.expectedPayPalMerchantId ||
+      head[0]!.checkout_source_id !== b.checkoutSourceId ||
+      head[0]!.environment !== b.environment ||
       Number(head[0]!.revision) !== m.merchantBindingRevision ||
       merchantBindingFingerprint(b) !== m.merchantBindingFingerprint ||
       head[0]!.fingerprint !== m.merchantBindingFingerprint ||
