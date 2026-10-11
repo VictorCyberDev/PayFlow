@@ -569,7 +569,7 @@ const url = process.env.TEST_DATABASE_URL;
         );
         vi.clearAllMocks();
         const catalog = demoCommerceCatalog();
-        if (attack === "sku") catalog.offers[0]!.sku = "OTHER-SKU";
+        if (attack === "sku") catalog.offers[0]!.sku = "PF-KB-OTHER-SKU";
         if (attack === "variant") catalog.offers[0]!.variant.switchType = "RED";
         if (attack === "offer") catalog.offers[0]!.offerId = "OTHER-OFFER";
         const next = worker(other, catalog),
