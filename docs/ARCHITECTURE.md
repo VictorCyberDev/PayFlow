@@ -127,3 +127,13 @@ positive replay-absence validation, response limits, deployment assumptions and
 M4 entry contract. The AI interprets your intention. It does not grant itself
 permission. This does not claim production login, verified PayPal payee routing,
 privileged-administrator-proof evidence or exactly-once distributed execution.
+
+## M4B durable commerce terms
+
+A source-instance controlled offer and operator binding become an immutable durable
+quote, manifest and ordinary proposal. Migration 006 preserves binding history,
+owner snapshots and unique linkage. Reserved server metadata puts the manifest
+fingerprint inside the existing proposal digest; grant formats remain unchanged.
+The compiler validates projection bounds but never returns a financial decision
+or reserves authority. See [ADR-011](ADR-011-durable-checkout-manifests.md) for lock
+order, expiry, recovery and execution-conformance work deferred beyond M4B.

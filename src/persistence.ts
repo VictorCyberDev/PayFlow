@@ -13,7 +13,20 @@ import {
   type Principal,
   type TransactionProposal,
 } from "./domain.js";
-import { mandateFingerprint } from "./canonical.js";
+import { mandateFingerprint, proposalDigest } from "./canonical.js";
+import {
+  CheckoutManifestSchema,
+  CheckoutQuoteSchema,
+  checkoutManifestFingerprint,
+  checkoutQuoteFingerprint,
+  COMMERCE_METADATA_KEYS,
+  hasCommerceMetadata,
+} from "./checkout-contracts.js";
+import {
+  MerchantBindingSchema,
+  controlledOfferFingerprint,
+  merchantBindingFingerprint,
+} from "./commerce.js";
 
 export const ReservationStatusSchema = z.enum([
   "PENDING",
@@ -229,6 +242,8 @@ export class PostgresTrustRepository {
   }
   async saveProposal(p: TransactionProposal): Promise<void> {
     const v = TransactionProposalSchema.parse(p);
+    if (hasCommerceMetadata(v.metadata))
+      throw new Error("RESERVED_COMMERCE_METADATA");
     await this
       .sql`insert into transaction_proposals(id,mandate_id,agent_id,nonce,amount_minor,currency,document,proposed_at) values(${v.id},${v.mandateId},${v.agentId},${v.nonce},${v.amount.minor},${v.amount.currency},${this.sql.json(v)},${v.proposedAt})`;
   }
@@ -253,6 +268,67 @@ export class PostgresTrustRepository {
       p.amount.currency !== r.currency
     )
       throw new Error("MALFORMED_PERSISTED_PROPOSAL");
+    if (hasCommerceMetadata(p.metadata)) {
+      const links =
+        await db`select l.proposal_digest,m.id commerce_manifest_id,m.document manifest,m.fingerprint manifest_fingerprint,m.document_hash manifest_hash,encode(sha256(convert_to(m.document::text,'UTF8')),'hex') actual_manifest_hash,q.document quote,q.id quote_id,q.principal_id commerce_principal_id,q.agent_id commerce_agent_id,q.mandate_id commerce_mandate_id,q.mandate_fingerprint commerce_mandate_fingerprint,q.merchant_id commerce_merchant_id,q.binding_revision commerce_binding_revision,q.binding_fingerprint commerce_binding_fingerprint,q.fingerprint quote_fingerprint,q.offer_document,b.document binding,b.fingerprint binding_fingerprint from checkout_manifest_proposals l join checkout_manifests m on m.id=l.manifest_id join commerce_quotes q on q.id=m.quote_id join commerce_merchant_bindings b on b.merchant_id=q.merchant_id and b.revision=q.binding_revision where l.proposal_id=${p.id}`;
+      if (links.length !== 1) throw new Error("COMMERCE_PROPOSAL_LINK_INVALID");
+      const link = row(links[0]),
+        m = CheckoutManifestSchema.parse(link.manifest),
+        q = CheckoutQuoteSchema.parse(link.quote),
+        b = MerchantBindingSchema.parse(link.binding);
+      const expectedMetadata = {
+        [COMMERCE_METADATA_KEYS.id]: m.manifestId,
+        [COMMERCE_METADATA_KEYS.version]: m.version,
+        [COMMERCE_METADATA_KEYS.fingerprint]: checkoutManifestFingerprint(m),
+      };
+      const { version: quoteVersion, expiresAt: quoteExpiresAt, ...terms } = q;
+      const expectedManifest = {
+        ...terms,
+        version: m.version,
+        manifestId: m.manifestId,
+        quoteVersion,
+        quoteExpiresAt,
+        owner: m.owner,
+        expectedPayPalMerchantId: b.expectedPayPalMerchantId,
+        environment: b.environment,
+      };
+      if (
+        m.manifestId !== link.commerce_manifest_id ||
+        m.logicalMerchantId !== link.commerce_merchant_id ||
+        m.merchantBindingRevision !==
+          asNumber(link.commerce_binding_revision) ||
+        m.merchantBindingFingerprint !== link.commerce_binding_fingerprint ||
+        m.quoteId !== link.quote_id ||
+        q.quoteId !== link.quote_id ||
+        m.owner.principalId !== link.commerce_principal_id ||
+        m.owner.agentId !== link.commerce_agent_id ||
+        m.owner.mandateId !== link.commerce_mandate_id ||
+        m.owner.mandateFingerprint !== link.commerce_mandate_fingerprint ||
+        canonical(p.metadata) !== canonical(expectedMetadata) ||
+        proposalDigest(p) !== link.proposal_digest ||
+        checkoutManifestFingerprint(m) !== link.manifest_fingerprint ||
+        checkoutManifestFingerprint(expectedManifest) !==
+          link.manifest_fingerprint ||
+        checkoutQuoteFingerprint(q) !== link.quote_fingerprint ||
+        controlledOfferFingerprint(link.offer_document) !==
+          q.controlledOfferFingerprint ||
+        merchantBindingFingerprint(b) !== link.binding_fingerprint ||
+        m.merchantBindingFingerprint !== link.binding_fingerprint ||
+        m.merchantBindingRevision !== b.bindingRevision ||
+        link.manifest_hash !== link.actual_manifest_hash ||
+        p.mandateId !== m.owner.mandateId ||
+        p.agentId !== m.owner.agentId ||
+        p.mandateFingerprint !== m.owner.mandateFingerprint ||
+        p.amount.minor !== m.totalMinor ||
+        p.amount.currency !== m.currency ||
+        p.quantity !== m.quantity ||
+        p.condition !== m.condition ||
+        p.category !== "KEYBOARD" ||
+        p.merchant.id !== m.logicalMerchantId ||
+        p.requestedCapability !== "CAPTURE_PAYMENT"
+      )
+        throw new Error("COMMERCE_PROPOSAL_LINK_INVALID");
+    }
     return p;
   }
   async claimReplay(

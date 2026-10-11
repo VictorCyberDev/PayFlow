@@ -135,3 +135,14 @@ positive replay-absence validation, response limits, deployment assumptions and
 M4 entry contract. The AI interprets your intention. It does not grant itself
 permission. This does not claim production login, verified PayPal payee routing,
 privileged-administrator-proof evidence or exactly-once distributed execution.
+
+## M4B controlled checkout binding
+
+`DurableCheckoutService` issues complete controlled Sandbox quotes, seals immutable
+manifests and links them to ordinary proposals through server-owned metadata.
+Merchant-binding and offer fingerprints, exact SKU/variant/condition/quantity,
+recipient expectation and complete payable charges survive restart. Quotes expire
+within five minutes; changed terms require a new lifecycle. This creates no
+financial permission and makes no provider calls. Normal authorization is still
+required. Recipient/item conformance and payer approval are not implemented here.
+See [ADR-011](docs/ADR-011-durable-checkout-manifests.md).

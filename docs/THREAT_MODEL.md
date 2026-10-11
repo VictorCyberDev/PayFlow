@@ -141,3 +141,15 @@ positive replay-absence validation, response limits, deployment assumptions and
 M4 entry contract. The AI interprets your intention. It does not grant itself
 permission. This does not claim production login, verified PayPal payee routing,
 privileged-administrator-proof evidence or exactly-once distributed execution.
+
+## M4B quote and manifest boundary
+
+Copied/parsed/foreign offers, discovery observations and reserved caller metadata
+cannot establish checkout provenance. Immutable snapshots and revision history
+prevent current catalog/binding changes from reinterpreting sealed terms. Strict
+arithmetic and complete charge fields prevent hidden totals; read-time fingerprint
+and relationship checks detect corruption. Quote locks serialize sealing/linking;
+observed expiry is durable and survives clock rollback. These controls do not
+prove external commerce truth or withstand privileged administrators rewriting
+all records/constraints. Host authentication and execution-time recipient/item
+conformance remain separate requirements. See [ADR-011](ADR-011-durable-checkout-manifests.md).
