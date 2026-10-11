@@ -182,3 +182,8 @@ the existing provider boundary, with zero live AI/discovery/PayPal calls.
 
 No arbitrary retailer checkout, physical availability/fulfillment/authenticity
 proof, production authentication, real AI provider integration or M4F UI is added.
+
+CI preserves only coverage-summary.json and a bounded count/head-SHA report as a
+seven-day GitHub Actions artifact for independent review. Raw test/provider/model
+payloads are not included. The mandatory validation steps and PostgreSQL 17 service
+remain in place; JSON reporters run alongside the normal test reporter.
