@@ -513,13 +513,43 @@ import {
   });
   it("persists only secret digest and bounded evidence", async () => {
     approve();
-    await resume();
+    const assertion = "opaque-human-assertion-m4d-never-persist";
+    const authenticated = new HumanConfirmationBoundary(
+      {
+        verify: async (proof, binding) => {
+          await Promise.resolve();
+          expect(proof).toBe(assertion);
+          expect(binding).toMatchObject({
+            action: "RESUME_PAYMENT",
+            paymentAttemptId: attemptId,
+            paypalOrderId: "ORDER-1",
+            proposalId,
+            challengeHash: paymentResumeDigest(secret),
+          });
+          return {
+            principalId: "commerce-p",
+            actor: "HUMAN",
+            authenticatedAt: time,
+            expiresAt: new Date(Date.parse(time) + 300000).toISOString(),
+          };
+        },
+      },
+      () => new Date(time),
+    );
+    expect(
+      await new PaymentResumeService(
+        repo,
+        authenticated,
+        rail,
+        () => new Date(time),
+      ).resume({ resumeSecret: secret }, assertion),
+    ).toBe("CAPTURED");
     const rows = await repo.sql`select * from payment_resume_capabilities`;
     expect(rows[0]!.secret_digest).toBe(paymentResumeDigest(secret));
     expect(JSON.stringify(rows)).not.toContain(secret);
     const evidence = JSON.stringify(await repo.evidence());
     expect(evidence).not.toContain(secret);
-    expect(evidence).not.toContain("assertion");
+    expect(evidence).not.toContain(assertion);
     expect(evidence).not.toContain("checkoutnow");
     expect(evidence).not.toContain("Authorization");
     await unchanged();
