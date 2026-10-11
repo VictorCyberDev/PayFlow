@@ -165,3 +165,19 @@ before any new capture. Revocation or expiry during approval prevents new financ
 dispatch. Already-existing conforming captures remain truthfully reconcilable.
 No authority is automatically renewed. Host browser sessions/login remain outside
 this repository. See [ADR-013](docs/ADR-013-secure-payer-approval-resumption.md).
+
+### M4E discovery and bounded ranking
+
+External discovery is untrusted evidence. PayFlow normalizes each offer separately,
+filters it deterministically, and gives the ranker only eligible request-scoped
+candidates. Model output contains a candidate ID and optional bounded explanation;
+local membership validation rejects invented IDs and extra authority fields.
+
+Only explicit operator mappings can resolve selected Demo Merchant observations
+to independently loaded controlled offers. Unmapped retailers remain
+**DISCOVERY_ONLY**: no silent Demo Merchant substitution. Discovery prices are
+observations; fresh M4B quotes supply executable price and merchant terms. Selected
+provenance is bounded, immutable, fingerprinted and verified on restart. Channel3
+and real LLM adapters remain pending; normal validation makes no live provider calls.
+See [ADR-014](docs/ADR-014-untrusted-discovery-bounded-ranking.md) for bounds,
+mapping revisions, corruption checks and security claim limits.

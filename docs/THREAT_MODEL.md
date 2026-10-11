@@ -186,3 +186,29 @@ successful dispatch transaction COMMIT remains the revocation cutoff. Already
 executed conforming financial effects remain truthfully reconcilable after expiry.
 See [ADR-013](ADR-013-secure-payer-approval-resumption.md) for capability lifetime,
 provider omissions, trusted host assumptions and distributed execution limitations.
+
+## M4E discovery and ranking attacks
+
+| Attack                                                         | Local control                                                                          | Result                                                     |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Prompt instructions in provider title/snippet/merchant         | Data-only bounded fields; deterministic eligibility and strict membership              | Text cannot create financial authority                     |
+| USED/UNKNOWN described as new                                  | Exact enumerated offer-level normalization                                             | NEW-only ranking excludes these offers                     |
+| Invented or ineligible candidate ID                            | Exact current request candidate set                                                    | No controlled offer loading or downstream financial calls  |
+| Cross-request candidate replay, including restart              | Fresh request UUID, candidate digest and immutable persisted request binding           | Other-context candidate rejected                           |
+| Model adds amount/merchant/SKU/authorized fields               | Strict flat output schema and byte bounds                                              | Entire ranking result rejected                             |
+| Discovery $84 replaces trusted $184, or hides shipping         | Independent controlled handle and complete M4B quote; existing budget checks/Kernel    | Executable terms use trusted total, not observed price     |
+| Merchant display/title/price impersonates Demo Merchant        | Explicit operator source-local mapping and pinned identity                             | No promotion without mapping                               |
+| External retailer silently routed to Demo Merchant             | Mapping restricted to named Demo observations; DISCOVERY_ONLY mode                     | No retailer execution claim or substituted checkout        |
+| Mapping revision repoints old selection                        | Pinned mapping ID/revision/fingerprint, independent reload                             | Historical selection cannot be reinterpreted               |
+| Persisted condition/variant/price/provider/identity corruption | Domain-separated canonical fingerprints, strict parsing, redundant relationship checks | Fail before quote/manifest/proposal/authorization/provider |
+| Oversized provider response or model output                    | Aggregate byte/node/count/text/provenance/reference/input limits                       | Entire overflowing provider response/result rejected       |
+| Malformed sibling offer contaminates valid offer               | Independent normalization; duplicate identities discarded                              | No inferred condition/price/merchant/availability defaults |
+| Provider refresh alters an old selected observation            | Immutable durable snapshot; no discovery refetch on resolution                         | Historical selection stays unchanged                       |
+| Duplicate resolution from independent workers                  | Selection advisory lock and unique immutable quote link                                | Concurrent normal callers reuse one quote                  |
+
+Prompt injection is not claimed impossible. Deterministic boundaries prevent
+provider/model output from directly becoming authority. Adapter code and operator
+mapping configuration remain trusted host composition. Channel3/real LLM live
+integration and production authentication are not implemented. Discovery does not
+prove inventory, fulfillment, authenticity, merchant legal identity or guaranteed
+checkout price. See [ADR-014](ADR-014-untrusted-discovery-bounded-ranking.md).

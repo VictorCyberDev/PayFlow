@@ -159,3 +159,23 @@ provider state, not PayFlow authority. The rail itself checks current authority
 before every new capture, including direct reconciliation. Completed captures can
 still be observed after revocation/expiry. See [ADR-013](ADR-013-secure-payer-approval-resumption.md)
 for host session duties, failure states and the short grant lifetime.
+
+## M4E discovery to controlled checkout
+
+`CommerceDiscoveryProvider` supplies untrusted offer-level observations. The engine
+bounds complete responses before strict normalization, filters conditions, observed
+price/currency, availability, variant and configured checkout eligibility, then
+passes only the bounded eligible set to `CommerceRanker`. The model returns only
+`candidateId` and optional explanation. Membership is scoped to one fresh request;
+invalid output fails before controlled offer resolution.
+
+`ControlledDiscoveryResolver` reads immutable operator mapping ID/revision and
+reloads a branded offer from the trusted controlled source. `DiscoveryCheckoutService`
+persists bounded immutable selection provenance, verifies it on restart, and
+serializes quote resolution across PostgreSQL workers. No discovery refresh can
+reinterpret a historical selection or mapping revision. The current controlled
+price supplies the normal M4B quote, manifest and proposal; the existing Kernel,
+signed grant, M4C conformance and M4D payer-resume boundaries remain authoritative.
+Unmapped external retailers stay discovery-only. [ADR-014](ADR-014-untrusted-discovery-bounded-ranking.md)
+defines complete limits and the crash window that can leave an unlinked, unauthorized
+quote between quote issuance and provenance linking.
