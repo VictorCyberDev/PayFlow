@@ -74,7 +74,7 @@ run("M4B immutable durable commerce (real PostgreSQL)", () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
     time = new Date(checkoutNow);
-    await repo.sql`truncate principals,evidence_events restart identity cascade`;
+    await repo.sql`truncate principals,evidence_events,commerce_merchant_bindings restart identity cascade`;
     const f = checkoutAuthority();
     await repo.savePrincipal({
       id: f.mandate.principalId,
@@ -181,6 +181,15 @@ run("M4B immutable durable commerce (real PostgreSQL)", () => {
     expect(await repo.sql`select * from commerce_quotes`).toHaveLength(0);
   });
   it("availability cannot widen human quantity authority", async () => {
+    const f = checkoutAuthority();
+    const m = {
+      ...f.mandate,
+      maxSingleTransactionMinor: 84000,
+      cumulativeLimitMinor: 84000,
+      autonomousPurchaseThresholdMinor: 84000,
+      humanApprovalThresholdMinor: 84000,
+    };
+    await repo.sql`update mandates set document=${repo.sql.json(m)},fingerprint=${mandateFingerprint(m)},cumulative_limit_minor=${m.cumulativeLimitMinor} where id=${m.id}`;
     await expect(service.issueQuote(offer(), "commerce-m", 10)).rejects.toThrow(
       "QUANTITY_EXHAUSTED",
     );
@@ -586,6 +595,16 @@ run("M4B immutable durable commerce (real PostgreSQL)", () => {
       }),
     ).rejects.toThrow("COMMERCE_PROPOSAL_LINK_INVALID");
     expect(await repo.sql`select * from transaction_proposals`).toHaveLength(1);
+  });
+  it("single-column quote corruption cannot become financial authorization", async () => {
+    const {q,m} = await sealed(); const p = await service.compileManifestProposal(m.manifestId);
+    await repo.sql`alter table commerce_quotes disable trigger immutable_commerce_quote`;
+    try {await repo.sql`update commerce_quotes set shipping_minor=1,total_minor=8401 where id=${q.quoteId}`;}
+    finally {await repo.sql`alter table commerce_quotes enable trigger immutable_commerce_quote`;}
+    await expect(service.getQuote(q.quoteId)).rejects.toThrow("COMMERCE_QUOTE_CORRUPT");
+    await expect(repo.getProposal(p.id)).rejects.toThrow("COMMERCE_PROPOSAL_LINK_INVALID");
+    await expect(new DurableAuthorizationService(repo).authorizeProposal(p.id,"LOW",checkoutNow)).rejects.toThrow("COMMERCE_PROPOSAL_LINK_INVALID");
+    expect(await repo.sql`select * from authorization_reservations`).toHaveLength(0);
   });
   it.each([
     "recipient",

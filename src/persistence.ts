@@ -270,7 +270,7 @@ export class PostgresTrustRepository {
       throw new Error("MALFORMED_PERSISTED_PROPOSAL");
     if (hasCommerceMetadata(p.metadata)) {
       const links =
-        await db`select l.proposal_digest,m.id commerce_manifest_id,m.document manifest,m.fingerprint manifest_fingerprint,m.document_hash manifest_hash,encode(sha256(convert_to(m.document::text,'UTF8')),'hex') actual_manifest_hash,q.document quote,q.id quote_id,q.principal_id commerce_principal_id,q.agent_id commerce_agent_id,q.mandate_id commerce_mandate_id,q.mandate_fingerprint commerce_mandate_fingerprint,q.merchant_id commerce_merchant_id,q.binding_revision commerce_binding_revision,q.binding_fingerprint commerce_binding_fingerprint,q.fingerprint quote_fingerprint,q.offer_document,b.document binding,b.fingerprint binding_fingerprint from checkout_manifest_proposals l join checkout_manifests m on m.id=l.manifest_id join commerce_quotes q on q.id=m.quote_id join commerce_merchant_bindings b on b.merchant_id=q.merchant_id and b.revision=q.binding_revision where l.proposal_id=${p.id}`;
+        await db`select l.proposal_digest,m.id commerce_manifest_id,m.document manifest,m.fingerprint manifest_fingerprint,m.document_hash manifest_hash,encode(sha256(convert_to(m.document::text,'UTF8')),'hex') actual_manifest_hash,q.document quote,q.id quote_id,q.principal_id commerce_principal_id,q.agent_id commerce_agent_id,q.mandate_id commerce_mandate_id,q.mandate_fingerprint commerce_mandate_fingerprint,q.merchant_id commerce_merchant_id,q.binding_revision commerce_binding_revision,q.binding_fingerprint commerce_binding_fingerprint,q.fingerprint quote_fingerprint,q.quantity commerce_quantity,q.unit_minor commerce_unit_minor,q.subtotal_minor commerce_subtotal_minor,q.tax_minor commerce_tax_minor,q.shipping_minor commerce_shipping_minor,q.discount_minor commerce_discount_minor,q.fee_minor commerce_fee_minor,q.total_minor commerce_total_minor,q.currency commerce_currency,q.quoted_at commerce_quoted_at,q.expires_at commerce_expires_at,q.document_hash quote_hash,encode(sha256(convert_to(q.document::text,'UTF8')),'hex') actual_quote_hash,q.offer_document,q.offer_document_hash offer_hash,encode(sha256(convert_to(q.offer_document::text,'UTF8')),'hex') actual_offer_hash,b.document binding,b.fingerprint binding_fingerprint from checkout_manifest_proposals l join checkout_manifests m on m.id=l.manifest_id join commerce_quotes q on q.id=m.quote_id join commerce_merchant_bindings b on b.merchant_id=q.merchant_id and b.revision=q.binding_revision where l.proposal_id=${p.id}`;
       if (links.length !== 1) throw new Error("COMMERCE_PROPOSAL_LINK_INVALID");
       const link = row(links[0]),
         m = CheckoutManifestSchema.parse(link.manifest),
@@ -310,6 +310,19 @@ export class PostgresTrustRepository {
         checkoutManifestFingerprint(expectedManifest) !==
           link.manifest_fingerprint ||
         checkoutQuoteFingerprint(q) !== link.quote_fingerprint ||
+        link.quote_hash !== link.actual_quote_hash ||
+        link.offer_hash !== link.actual_offer_hash ||
+        q.currency !== link.commerce_currency ||
+        q.quotedAt !== persistedDate(link.commerce_quoted_at).toISOString() ||
+        q.expiresAt !== persistedDate(link.commerce_expires_at).toISOString() ||
+        q.quantity !== asNumber(link.commerce_quantity) ||
+        q.unitAmountMinor !== asNumber(link.commerce_unit_minor) ||
+        q.subtotalMinor !== asNumber(link.commerce_subtotal_minor) ||
+        q.taxMinor !== asNumber(link.commerce_tax_minor) ||
+        q.shippingMinor !== asNumber(link.commerce_shipping_minor) ||
+        q.customerDiscountMinor !== asNumber(link.commerce_discount_minor) ||
+        q.customerFeeMinor !== asNumber(link.commerce_fee_minor) ||
+        q.totalMinor !== asNumber(link.commerce_total_minor) ||
         controlledOfferFingerprint(link.offer_document) !==
           q.controlledOfferFingerprint ||
         merchantBindingFingerprint(b) !== link.binding_fingerprint ||
