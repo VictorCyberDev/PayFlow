@@ -6,6 +6,15 @@ import { mandateFingerprint, proposalDigest } from "./canonical.js";
 import { ExecutionQuarantinedError } from "./execution-outcome.js";
 import { persistedDate, type PostgresTrustRepository } from "./persistence.js";
 
+import { commerceExecutionTerms } from "./commerce-execution.js";
+import {
+  paypalCommerceRequest,
+  verifyPayPalCommerce,
+  type PayPalCommerceRequest,
+  type PayPalCommerceItem,
+} from "./paypal-commerce.js";
+import type { CheckoutManifest } from "./checkout-contracts.js";
+
 const BASE = "https://api-m.sandbox.paypal.com";
 const PRECISION: Readonly<Record<string, number>> = {
   USD: 2,
@@ -51,12 +60,17 @@ export interface PayPalOrderView {
     referenceId: string;
     amountValue?: string;
     currency?: string;
+    payeeMerchantId?: string;
+    customId?: string;
+    items?: readonly PayPalCommerceItem[];
+    breakdown?: PayPalCommerceRequest["breakdown"];
   }[];
   readonly captures: readonly {
     id: string;
     status: string;
     amountValue: string;
     currency: string;
+    orderId?: string;
   }[];
 }
 export interface PaymentProvider {
@@ -65,6 +79,7 @@ export interface PaymentProvider {
     currency: string;
     merchantReference: string;
     requestId: string;
+    commerce?: PayPalCommerceRequest;
   }): Promise<PayPalOrderView>;
   getOrder(orderId: string): Promise<PayPalOrderView>;
   captureOrder(orderId: string, requestId: string): Promise<PayPalOrderView>;
@@ -119,7 +134,38 @@ const orderSchema = z.object({
       z.object({
         reference_id: z.string().min(1),
         amount: z
-          .object({ value: z.string(), currency_code: z.string() })
+          .object({
+            value: z.string(),
+            currency_code: z.string(),
+            breakdown: z
+              .record(
+                z.object({
+                  value: z.string().max(32),
+                  currency_code: z.string().max(3),
+                }),
+              )
+              .optional(),
+          })
+          .optional(),
+        payee: z
+          .object({ merchant_id: z.string().max(64).optional() })
+          .optional(),
+        custom_id: z.string().max(256).optional(),
+        items: z
+          .array(
+            z.object({
+              name: z.string().max(127),
+              description: z.string().max(127).optional(),
+              sku: z.string().max(127).optional(),
+              quantity: z.string().max(16),
+              unit_amount: z.object({
+                value: z.string().max(32),
+                currency_code: z.string().max(3),
+              }),
+              category: z.string().max(32).optional(),
+            }),
+          )
+          .max(100)
           .optional(),
         payments: z
           .object({
@@ -132,6 +178,13 @@ const orderSchema = z.object({
                     value: z.string(),
                     currency_code: z.string(),
                   }),
+                  supplementary_data: z
+                    .object({
+                      related_ids: z
+                        .object({ order_id: z.string().max(64).optional() })
+                        .optional(),
+                    })
+                    .optional(),
                 }),
               )
               .optional(),
@@ -218,6 +271,7 @@ export class PayPalPaymentProvider implements PaymentProvider {
     currency: string;
     merchantReference: string;
     requestId: string;
+    commerce?: PayPalCommerceRequest;
   }): Promise<PayPalOrderView> {
     return this.call(
       "POST",
@@ -228,7 +282,18 @@ export class PayPalPaymentProvider implements PaymentProvider {
         purchase_units: [
           {
             reference_id: i.merchantReference,
-            amount: { currency_code: i.currency, value: i.amountValue },
+            amount: {
+              currency_code: i.currency,
+              value: i.amountValue,
+              ...(i.commerce ? { breakdown: i.commerce.breakdown } : {}),
+            },
+            ...(i.commerce
+              ? {
+                  payee: i.commerce.payee,
+                  custom_id: i.commerce.custom_id,
+                  items: i.commerce.items,
+                }
+              : {}),
           },
         ],
       },
@@ -314,6 +379,9 @@ export class PayPalPaymentProvider implements PaymentProvider {
           status: c.status,
           amountValue: c.amount.value,
           currency: c.amount.currency_code,
+          ...(c.supplementary_data?.related_ids?.order_id
+            ? { orderId: c.supplementary_data.related_ids.order_id }
+            : {}),
         })) ?? [];
     const payerActionUrl = p.links?.find(
       (l) => l.rel === "payer-action" || l.rel === "approve",
@@ -323,6 +391,21 @@ export class PayPalPaymentProvider implements PaymentProvider {
       status: p.status,
       purchaseUnits: (p.purchase_units ?? []).map((u) => ({
         referenceId: u.reference_id,
+        ...(u.payee?.merchant_id
+          ? { payeeMerchantId: u.payee.merchant_id }
+          : {}),
+        ...(u.custom_id ? { customId: u.custom_id } : {}),
+        ...(u.items
+          ? {
+              items: u.items.map((item) => ({
+                ...item,
+                description: item.description ?? "",
+                sku: item.sku ?? "",
+                category: item.category ?? "",
+              })) as PayPalCommerceItem[],
+            }
+          : {}),
+        ...(u.amount?.breakdown ? { breakdown: u.amount.breakdown } : {}),
         ...(u.amount
           ? { amountValue: u.amount.value, currency: u.amount.currency_code }
           : {}),
@@ -430,6 +513,10 @@ export class PayPalExecutionRail implements ExecutionSink {
         await db`select * from payment_attempts where id=${attemptId}`;
       if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
       let a = asRow(rows[0]);
+      if (String(a.failure_classification).startsWith("COMMERCE_"))
+        throw new ExecutionQuarantinedError(
+          "COMMERCE_PROVIDER_MISMATCH_QUARANTINED",
+        );
       let capability: unknown;
       if (["FAILED", "CANCELLED"].includes(String(a.status)))
         return String(a.status);
@@ -472,11 +559,19 @@ export class PayPalExecutionRail implements ExecutionSink {
         )
           throw new Error("PAYMENT_ATTEMPT_ORDER_MISSING");
         if (!this.retryWindow(a, now)) return String(a.status);
-        await this.dispatch(db, a, "ORDER_CREATING", currentTime);
+        const dispatchCommerce = await this.dispatch(
+          db,
+          a,
+          "ORDER_CREATING",
+          currentTime,
+        );
         a = { ...a, status: "ORDER_CREATING" };
         let created: PayPalOrderView;
         try {
           created = await this.provider.createOrder({
+            ...(dispatchCommerce
+              ? { commerce: paypalCommerceRequest(dispatchCommerce) }
+              : {}),
             amountValue: paypalMoney(
               Number(a.amount_minor),
               String(a.currency),
@@ -500,7 +595,16 @@ export class PayPalExecutionRail implements ExecutionSink {
         }
         try {
           this.assertOrder(a, created, true);
+          if (dispatchCommerce) verifyPayPalCommerce(dispatchCommerce, created);
         } catch (error) {
+          if (dispatchCommerce)
+            await this.commerceMismatch(
+              db,
+              a,
+              error,
+              currentTime(),
+              created.id,
+            );
           await this.reconciliationState(
             db,
             a,
@@ -522,6 +626,18 @@ export class PayPalExecutionRail implements ExecutionSink {
           this.assertUnchanged(a, current);
           await this.assertAuthority(tx, current);
           const observedAt = currentTime();
+          if (dispatchCommerce)
+            await this.repo.appendEvidenceInTransaction(
+              tx,
+              "COMMERCE_PROVIDER_ORDER_VERIFIED",
+              {
+                paymentAttemptId: attemptId,
+                manifestId: dispatchCommerce.manifestId,
+                paypalOrderId: created.id,
+                recipient: "VERIFIED",
+              },
+              observedAt,
+            );
           const changed =
             await tx`update payment_attempts set provider_order_id=${created.id},provider_status=${created.status},payer_action_url=${created.payerActionUrl ?? null},status=${status},last_reconciled_at=${observedAt},updated_at=${observedAt} where id=${attemptId} and status=${String(a.status)} returning id`;
           if (changed.length !== 1)
@@ -556,7 +672,20 @@ export class PayPalExecutionRail implements ExecutionSink {
           throw new Error("PAYPAL_FINALIZED_ORDER_UNVERIFIED");
         return String(a.status);
       }
-      this.assertOrder(a, order, true);
+      const observedCommerce = await this.commerceTerms(db, a);
+      try {
+        this.assertOrder(a, order, true);
+        if (observedCommerce)
+          verifyPayPalCommerce(
+            observedCommerce,
+            order,
+            order.captures.length > 0,
+          );
+      } catch (error) {
+        if (observedCommerce)
+          await this.commerceMismatch(db, a, error, currentTime(), order.id);
+        throw error;
+      }
       if (order.captures.length === 0) {
         // APPROVED + a fully bound single purchase unit + no captures is the
         // only automatic retry condition. COMPLETED without capture is unknown.
@@ -593,7 +722,11 @@ export class PayPalExecutionRail implements ExecutionSink {
         }
         try {
           this.assertOrder(a, order, false);
+          if (observedCommerce)
+            verifyPayPalCommerce(observedCommerce, order, true);
         } catch (error) {
+          if (observedCommerce)
+            await this.commerceMismatch(db, a, error, currentTime(), order.id);
           await this.reconciliationState(
             db,
             a,
@@ -631,6 +764,9 @@ export class PayPalExecutionRail implements ExecutionSink {
         this.assertUnchanged(a, current);
         await this.assertAuthority(tx, current, current.status === "CAPTURED");
         this.assertOrder(current, order, false);
+        const committedCommerce = await this.commerceTerms(tx, current);
+        if (committedCommerce)
+          verifyPayPalCommerce(committedCommerce, order, true);
         this.assertBinding(current, cap);
         if (current.status === "CAPTURED") {
           if (
@@ -693,13 +829,17 @@ export class PayPalExecutionRail implements ExecutionSink {
     a: Record<string, unknown>,
     status: string,
     currentTime: () => string,
-  ): Promise<void> {
-    await this.reconciliationTransaction(db, async (tx) => {
+  ): Promise<CheckoutManifest | undefined> {
+    return this.reconciliationTransaction(db, async (tx) => {
       const rows =
         await tx`select * from payment_attempts where id=${String(a.id)} for update`;
       if (!rows[0]) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
       const current = asRow(rows[0]);
       this.assertUnchanged(a, current);
+      if (String(current.failure_classification).startsWith("COMMERCE_"))
+        throw new ExecutionQuarantinedError(
+          "COMMERCE_PROVIDER_MISMATCH_QUARANTINED",
+        );
       await this.assertAuthority(tx, current);
       const grants =
         await tx`select * from execution_grants where id=${String(a.grant_id)}`;
@@ -722,6 +862,7 @@ export class PayPalExecutionRail implements ExecutionSink {
       const reservations =
         await tx`select expires_at from authorization_reservations where id=${String(a.reservation_id)}`;
       const now = currentTime();
+      const commerce = await this.commerceTerms(tx, current, now);
       if (!this.retryWindow(a, now))
         throw new Error("PAYPAL_RETRY_WINDOW_EXPIRED");
       if (
@@ -761,11 +902,28 @@ export class PayPalExecutionRail implements ExecutionSink {
         { paymentAttemptId: String(a.id), status },
         now,
       );
+      if (commerce)
+        await this.repo.appendEvidenceInTransaction(
+          tx,
+          "COMMERCE_EXECUTION_VERIFIED",
+          {
+            paymentAttemptId: String(a.id),
+            manifestId: commerce.manifestId,
+            proposalDigest: String(g.proposal_digest),
+            merchantBindingFingerprint: commerce.merchantBindingFingerprint,
+          },
+          now,
+        );
       // Ledger serialization can wait after authority validation. Recheck time
       // after that final lock/write so a delayed handoff rolls back on expiry.
       const handoffTime = currentTime();
       if (!this.retryWindow(a, handoffTime))
         throw new Error("PAYPAL_RETRY_WINDOW_EXPIRED");
+      if (
+        commerce &&
+        Date.parse(handoffTime) >= Date.parse(commerce.quoteExpiresAt)
+      )
+        throw new Error("COMMERCE_QUOTE_EXPIRED");
       if (
         Date.parse(handoffTime) >= Date.parse(agent.expiresAt) ||
         Date.parse(handoffTime) >= Date.parse(mandate.expiresAt) ||
@@ -774,6 +932,7 @@ export class PayPalExecutionRail implements ExecutionSink {
           persistedDate(reservations[0]?.expires_at).getTime()
       )
         throw new Error("PAYMENT_AUTHORITY_NOT_CURRENT");
+      return commerce;
     });
   }
   async claimedGrantsWithoutAttempts(): Promise<readonly string[]> {
@@ -949,6 +1108,7 @@ export class PayPalExecutionRail implements ExecutionSink {
       String(r.id),
       tx,
     );
+    await this.commerceTerms(tx, a);
     await this.repo.assertReceiptProposal(String(g.receipt_id), proposal, tx);
     await this.repo.assertGrantSnapshot(String(g.id), tx);
     const claim =
@@ -1101,6 +1261,58 @@ export class PayPalExecutionRail implements ExecutionSink {
         now,
       );
       return a;
+    });
+  }
+  private async commerceTerms(
+    db: Sql,
+    a: Record<string, unknown>,
+    freshAt?: string,
+  ): Promise<CheckoutManifest | undefined> {
+    const rows =
+      await db`select * from execution_grants where id=${String(a.grant_id)}`;
+    const g = asRow(rows[0]);
+    return commerceExecutionTerms(
+      this.repo,
+      db,
+      {
+        proposalId: String(g.proposal_id),
+        proposalDigest: String(g.proposal_digest),
+        principalId: String(g.principal_id),
+        agentId: String(g.agent_id),
+        mandateId: String(g.mandate_id),
+        mandateFingerprint: String(g.mandate_fingerprint),
+        capability: g.capability as ExecutionGrantClaims["capability"],
+      },
+      freshAt,
+    );
+  }
+  private async commerceMismatch(
+    db: Sql,
+    a: Record<string, unknown>,
+    error: unknown,
+    now: string,
+    orderId: string,
+  ): Promise<void> {
+    const reason =
+      error instanceof PayPalProviderError &&
+      /^COMMERCE_[A-Z_]+$/.test(error.message)
+        ? error.message
+        : "COMMERCE_PROVIDER_RESPONSE_INVALID";
+    await this.reconciliationTransaction(db, async (tx) => {
+      const changed =
+        await tx`update payment_attempts set failure_classification=${reason},updated_at=${now} where id=${String(a.id)} and status=${String(a.status)} returning id`;
+      if (changed.length !== 1)
+        throw new Error("PAYMENT_FINALIZATION_STATE_INVALID");
+      await this.repo.appendEvidenceInTransaction(
+        tx,
+        "COMMERCE_PROVIDER_MISMATCH",
+        {
+          paymentAttemptId: String(a.id),
+          reason,
+          paypalOrderId: /^[A-Za-z0-9_-]{1,64}$/.test(orderId) ? orderId : null,
+        },
+        now,
+      );
     });
   }
   private assertBinding(

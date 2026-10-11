@@ -137,3 +137,11 @@ fingerprint inside the existing proposal digest; grant formats remain unchanged.
 The compiler validates projection bounds but never returns a financial decision
 or reserves authority. See [ADR-011](ADR-011-durable-checkout-manifests.md) for lock
 order, expiry, recovery and execution-conformance work deferred beyond M4B.
+
+## M4C execution-boundary commerce conformance
+
+Commerce-linked signed execution independently reloads the immutable M4B
+relationship before claim and provider dispatch. Exact PayPal item, amount,
+currency and provider-reported recipient conformance is mandatory; known
+provider conflicts durably quarantine authority without replacement purchases.
+Historical generic operations retain Foundation behavior. See [ADR-012](ADR-012-execution-boundary-commerce-conformance.md) for provider omissions, trusted host composition, recovery and claim limits.

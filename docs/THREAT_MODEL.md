@@ -153,3 +153,11 @@ observed expiry is durable and survives clock rollback. These controls do not
 prove external commerce truth or withstand privileged administrators rewriting
 all records/constraints. Host authentication and execution-time recipient/item
 conformance remain separate requirements. See [ADR-011](ADR-011-durable-checkout-manifests.md).
+
+## M4C execution-boundary commerce conformance
+
+Commerce-linked signed execution independently reloads the immutable M4B
+relationship before claim and provider dispatch. Exact PayPal item, amount,
+currency and provider-reported recipient conformance is mandatory; known
+provider conflicts durably quarantine authority without replacement purchases.
+Historical generic operations retain Foundation behavior. See [ADR-012](ADR-012-execution-boundary-commerce-conformance.md) for provider omissions, trusted host composition, recovery and claim limits.

@@ -146,3 +146,11 @@ within five minutes; changed terms require a new lifecycle. This creates no
 financial permission and makes no provider calls. Normal authorization is still
 required. Recipient/item conformance and payer approval are not implemented here.
 See [ADR-011](docs/ADR-011-durable-checkout-manifests.md).
+
+## M4C execution-boundary commerce conformance
+
+Commerce-linked signed execution independently reloads the immutable M4B
+relationship before claim and provider dispatch. Exact PayPal item, amount,
+currency and provider-reported recipient conformance is mandatory; known
+provider conflicts durably quarantine authority without replacement purchases.
+Historical generic operations retain Foundation behavior. See [ADR-012](docs/ADR-012-execution-boundary-commerce-conformance.md) for provider omissions, trusted host composition, recovery and claim limits.

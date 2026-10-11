@@ -11,6 +11,7 @@ import {
   ExecutionRejectedError,
 } from "./execution-outcome.js";
 import { mandateFingerprint, proposalDigest } from "./canonical.js";
+import { commerceExecutionTerms } from "./commerce-execution.js";
 import { CapabilitySchema } from "./domain.js";
 import {
   persistedDate,
@@ -503,6 +504,7 @@ export class ExecutionBoundary {
           throw new Error("RECEIPT_NOT_EXECUTABLE");
         }
 
+        await commerceExecutionTerms(this.repo, tx, claims, now);
         const executing =
           await tx`update authorization_reservations set status='EXECUTING',updated_at=${now} where id=${claims.reservationId} and status='AUTHORIZED' returning id`;
         const claimed =
