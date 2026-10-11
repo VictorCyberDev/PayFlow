@@ -145,3 +145,17 @@ relationship before claim and provider dispatch. Exact PayPal item, amount,
 currency and provider-reported recipient conformance is mandatory; known
 provider conflicts durably quarantine authority without replacement purchases.
 Historical generic operations retain Foundation behavior. See [ADR-012](ADR-012-execution-boundary-commerce-conformance.md) for provider omissions, trusted host composition, recovery and claim limits.
+
+## M4D payer approval and durable resume
+
+Execution Grant → Commerce Revalidation → PayPal Create Order → Payer Action →
+Secure Resume → PayPal GET of persisted Order → Authority + Commerce Revalidation →
+Capture → Reconciliation.
+
+`PaymentResumeService` extends the existing M3C exact-action authentication boundary
+and uses migration 007 only for immutable hashed resume metadata. The existing
+Payment Attempt owns the operation, order and idempotency identity. APPROVED is
+provider state, not PayFlow authority. The rail itself checks current authority
+before every new capture, including direct reconciliation. Completed captures can
+still be observed after revocation/expiry. See [ADR-013](ADR-013-secure-payer-approval-resumption.md)
+for host session duties, failure states and the short grant lifetime.

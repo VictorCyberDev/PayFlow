@@ -161,3 +161,28 @@ relationship before claim and provider dispatch. Exact PayPal item, amount,
 currency and provider-reported recipient conformance is mandatory; known
 provider conflicts durably quarantine authority without replacement purchases.
 Historical generic operations retain Foundation behavior. See [ADR-012](ADR-012-execution-boundary-commerce-conformance.md) for provider omissions, trusted host composition, recovery and claim limits.
+
+## M4D untrusted browser return and post-approval authority
+
+| Attack                                         | Control                                                                               | Result                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Forged return URL / approved or COMPLETED flag | Strict browser schema, exact-action authentication and server-side provider retrieval | No false approval or capture                         |
+| Order-ID substitution                          | Durable Payment Attempt owns order identity; optional returned ID is comparison only  | Cannot redirect capture to another order             |
+| Cross-attempt/principal resume                 | Random hashed capability and authenticated exact local action / owner                 | Cannot transfer A's authentication to B              |
+| Mandate revoked while payer is away            | Current authority checked at capture dispatch handoff                                 | No new capture                                       |
+| Principal disabled / agent suspended           | Existing rail's locked current identity checks                                        | No new capture                                       |
+| Quote expires during approval                  | M4C freshness before new dispatch                                                     | No stale-price capture                               |
+| Grant / reservation expires                    | Original deadlines preserved; no implicit renewal                                     | No new capture                                       |
+| PayPal APPROVED but PayFlow authority expired  | Provider approval is not PayFlow authorization                                        | Unresolved operation, no success claim or capture    |
+| Duplicate callback / concurrent resume         | Existing attempt lock, one-time authority claim, stable idempotency keys              | Existing operation reused; no second local operation |
+| Lost capture response                          | UNKNOWN quarantine plus authoritative GET reconciliation                              | Observe original capture without dispatching another |
+| Provider recipient / item / amount conflict    | M4C mandatory conformance and durable mismatch marker                                 | No false completion or replacement order             |
+| Malicious payer navigation URL                 | Bounded provider schema and exact reviewed Sandbox HTTPS origin before presentation   | No arbitrary redirect presented by resume service    |
+
+Resume secrets/authentication assertions/provider credentials never enter evidence.
+Hosts supply protected browser session storage, CSRF/origin/audience enforcement
+and exact-action authentication; production login is not implemented here. The
+successful dispatch transaction COMMIT remains the revocation cutoff. Already
+executed conforming financial effects remain truthfully reconcilable after expiry.
+See [ADR-013](ADR-013-secure-payer-approval-resumption.md) for capability lifetime,
+provider omissions, trusted host assumptions and distributed execution limitations.

@@ -53,7 +53,15 @@ export const ActivationPolicySchema = z
 export type ActivationPolicy = z.infer<typeof ActivationPolicySchema>;
 const BindingSchema = z
   .object({
-    action: z.enum(["CREATE_INTENT_REVIEW", "CONFIRM_EXACT_TERMS"]),
+    action: z.enum([
+      "CREATE_INTENT_REVIEW",
+      "CONFIRM_EXACT_TERMS",
+      "PREPARE_PAYMENT_RESUME",
+      "RESUME_PAYMENT",
+    ]),
+    paymentAttemptId: id.optional(),
+    proposalId: id.optional(),
+    paypalOrderId: id.optional(),
     reviewId: id.optional(),
     agentId: id,
     draftFingerprint: digest.optional(),

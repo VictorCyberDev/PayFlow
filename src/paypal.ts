@@ -127,7 +127,9 @@ const orderSchema = z.object({
   id: z.string().min(1),
   status: z.string().min(1),
   links: z
-    .array(z.object({ href: z.string().url(), rel: z.string() }))
+    .array(
+      z.object({ href: z.string().url().max(2048), rel: z.string().max(64) }),
+    )
     .optional(),
   purchase_units: z
     .array(
@@ -259,11 +261,29 @@ export class PayPalOAuthClient {
 }
 
 export class PayPalPaymentProvider implements PaymentProvider {
+  private readonly payerReturn:
+    Readonly<{ returnUrl: string; cancelUrl: string }> | undefined;
   constructor(
     private readonly oauth: PayPalOAuthClient,
     private readonly fetcher: FetchLike = fetch,
     environment = "sandbox",
+    payerReturn?: { returnUrl: string; cancelUrl: string },
   ) {
+    this.payerReturn = payerReturn
+      ? Object.freeze({ ...payerReturn })
+      : undefined;
+    for (const raw of Object.values(this.payerReturn ?? {})) {
+      const u = new URL(raw);
+      if (
+        raw.length > 2048 ||
+        u.protocol !== "https:" ||
+        u.username ||
+        u.password ||
+        u.search ||
+        u.hash
+      )
+        throw new Error("PAYPAL_RETURN_CONFIGURATION_INVALID");
+    }
     if (environment !== "sandbox") throw new Error("PAYPAL_2D_SANDBOX_ONLY");
   }
   createOrder(i: {
@@ -279,6 +299,19 @@ export class PayPalPaymentProvider implements PaymentProvider {
       i.requestId,
       {
         intent: "CAPTURE",
+        ...(this.payerReturn
+          ? {
+              payment_source: {
+                paypal: {
+                  experience_context: {
+                    return_url: this.payerReturn.returnUrl,
+                    cancel_url: this.payerReturn.cancelUrl,
+                    user_action: "PAY_NOW",
+                  },
+                },
+              },
+            }
+          : {}),
         purchase_units: [
           {
             reference_id: i.merchantReference,
@@ -652,6 +685,18 @@ export class PayPalExecutionRail implements ExecutionSink {
             observedAt,
           );
         });
+        if (status === "PAYER_ACTION_REQUIRED")
+          await this.reconciliationTransaction(db, (tx) =>
+            this.repo.appendEvidenceInTransaction(
+              tx,
+              "PAYPAL_PAYER_ACTION_REQUIRED",
+              {
+                paymentAttemptId: attemptId,
+                paypalOrderId: created.id,
+              },
+              currentTime(),
+            ),
+          );
         a = {
           ...a,
           provider_order_id: created.id,
@@ -704,7 +749,37 @@ export class PayPalExecutionRail implements ExecutionSink {
           ].includes(String(a.status))
         )
           return String(a.status);
-        await this.dispatch(db, a, "CAPTURE_IN_FLIGHT", currentTime);
+        if (a.status === "PAYER_ACTION_REQUIRED")
+          await this.reconciliationTransaction(db, (tx) =>
+            this.repo.appendEvidenceInTransaction(
+              tx,
+              "PAYPAL_APPROVAL_OBSERVED",
+              {
+                paymentAttemptId: attemptId,
+                paypalOrderId: order.id,
+                providerStatus: "APPROVED",
+              },
+              currentTime(),
+            ),
+          );
+        try {
+          await this.dispatch(db, a, "CAPTURE_IN_FLIGHT", currentTime);
+        } catch (error) {
+          if (a.status === "PAYER_ACTION_REQUIRED")
+            await this.reconciliationTransaction(db, (tx) =>
+              this.repo.appendEvidenceInTransaction(
+                tx,
+                "PAYMENT_RESUME_REJECTED",
+                {
+                  paymentAttemptId: attemptId,
+                  providerStatus: "APPROVED",
+                  code: "CURRENT_AUTHORITY_OR_COMMERCE_INVALID",
+                },
+                currentTime(),
+              ),
+            );
+          throw error;
+        }
         a = { ...a, status: "CAPTURE_IN_FLIGHT" };
         try {
           order = await this.provider.captureOrder(
@@ -911,6 +986,19 @@ export class PayPalExecutionRail implements ExecutionSink {
             manifestId: commerce.manifestId,
             proposalDigest: String(g.proposal_digest),
             merchantBindingFingerprint: commerce.merchantBindingFingerprint,
+          },
+          now,
+        );
+      if (
+        a.status === "PAYER_ACTION_REQUIRED" &&
+        status === "CAPTURE_IN_FLIGHT"
+      )
+        await this.repo.appendEvidenceInTransaction(
+          tx,
+          "PAYMENT_CAPTURE_RESUMED",
+          {
+            paymentAttemptId: String(a.id),
+            paypalOrderId: String(a.provider_order_id),
           },
           now,
         );

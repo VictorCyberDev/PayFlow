@@ -154,3 +154,14 @@ relationship before claim and provider dispatch. Exact PayPal item, amount,
 currency and provider-reported recipient conformance is mandatory; known
 provider conflicts durably quarantine authority without replacement purchases.
 Historical generic operations retain Foundation behavior. See [ADR-012](docs/ADR-012-execution-boundary-commerce-conformance.md) for provider omissions, trusted host composition, recovery and claim limits.
+
+### M4D payer approval and secure resume
+
+Payer approval may temporarily leave PayFlow for PayPal. Browser return parameters
+are untrusted notifications: an opaque durable resume capability and the existing
+human authentication boundary identify the original attempt. PayFlow retrieves the
+persisted PayPal order server-side and revalidates current authority and commerce
+before any new capture. Revocation or expiry during approval prevents new financial
+dispatch. Already-existing conforming captures remain truthfully reconcilable.
+No authority is automatically renewed. Host browser sessions/login remain outside
+this repository. See [ADR-013](docs/ADR-013-secure-payer-approval-resumption.md).
