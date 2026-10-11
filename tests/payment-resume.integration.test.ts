@@ -246,6 +246,7 @@ import {
       repo,
       "m4c",
       keys.privateKey,
+      "payflow.payment-execution",
       context.task.name.includes("expired grant") ? 30000 : 120000,
     ).issue(result.reservation!.id, time);
     provider = new Provider();
@@ -410,12 +411,41 @@ import {
       other,
       new PayPalExecutionRail(other, provider, clock),
     );
-    expect(
-      await Promise.all([
-        resume(),
-        otherService.resume({ resumeSecret: secret }, "commerce-p"),
-      ]),
-    ).toEqual(["CAPTURED", "CAPTURED"]);
+    let entered!: () => void, release!: () => void;
+    const capturing = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const capture = provider.captureOrder.bind(provider);
+    vi.spyOn(provider, "captureOrder").mockImplementation(
+      async (id, requestId) => {
+        entered();
+        await gate;
+        return capture(id, requestId);
+      },
+    );
+    const first = resume();
+    await capturing;
+    const second = otherService.resume({ resumeSecret: secret }, "commerce-p");
+    try {
+      // Observe the independent worker actually waiting on this attempt's lock.
+      await vi.waitFor(
+        async () => {
+          const rows =
+            await repo.sql`select count(*)::int n from pg_locks l where l.locktype='advisory' and not l.granted and l.classid=((hashtextextended(${attemptId},2)>>32)&4294967295)::oid and l.objid=(hashtextextended(${attemptId},2)&4294967295)::oid`;
+          expect(rows[0]!.n).toBeGreaterThan(0);
+        },
+        { timeout: 5000, interval: 10 },
+      );
+    } finally {
+      release();
+    }
+    expect(await Promise.all([first, second])).toEqual([
+      "CAPTURED",
+      "CAPTURED",
+    ]);
     expect(provider.captureCalls).toBe(1);
     expect(
       (await repo.evidence()).filter((e) => e.type === "PAYMENT_COMMITTED"),

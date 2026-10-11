@@ -27,7 +27,12 @@ export function paymentResumeDigest(secret: string): string {
 export function sandboxPayerActionUrl(raw: unknown): string {
   if (typeof raw !== "string" || raw.length > 2048)
     throw new Error("PAYMENT_PAYER_URL_INVALID");
-  const u = new URL(raw);
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new Error("PAYMENT_PAYER_URL_INVALID");
+  }
   if (
     u.origin !== "https://www.sandbox.paypal.com" ||
     u.username ||
