@@ -405,6 +405,45 @@ run("M4B immutable durable commerce (real PostgreSQL)", () => {
       ).toBe(false);
     },
   );
+  it("idempotent seal still checks expiry after durable reads", async () => {
+    const { q, m } = await sealed();
+    let calls = 0;
+    const next = new DurableCheckoutService(
+      other,
+      source,
+      () => new Date(++calls >= 3 ? q.expiresAt : checkoutNow),
+    );
+    await expect(next.sealManifest(q.quoteId)).rejects.toThrow(
+      "COMMERCE_QUOTE_EXPIRED_AT_COMMIT",
+    );
+    expect(await service.getManifest(m.manifestId)).toEqual(m);
+    await expect(service.sealManifest(q.quoteId)).rejects.toThrow(
+      "COMMERCE_QUOTE_EXPIRED",
+    );
+    expect(await repo.sql`select * from checkout_manifests`).toHaveLength(1);
+  });
+  it("idempotent proposal linkage still checks expiry after durable reads", async () => {
+    const { q, m } = await sealed();
+    const p = await service.compileManifestProposal(m.manifestId);
+    const original = repo.getProposal.bind(repo);
+    vi.spyOn(repo, "getProposal").mockImplementation(async (...args) => {
+      const result = await original(...args);
+      time = new Date(q.expiresAt);
+      return result;
+    });
+    await expect(service.compileManifestProposal(m.manifestId)).rejects.toThrow(
+      "COMMERCE_QUOTE_EXPIRED_AT_COMMIT",
+    );
+    expect(await repo.sql`select id from transaction_proposals`).toEqual([
+      { id: p.id },
+    ]);
+    time = new Date(checkoutNow);
+    await expect(
+      new DurableCheckoutService(other, source, clock).compileManifestProposal(
+        m.manifestId,
+      ),
+    ).rejects.toThrow("COMMERCE_QUOTE_EXPIRED");
+  });
   it("binding revisions cannot reinterpret a sealed manifest or be downgraded", async () => {
     const { q, m } = await sealed();
     const newer = source.withMerchantBinding({

@@ -413,6 +413,18 @@ export class DurableCheckoutService {
         at,
       );
   }
+  private finishFreshOperation(
+    q: CheckoutQuote,
+    mandate: Mandate,
+    agentExpiry: string,
+  ): void {
+    const checkedAt = this.now();
+    if (Date.parse(checkedAt) < Date.parse(q.quotedAt))
+      return fail("COMMERCE_CLOCK_ROLLBACK");
+    if (Date.parse(checkedAt) >= Date.parse(q.expiresAt))
+      throw new QuoteBoundaryExpired(q, checkedAt);
+    this.timeWithinAuthority(mandate, agentExpiry, checkedAt);
+  }
   private manifestFromQuote(
     q: CheckoutQuote,
     owner: CheckoutOwner,
@@ -482,7 +494,15 @@ export class DurableCheckoutService {
       if (!(await this.quoteLive(tx, quote))) return null;
       const existing =
         await tx`select id from checkout_manifests where quote_id=${quoteId}`;
-      if (existing[0]) return this.manifestRecord(String(existing[0].id), tx);
+      if (existing[0]) {
+        const m = await this.manifestRecord(String(existing[0].id), tx);
+        this.finishFreshOperation(
+          quote,
+          authority.mandate,
+          authority.agent.expiresAt,
+        );
+        return m;
+      }
       const m = this.manifestFromQuote(quote, owner, binding, randomUUID()),
         fp = checkoutManifestFingerprint(m);
       const now = this.now();
@@ -509,13 +529,10 @@ export class DurableCheckoutService {
         },
         now,
       );
-      const checkedAt = this.now();
-      if (Date.parse(checkedAt) >= Date.parse(quote.expiresAt))
-        throw new QuoteBoundaryExpired(quote, checkedAt);
-      this.timeWithinAuthority(
+      this.finishFreshOperation(
+        quote,
         authority.mandate,
         authority.agent.expiresAt,
-        checkedAt,
       );
       return m;
     });
@@ -545,6 +562,11 @@ export class DurableCheckoutService {
           tx,
         );
         if (!p) return fail("COMMERCE_PROPOSAL_MISSING");
+        this.finishFreshOperation(
+          q,
+          authority.mandate,
+          authority.agent.expiresAt,
+        );
         return p;
       }
       const now = this.now();
@@ -589,13 +611,10 @@ export class DurableCheckoutService {
         },
         now,
       );
-      const checkedAt = this.now();
-      if (Date.parse(checkedAt) >= Date.parse(q.expiresAt))
-        throw new QuoteBoundaryExpired(q, checkedAt);
-      this.timeWithinAuthority(
+      this.finishFreshOperation(
+        q,
         authority.mandate,
         authority.agent.expiresAt,
-        checkedAt,
       );
       return Object.freeze(p);
     });
