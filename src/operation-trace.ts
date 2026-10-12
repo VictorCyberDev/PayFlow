@@ -1057,20 +1057,26 @@ export class OperationTraceService {
                   Date.parse(e.occurredAt) < Date.parse(m.expiresAt) &&
                   Date.parse(e.occurredAt) < Date.parse(r.expiresAt) &&
                   Date.parse(e.occurredAt) <
-                    persistedDate(g.expires_at).getTime() &&
-                  (!mandateState?.revoked_at ||
-                    Date.parse(e.occurredAt) <
-                      persistedDate(mandateState.revoked_at).getTime() ||
-                    (Date.parse(e.occurredAt) ===
-                      persistedDate(mandateState.revoked_at).getTime() &&
-                      ledger.some(
-                        (revocation) =>
-                          revocation.type === "MANDATE_REVOKED" &&
-                          revocation.data.mandateId === m.id &&
-                          revocation.sequence > e.sequence &&
-                          revocation.occurredAt === e.occurredAt,
-                      ))),
+                    persistedDate(g.expires_at).getTime(),
                 "DISPATCH_AUTHORITY_EXPIRED",
+              );
+            for (const e of related.filter(
+              (event) => event.type === "PAYPAL_OPERATION_DISPATCHED",
+            ))
+              check(
+                "DISPATCH_REVOCATION_ORDERING",
+                !mandateState?.revoked_at ||
+                  ledger.some(
+                    (revocation) =>
+                      revocation.type === "MANDATE_REVOKED" &&
+                      revocation.data.mandateId === m.id &&
+                      revocation.sequence > e.sequence &&
+                      Date.parse(revocation.occurredAt) ===
+                        persistedDate(mandateState.revoked_at).getTime() &&
+                      Date.parse(e.occurredAt) <=
+                        Date.parse(revocation.occurredAt),
+                  ),
+                "DISPATCH_AFTER_REVOCATION",
               );
           }
           const [resume] =
