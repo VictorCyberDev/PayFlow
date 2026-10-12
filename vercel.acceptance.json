@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci",
+  "buildCommand": "RUN_PAYPAL_SANDBOX_SMOKE=true npm run test:paypal:commerce:sandbox && mkdir -p .vercel-acceptance-output && printf 'PayFlow M4F PayPal Sandbox order conformance build completed.\\n' > .vercel-acceptance-output/index.txt",
+  "outputDirectory": ".vercel-acceptance-output"
+}
