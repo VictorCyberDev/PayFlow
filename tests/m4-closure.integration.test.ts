@@ -133,6 +133,9 @@ const url = process.env.TEST_DATABASE_URL;
       await expect(s.resume()).rejects.toThrow();
       expect(s.provider.captureCalls).toBe(0);
       const trace = await s.project();
+      expect(
+        trace.stages.filter((stage) => stage.status === "INVALID"),
+      ).toEqual([]);
       expect(trace.status).toBe("INCOMPLETE");
       expect(trace.authorityMeter.financial.freshDispatchBlocked).toBe(true);
       expect(
