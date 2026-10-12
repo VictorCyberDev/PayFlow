@@ -75,6 +75,15 @@ const url = process.env.TEST_DATABASE_URL;
       await expect(s.execute()).rejects.toThrow();
       expect(s.provider.captureCalls).toBe(0);
       await s.prepare();
+      // Existing rail advances dispatch timestamps with monotonic elapsed time.
+      // Move the injected host clock after the durable order event; do not backdate revocation.
+      const events = await repo.evidence();
+      s.time = new Date(
+        Math.max(
+          Date.parse(s.time),
+          ...events.map((event) => Date.parse(event.occurredAt)),
+        ) + 1,
+      ).toISOString();
     }
     it("additive upgrade preserves historical financial rows and fabricates no proof", () => {
       expect(upgradePreserved).toBe(true);
