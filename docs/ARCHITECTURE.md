@@ -179,3 +179,24 @@ signed grant, M4C conformance and M4D payer-resume boundaries remain authoritati
 Unmapped external retailers stay discovery-only. [ADR-014](ADR-014-untrusted-discovery-bounded-ranking.md)
 defines complete limits and the crash window that can leave an unlinked, unauthorized
 quote between quote issuance and provenance linking.
+
+## M4F final composition and verification
+
+Human mandate and Agent Passport → **untrusted** discovery → deterministic
+eligibility → bounded ranking → exact request-membership validation → **trusted
+operator mapping** → controlled source-issued offer → trusted complete quote →
+immutable manifest → ordinary proposal → **existing Trust Kernel** → receipt /
+human escalation approval → reservation → signed v1 execution grant → **M4C
+execution revalidation** → PayPal order → payer action / **M4D authenticated resume
+and server GET** → current authority and commerce revalidation → capture / UNKNOWN /
+reconciliation → durable financial outcome → **read-only Trust Trace**.
+
+The trace and Authority Meter are projections, not policy authorities. New immutable
+verification material preserves original ranking inputs, existing Kernel context,
+grant signature bytes and normalized provider facts. Historical absence remains
+explicit. Quote refusals preserve non-executable trusted terms. Original evidence
+hashes and financial state machines remain unchanged. One read-only repeatable-read
+snapshot prevents hybrid states; overflow never becomes VERIFIED. Internal integrity
+is not external immutable anchoring. [ADR-015](ADR-015-verifiable-trust-trace-and-m4-closure.md)
+records bounds, lookup/index behavior, historical/restart semantics and external
+acceptance requirements.

@@ -178,7 +178,7 @@ export class FakeDiscoveryProvider implements CommerceDiscoveryProvider {
     return Promise.resolve(structuredClone(this.observations));
   }
 }
-const mappingSchema = z
+export const mappingSchema = z
   .object({
     mappingId: identifier,
     revision: z.number().int().positive().max(1000000),
@@ -230,6 +230,7 @@ export class ControlledDiscoveryResolver {
         status: "SUPPORTED_CHECKOUT";
         merchantId: string;
         mappingFingerprint: string;
+        mapping: DiscoveryMapping;
       }
     | { status: "DISCOVERY_ONLY" } {
     const m = this.#mappings.get(JSON.stringify([o.providerId, o.offerId]));
@@ -244,6 +245,7 @@ export class ControlledDiscoveryResolver {
       ? {
           status: "SUPPORTED_CHECKOUT",
           merchantId: DEMO_MERCHANT_ID,
+          mapping: m,
           mappingFingerprint: createHash("sha256")
             .update("payflow:discovery-mapping:v1\n" + JSON.stringify(m))
             .digest("hex"),
@@ -403,6 +405,7 @@ export interface DiscoverySelection {
   readonly explanation: string;
   readonly quantity: number;
   readonly mappingFingerprint: string | null;
+  readonly rankingProof: unknown;
   readonly selectedAt: string;
 }
 export class CommerceDiscoveryEngine {
@@ -447,6 +450,7 @@ export class CommerceDiscoveryEngine {
     const requestId = randomUUID(),
       candidates: RankingCandidate[] = [];
     const mappingBindings = new Map<string, string | null>();
+    const proofMappings = new Map<string, DiscoveryMapping | null>();
     const results = await Promise.allSettled(
       this.#providers.map((p) =>
         boundedDiscoveryCall((signal) => p.discover(query, signal)),
@@ -514,6 +518,12 @@ export class CommerceDiscoveryEngine {
         const candidateId = createHash("sha256")
           .update(requestId + ":" + discoveryFingerprint(o))
           .digest("hex");
+        proofMappings.set(
+          candidateId,
+          resolution.status === "SUPPORTED_CHECKOUT"
+            ? resolution.mapping
+            : null,
+        );
         mappingBindings.set(
           candidateId,
           resolution.status === "SUPPORTED_CHECKOUT"
@@ -615,6 +625,16 @@ export class CommerceDiscoveryEngine {
       explanation: parsed.explanation ?? "",
       quantity: query.quantity,
       mappingFingerprint: mappingBindings.get(candidate.candidateId) ?? null,
+      rankingProof: {
+        requestId,
+        query,
+        candidates: eligible.map((c) => ({
+          ...c,
+          mapping: proofMappings.get(c.candidateId),
+        })),
+        selectedCandidateId: candidate.candidateId,
+        selectedAt: this.clock().toISOString(),
+      },
       selectedAt: this.clock().toISOString(),
     });
   }

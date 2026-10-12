@@ -1,3 +1,4 @@
+import { RecordingPaymentProvider } from "./trace-material.js";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Sql } from "postgres";
@@ -478,9 +479,12 @@ export function withinPayPalRetryWindow(
 export class PayPalExecutionRail implements ExecutionSink {
   constructor(
     private readonly repo: PostgresTrustRepository,
-    private readonly provider: PaymentProvider,
+    provider: PaymentProvider,
     private readonly clock = () => new Date().toISOString(),
-  ) {}
+  ) {
+    this.provider = new RecordingPaymentProvider(repo, provider, clock);
+  }
+  private readonly provider: PaymentProvider;
   readonly finalizesAuthority = true;
   readonly requiredCapability = "CAPTURE_PAYMENT" as const;
   async execute(

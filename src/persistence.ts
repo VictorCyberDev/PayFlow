@@ -702,3 +702,6 @@ export class PostgresTrustRepository {
     return true;
   }
 }
+
+// Read-only consumers reuse the historical canonical format; hashes are unchanged.
+export { canonical as canonicalDurableValue };

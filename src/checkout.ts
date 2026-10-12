@@ -61,6 +61,12 @@ function same(a: unknown, b: unknown): boolean {
  * grants, payment attempts or provider calls. Caller IDs are lookup keys, not
  * authentication assertions; the host must restrict access to owned workflows.
  */
+/** Non-executable trusted terms from a rejected quote attempt, never authority. */
+export class CheckoutQuoteRefusedError extends Error {
+  constructor(readonly trustedTerms: CheckoutQuote) {
+    super("AMOUNT_EXCEEDS_LIMIT");
+  }
+}
 export class DurableCheckoutService {
   constructor(
     private readonly repo: PostgresTrustRepository,
@@ -293,7 +299,13 @@ export class DurableCheckoutService {
         expiresAt,
         provenanceReference: offer.sourceId + "/" + offer.offerId,
       });
-      this.termsWithinMandate(authority.mandate, quote);
+      try {
+        this.termsWithinMandate(authority.mandate, quote);
+      } catch (error) {
+        if (error instanceof Error && error.message === "AMOUNT_EXCEEDS_LIMIT")
+          throw new CheckoutQuoteRefusedError(quote);
+        throw error;
+      }
       const fp = checkoutQuoteFingerprint(quote),
         o = authority.owner;
       await tx`insert into commerce_quotes(id,merchant_id,binding_revision,binding_fingerprint,principal_id,agent_id,mandate_id,mandate_fingerprint,document,fingerprint,document_hash,offer_document,offer_document_hash,quantity,unit_minor,subtotal_minor,tax_minor,shipping_minor,discount_minor,fee_minor,total_minor,currency,quoted_at,expires_at) values(${quote.quoteId},${quote.logicalMerchantId},${quote.merchantBindingRevision},${quote.merchantBindingFingerprint},${o.principalId},${o.agentId},${o.mandateId},${o.mandateFingerprint},${tx.json(quote)},${fp},encode(sha256(convert_to(${tx.json(quote)}::jsonb::text,'UTF8')),'hex'),${tx.json(offer)},encode(sha256(convert_to(${tx.json(offer)}::jsonb::text,'UTF8')),'hex'),${quote.quantity},${quote.unitAmountMinor},${quote.subtotalMinor},${quote.taxMinor},${quote.shippingMinor},${quote.customerDiscountMinor},${quote.customerFeeMinor},${quote.totalMinor},${quote.currency},${quote.quotedAt},${quote.expiresAt})`;

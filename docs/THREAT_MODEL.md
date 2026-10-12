@@ -212,3 +212,28 @@ mapping configuration remain trusted host composition. Channel3/real LLM live
 integration and production authentication are not implemented. Discovery does not
 prove inventory, fulfillment, authenticity, merchant legal identity or guaranteed
 checkout price. See [ADR-014](ADR-014-untrusted-discovery-bounded-ranking.md).
+
+## M4 closure: boundaries, controls and residual limits
+
+| Surface / attack                                                               | Boundary and defense                                                                               | Residual limit                                                         |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Prompt injection / condition laundering                                        | Offer-level exact normalization and local eligibility                                              | Provider can lie; trusted checkout still resolves independently        |
+| Invented/cross-request candidate / AI authority fields                         | Strict membership and schema; immutable ranking snapshot                                           | Host/ranker adapter code is trusted composition                        |
+| Discovery price / hidden charges                                               | Fresh complete trusted terms and existing budget checks/Kernel                                     | Demo issuer has zero shipping; observed price is not guaranteed        |
+| Merchant / SKU / variant / mapping revision / retailer impersonation           | Explicit pinned mapping, source handle and immutable manifest                                      | No arbitrary retailer checkout or fulfillment proof                    |
+| Quote/mandate/grant/reservation expiry                                         | Unchanged pre-dispatch rail checks and intersection of windows                                     | Provider may finish a previously initiated effect later                |
+| Mandate revocation / agent suspension / principal disablement                  | Current authority revalidation before NEW capture                                                  | Already-existing effects still require truthful reconciliation         |
+| Forged browser approval / browser financial data / substituted order           | M4D exact-action authentication, opaque resume identity, durable order and server GET              | Production login/session/WebAuthn implementation remains external      |
+| Recipient / amount / currency / item mismatch                                  | M4C provider conformance and quarantine                                                            | No merchant legal-identity or physical-delivery guarantee              |
+| Lost create/capture response / UNKNOWN replacement                             | Stable operation/request identity, held authority and reconciliation                               | Provider idempotency windows; no exactly-once claim                    |
+| Duplicate execution/resume                                                     | Independent PostgreSQL locks, one-time claim, unique attempt and stable IDs                        | Distributed/network uncertainty remains                                |
+| Discovery/quote/manifest/proposal/receipt/reservation/grant/attempt corruption | Canonical recomputation, Kernel replay, signatures and relationship checks                         | Privileged storage/host rewrite is outside tamper-proof claims         |
+| Provider evidence / ledger corruption / trace spoofing                         | Observation facts independently compared; existing complete ledger verifier; durable trace service | Unsigned REST observations and no external evidence anchor             |
+| Orphaned discovery quote                                                       | Missing immutable link stays INCOMPLETE; no matching-based inference                               | Crash may leave a harmless unauthorized unlinked quote                 |
+| Trace racing capture / reconciliation                                          | Read-only repeatable-read snapshot                                                                 | Intermediate states remain incomplete/unknown                          |
+| Oversized trace/history                                                        | Explicit stage, observation, ledger and byte caps                                                  | Large histories return INCOMPLETE rather than partial VERIFIED         |
+| Secret leakage                                                                 | Explicit projection allowlist; no raw tokens/keys/assertions/URLs/provider blobs                   | Trusted host must also protect database proof material and owner reads |
+
+M4F does not replace any M1–M4E defense. Historical proof gaps are not fabricated.
+Real PayPal conformance and Channel3 discovery are pending; normal CI uses no live
+provider. See [ADR-015](ADR-015-verifiable-trust-trace-and-m4-closure.md).

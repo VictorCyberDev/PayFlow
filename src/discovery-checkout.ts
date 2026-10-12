@@ -1,3 +1,12 @@
+import { CheckoutQuoteRefusedError } from "./checkout.js";
+import {
+  QuoteRefusalSchema,
+  quoteRefusalFingerprint,
+} from "./trace-material.js";
+import {
+  RankingMaterialSchema,
+  rankingMaterialFingerprint,
+} from "./discovery-proof.js";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { mandateFingerprint } from "./canonical.js";
@@ -20,7 +29,7 @@ import type { PostgresTrustRepository } from "./persistence.js";
 import { persistedDate } from "./persistence.js";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
-const storedSelection = z
+export const storedSelection = z
   .object({
     version: z.literal("payflow.discovery-selection.v1"),
     requestId: z.string().uuid(),
@@ -40,7 +49,7 @@ const storedSelection = z
     selectedAt: z.string().datetime(),
   })
   .strict();
-function selectionFingerprint(
+export function selectionFingerprint(
   document: z.infer<typeof storedSelection>,
 ): string {
   return createHash("sha256")
@@ -131,6 +140,12 @@ export class DiscoveryCheckoutService {
     const id = randomUUID();
     await this.repo.sql.begin(async (tx) => {
       await tx`insert into commerce_discovery_selections(id,request_id,candidate_id,principal_id,mandate_id,mandate_fingerprint,document,document_hash,selected_at) values(${id},${document.requestId},${document.candidateId},${document.principalId},${mandateId},${fingerprint},${tx.json(document)},${selectionFingerprint(document)},${document.selectedAt})`;
+      const [proofTable] =
+        await tx`select to_regclass('discovery_ranking_material') present`;
+      if (proofTable?.present) {
+        const proof = RankingMaterialSchema.parse(selected.rankingProof);
+        await tx`insert into discovery_ranking_material(selection_id,document,fingerprint) values(${id},${tx.json(proof)},${rankingMaterialFingerprint(proof)})`;
+      }
       await this.repo.appendEvidenceInTransaction(
         tx,
         "COMMERCE_DISCOVERY_SELECTED",
@@ -226,11 +241,26 @@ export class DiscoveryCheckoutService {
         return quote;
       }
       // Observed price, merchant claim and AI explanation are never quote inputs.
-      const quote = await this.checkout.issueQuote(
-        resolution.offer,
-        s.mandateId,
-        s.quantity,
-      );
+      const quote = await this.checkout
+        .issueQuote(resolution.offer, s.mandateId, s.quantity)
+        .catch(async (error) => {
+          if (error instanceof CheckoutQuoteRefusedError) {
+            const [table] =
+              await db`select to_regclass('commerce_quote_refusals') present`;
+            if (table?.present) {
+              const document = QuoteRefusalSchema.parse({
+                quote: error.trustedTerms,
+                offer: resolution.offer,
+                reason: "AMOUNT_EXCEEDS_LIMIT",
+              });
+              const fingerprint = quoteRefusalFingerprint(document);
+              await this.repo.sql.begin(async (tx) => {
+                await tx`insert into commerce_quote_refusals(selection_id,document,fingerprint) values(${selectionId},${tx.json(document)},${fingerprint}) on conflict(selection_id) do nothing`;
+              });
+            }
+          }
+          throw error;
+        });
       await this.repo.sql.begin(async (tx) => {
         await tx`insert into commerce_discovery_quote_links(selection_id,quote_id,controlled_offer_fingerprint,mapping_fingerprint,resolved_at) values(${selectionId},${quote.quoteId},${quote.controlledOfferFingerprint},${resolution.mappingFingerprint},${this.clock().toISOString()})`;
         await this.repo.appendEvidenceInTransaction(

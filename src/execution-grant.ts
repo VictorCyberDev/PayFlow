@@ -271,6 +271,10 @@ export class ExecutionGrantIssuer {
         },
         now,
       );
+      const [proofTable] =
+        await tx`select to_regclass('execution_grant_signatures') present`;
+      if (proofTable?.present)
+        await tx`insert into execution_grant_signatures(grant_id,signed_token) values(${claims.jti},${token})`;
       return token;
     });
   }
@@ -621,5 +625,47 @@ export class ExecutionBoundary {
       });
       throw error;
     }
+  }
+}
+
+/** Historical proof verification only: expiry is checked at dispatch, not at
+ * trace-view time. Same claims schema, canonical bytes and Ed25519 as the boundary. */
+export function verifyHistoricalExecutionGrant(
+  token: string,
+  keys: PublicKeyResolver,
+  audience = "payflow.payment-execution",
+): ExecutionGrantClaims {
+  if (
+    typeof token !== "string" ||
+    token.length > MAX_EXECUTION_GRANT_TOKEN_CHARACTERS
+  )
+    throw new Error("GRANT_PROOF_INVALID");
+  const parts = token.split(".");
+  if (parts.length !== 2) throw new Error("GRANT_PROOF_INVALID");
+  try {
+    const claims = ExecutionGrantClaimsSchema.parse(
+      JSON.parse(Buffer.from(parts[0]!, "base64url").toString("utf8")),
+    );
+    const key = keys.resolve(claims.kid);
+    if (!key) throw new Error("GRANT_PROOF_KEY_UNAVAILABLE");
+    if (
+      key.asymmetricKeyType !== "ed25519" ||
+      claims.audience !== audience ||
+      !verify(
+        null,
+        Buffer.from(stable(claims)),
+        key,
+        Buffer.from(parts[1]!, "base64url"),
+      )
+    )
+      throw new Error("GRANT_PROOF_INVALID");
+    return claims;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "GRANT_PROOF_KEY_UNAVAILABLE"
+    )
+      throw error;
+    throw new Error("GRANT_PROOF_INVALID");
   }
 }

@@ -181,3 +181,28 @@ provenance is bounded, immutable, fingerprinted and verified on restart. Channel
 and real LLM adapters remain pending; normal validation makes no live provider calls.
 See [ADR-014](docs/ADR-014-untrusted-discovery-bounded-ranking.md) for bounds,
 mapping revisions, corruption checks and security claim limits.
+
+### Milestone 4: authority from human intent to financial outcome
+
+AI agents can reason about spending. PayFlow determines what an agent is allowed
+to do with a user's money: the human defines authority, AI ranks constrained
+candidates, the existing Kernel authorizes exact trusted commerce terms, PayPal
+executes, and a read-only Trust Trace verifies the durable relationships.
+
+For “buy one NEW keyboard under $100,” deterministic eligibility excludes cheaper
+USED/UNKNOWN and unsupported offers. The ranker selects an eligible candidate; an
+operator mapping reloads the controlled Demo Merchant offer. A trusted $84 quote
+becomes a manifest/proposal, ALLOW, reservation and signed grant. M4C/M4D constrain
+order, payer approval/resume and capture. A completed conforming operation can then
+have a VERIFIED trace and a separate financial/commercial Authority Meter.
+
+A trusted price drift to $184 is refused before an executable quote/proposal is
+issued; the trace preserves $84 observed and $184 refused trusted terms. Revocation
+during payer approval produces zero capture. A lost capture response produces
+UNKNOWN and reconciliation of the original effect, rather than another purchase.
+
+`OperationTraceService`, `projectM4Demo` and the 37-scenario Break PayFlow contracts
+provide bounded data for a later frontend. PostgreSQL integration tests exercise
+the actual vertical path, corruption, restart, races and recovery. No major UI or
+production login is added. See [ADR-015](docs/ADR-015-verifiable-trust-trace-and-m4-closure.md).
+Real Sandbox conformance and Channel3 remain pending; normal CI makes zero live calls.

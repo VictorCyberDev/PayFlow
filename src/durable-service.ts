@@ -1,3 +1,4 @@
+import { saveAuthorizationMaterial } from "./trace-material.js";
 import { randomUUID } from "node:crypto";
 import { authorize } from "./kernel.js";
 import {
@@ -66,13 +67,14 @@ export class DurableAuthorizationService {
       const replayRows =
         await tx`select 1 from replay_keys where scope=${mandate.id} and replay_key in (${proposal.id},${proposal.nonce}) limit 1`;
       const consumedQuantity = await this.repo.quantityAccounting(mandate, tx);
-      const receipt = authorize(mandate, agent, proposal, {
+      const context = {
         now,
         merchantRisk,
         cumulativeSpentMinor: accounting.consumedMinor,
         ...(consumedQuantity === undefined ? {} : { consumedQuantity }),
         replaySeen: replayRows.length > 0,
-      });
+      };
+      const receipt = authorize(mandate, agent, proposal, context);
 
       await this.repo.appendEvidenceInTransaction(
         tx,
@@ -85,6 +87,10 @@ export class DurableAuthorizationService {
         now,
       );
       await this.repo.saveReceipt(receipt, tx);
+      await saveAuthorizationMaterial(tx, receipt.receiptId, {
+        agent,
+        context,
+      });
 
       if (receipt.decision === "DENY") {
         await this.repo.appendEvidenceInTransaction(
