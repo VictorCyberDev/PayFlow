@@ -154,9 +154,11 @@ export class PostgresTrustRepository {
   async getAgent(
     id: string,
     db: Sql = this.sql,
+    lock = true,
   ): Promise<AgentPassport | null> {
-    const rows =
-      await db`select * from agent_passports where id=${id} for update`;
+    const rows = lock
+      ? await db`select * from agent_passports where id=${id} for update`
+      : await db`select * from agent_passports where id=${id}`;
     if (!rows[0]) return null;
     const r = row(rows[0]);
     return AgentPassportSchema.parse({

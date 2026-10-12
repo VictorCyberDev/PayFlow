@@ -681,7 +681,7 @@ export class OperationTraceService {
           const legacy = !hasCommerceMetadata(p.metadata);
           check("PROPOSAL", !(legacy && commerce), "COMMERCE_BINDING_REQUIRED");
           const m = await this.repo.getMandate(p.mandateId, db),
-            agent = await this.repo.getAgent(p.agentId, db);
+            agent = await this.repo.getAgent(p.agentId, db, false);
           if (!m || !agent) {
             stage("AUTHORITY", "INVALID", "AUTHORITY_RECORD_MISSING");
             return finish(legacy);
@@ -906,7 +906,7 @@ export class OperationTraceService {
               a.principal_id === m.principalId &&
               Number(a.amount_minor) === p.amount.minor &&
               a.currency === p.amount.currency &&
-              a.merchant_reference === p.id,
+              a.merchant_reference === p.merchant.id,
             "ATTEMPT_BINDING_INVALID",
           );
           initial.financialOutcome = String(a.status);

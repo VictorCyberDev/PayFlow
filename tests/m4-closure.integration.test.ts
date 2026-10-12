@@ -219,7 +219,9 @@ const url = process.env.TEST_DATABASE_URL;
         await s.execute();
         await repo.sql.begin(async (tx) => {
           if (trigger)
-            await tx.unsafe(`alter table ${table} disable trigger ${trigger}`);
+            await tx.unsafe(
+              `alter table ${table} disable trigger ${table === "transaction_proposals" ? "all" : trigger}`,
+            );
           // Respect existing document-hash CHECK constraints while testing canonical links.
           const hashed = [
             "commerce_quotes",
@@ -232,7 +234,9 @@ const url = process.env.TEST_DATABASE_URL;
             [path.split(","), JSON.stringify(value)],
           );
           if (trigger)
-            await tx.unsafe(`alter table ${table} enable trigger ${trigger}`);
+            await tx.unsafe(
+              `alter table ${table} enable trigger ${table === "transaction_proposals" ? "all" : trigger}`,
+            );
         });
         expect((await s.project()).status).toBe("INVALID");
       },
@@ -309,7 +313,7 @@ const url = process.env.TEST_DATABASE_URL;
         condition: "NEW",
         requestedCapability: "CAPTURE_PAYMENT",
         proposedAt: s.time,
-        nonce: "legacy-nonce",
+        nonce: "legacy-nonce-exact-0001",
         metadata: {},
         quantity: 1,
       });
@@ -569,7 +573,7 @@ const url = process.env.TEST_DATABASE_URL;
               quantity: 1,
               requestedCapability: "CAPTURE_PAYMENT",
               proposedAt: s.time,
-              nonce: "shipping-nonce",
+              nonce: "shipping-nonce-exact-10700",
               metadata: {},
             },
             {
@@ -629,9 +633,9 @@ const url = process.env.TEST_DATABASE_URL;
             });
           if (attack === "PROPOSAL_CORRUPTION")
             await repo.sql.begin(async (tx) => {
-              await tx`alter table transaction_proposals disable trigger immutable_commerce_proposal`;
+              await tx`alter table transaction_proposals disable trigger all`;
               await tx`update transaction_proposals set amount_minor=1`;
-              await tx`alter table transaction_proposals enable trigger immutable_commerce_proposal`;
+              await tx`alter table transaction_proposals enable trigger all`;
             });
           if (attack === "GRANT_TAMPERING")
             s.token = s.token!.slice(0, -10) + "tampered00";
