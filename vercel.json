@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run typecheck && RUN_PAYPAL_SANDBOX_SMOKE=true npm run test:paypal:commerce:sandbox && npm run build && mkdir -p public && printf '<!doctype html><html><body>PayFlow M4F PayPal Sandbox acceptance harness</body></html>' > public/index.html",
+  "outputDirectory": "public"
+}
