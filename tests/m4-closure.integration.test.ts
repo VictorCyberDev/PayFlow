@@ -83,6 +83,12 @@ const url = process.env.TEST_DATABASE_URL;
       s.provider.payer = false;
       await s.execute();
       const before = await s.project();
+      expect(
+        before.stages.filter(
+          (stage) =>
+            stage.status === "INVALID" || stage.status === "INCOMPLETE",
+        ),
+      ).toEqual([]);
       expect(before.status).toBe("VERIFIED");
       expect(before.financialOutcome).toBe("CAPTURED");
       expect(before.authorityMeter.commerce.observedPrice).toEqual({
@@ -341,10 +347,10 @@ const url = process.env.TEST_DATABASE_URL;
         other,
         new StaticPublicKeyRing(new Map([["m4f", s.keys.publicKey]])),
       ).project({ proposalId: s.proposalId }, s.time);
-      expect(t.financialOutcome).toBe("CAPTURE_IN_FLIGHT");
-      expect(t.status).toBe("UNKNOWN_FINANCIAL_OUTCOME");
       release();
       expect(await work).toBe("CAPTURED");
+      expect(t.financialOutcome).toBe("CAPTURE_IN_FLIGHT");
+      expect(t.status).toBe("UNKNOWN_FINANCIAL_OUTCOME");
     });
 
     it("trusted quote refusal projects $84 observed, $184 trusted, and DENIED without a proposal", async () => {

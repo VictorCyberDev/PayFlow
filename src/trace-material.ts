@@ -4,7 +4,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Sql } from "postgres";
 import { AgentPassportSchema, MerchantRiskSchema } from "./domain.js";
-import type { PostgresTrustRepository } from "./persistence.js";
+import {
+  canonicalDurableValue,
+  type PostgresTrustRepository,
+} from "./persistence.js";
 import type { PaymentProvider, PayPalOrderView } from "./paypal.js";
 export const AuthorizationMaterialSchema = z
   .object({
@@ -23,7 +26,7 @@ export const AuthorizationMaterialSchema = z
 export function authorizationMaterialFingerprint(raw: unknown): string {
   return createHash("sha256")
     .update("payflow:authorization-material:v1\n")
-    .update(JSON.stringify(AuthorizationMaterialSchema.parse(raw)))
+    .update(canonicalDurableValue(AuthorizationMaterialSchema.parse(raw)))
     .digest("hex");
 }
 const id = z.string().min(1).max(128),
@@ -80,7 +83,7 @@ export const ProviderObservationSchema = z
 export function providerObservationFingerprint(raw: unknown): string {
   return createHash("sha256")
     .update("payflow:provider-observation:v1\n")
-    .update(JSON.stringify(ProviderObservationSchema.parse(raw)))
+    .update(canonicalDurableValue(ProviderObservationSchema.parse(raw)))
     .digest("hex");
 }
 export async function saveAuthorizationMaterial(
@@ -192,6 +195,6 @@ export const QuoteRefusalSchema = z
 export function quoteRefusalFingerprint(raw: unknown): string {
   return createHash("sha256")
     .update("payflow:quote-refusal:v1\n")
-    .update(JSON.stringify(QuoteRefusalSchema.parse(raw)))
+    .update(canonicalDurableValue(QuoteRefusalSchema.parse(raw)))
     .digest("hex");
 }

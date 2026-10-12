@@ -1060,7 +1060,16 @@ export class OperationTraceService {
                     persistedDate(g.expires_at).getTime() &&
                   (!mandateState?.revoked_at ||
                     Date.parse(e.occurredAt) <
-                      persistedDate(mandateState.revoked_at).getTime()),
+                      persistedDate(mandateState.revoked_at).getTime() ||
+                    (Date.parse(e.occurredAt) ===
+                      persistedDate(mandateState.revoked_at).getTime() &&
+                      ledger.some(
+                        (revocation) =>
+                          revocation.type === "MANDATE_REVOKED" &&
+                          revocation.data.mandateId === m.id &&
+                          revocation.sequence > e.sequence &&
+                          revocation.occurredAt === e.occurredAt,
+                      ))),
                 "DISPATCH_AUTHORITY_EXPIRED",
               );
           }

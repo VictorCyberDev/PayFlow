@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { canonicalDurableValue } from "./persistence.js";
 import {
   DiscoveryQuerySchema,
   NormalizedDiscoveryOfferSchema,
@@ -29,6 +30,6 @@ export const RankingMaterialSchema = z
 export function rankingMaterialFingerprint(raw: unknown): string {
   return createHash("sha256")
     .update("payflow:ranking-material:v1\n")
-    .update(JSON.stringify(RankingMaterialSchema.parse(raw)))
+    .update(canonicalDurableValue(RankingMaterialSchema.parse(raw)))
     .digest("hex");
 }

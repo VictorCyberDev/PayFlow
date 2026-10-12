@@ -45,6 +45,11 @@ Additive immutable records now preserve **new** operations only:
   AMOUNT_EXCEEDS_LIMIT rejection. No quote, manifest, proposal or financial authority
   is issued by this record. It makes $84 observed → $184 trusted → denial visible.
 
+New proof fingerprints reuse the existing durable canonical serializer, including
+provider breakdown records whose object-key order PostgreSQL may change. Equal
+dispatch/revocation timestamps are disambiguated only by the verified existing
+evidence sequence; expiry boundaries remain strict.
+
 No old receipt, proposal, reservation, grant, attempt, migration or ledger hash is
 rewritten. Existing partial Foundation installations continue operating: writers
 check table availability. New proof tables reference existing identities and have

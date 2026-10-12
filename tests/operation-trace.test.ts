@@ -153,6 +153,31 @@ describe("M4F trace proof and output contracts", () => {
       }).success,
     ).toBe(false);
   });
+  it("provider fingerprint survives PostgreSQL object-key reordering", () => {
+    const amount = { value: "84.00", currency_code: "USD" };
+    const observation = {
+      id: "ORDER",
+      status: "APPROVED",
+      captures: [],
+      purchaseUnits: [
+        {
+          referenceId: "proposal",
+          breakdown: {
+            item_total: amount,
+            shipping: { ...amount, value: "0.00" },
+          },
+        },
+      ],
+    };
+    const reordered = structuredClone(observation);
+    reordered.purchaseUnits[0]!.breakdown = {
+      shipping: observation.purchaseUnits[0]!.breakdown.shipping,
+      item_total: amount,
+    };
+    expect(providerObservationFingerprint(observation)).toBe(
+      providerObservationFingerprint(reordered),
+    );
+  });
   it("authorization replay context is bounded to existing policy inputs", () => {
     expect(
       AuthorizationMaterialSchema.safeParse({
