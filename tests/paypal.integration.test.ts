@@ -30,7 +30,10 @@ import {
   type PaymentProvider,
   type PayPalOrderView,
 } from "../src/paypal.js";
-import { ExecutionQuarantinedError } from "../src/execution-outcome.js";
+import {
+  ExecutionQuarantinedError,
+  ExecutionRejectedError,
+} from "../src/execution-outcome.js";
 import { PostgresTrustRepository } from "../src/persistence.js";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -318,6 +321,277 @@ run("Milestone 2D durable PayPal execution", () => {
     expect(provider.createIds).toHaveLength(1);
     expect(provider.captureIds).toHaveLength(1);
     expect(provider.financialSideEffects).toBe(1);
+  });
+
+  describe("M4 acceptance: prospective definitive first-create rejection", () => {
+    async function initial(provider: RecoveryProvider) {
+      await repo.saveProposal(proposal);
+      const decision = await auth.authorizeProposal(proposal.id, "LOW", now);
+      const token = await issuer.issue(decision.reservation!.id, now);
+      return { token, reservationId: decision.reservation!.id, provider };
+    }
+    function reject(
+      provider: RecoveryProvider,
+      classification = "DEFINITIVE_REJECTION",
+    ) {
+      provider.beforeCreate = async () => {
+        await Promise.resolve();
+        throw new PayPalProviderError(
+          classification as PayPalProviderError["classification"],
+          "UNCONTROLLED_SECRET_BEARING_PROVIDER_MESSAGE",
+          "UNCONTROLLED_DEBUG_ID",
+        );
+      };
+    }
+    async function failed() {
+      const provider = new RecoveryProvider();
+      reject(provider);
+      const setup = await initial(provider);
+      await expect(
+        boundary(provider).execute(setup.token, now),
+      ).rejects.toThrow("PAYPAL_DEFINITIVE_CREATE_REJECTION");
+      const [a] = await repo.sql`select * from payment_attempts`;
+      return { ...setup, attemptId: String(a!.id) };
+    }
+    it("atomically fails attempt/grant/reservation, releases budget, and emits only sanitized no-effect evidence", async () => {
+      const { provider, attemptId } = await failed();
+      const [s] =
+        await repo.sql`select p.*,g.status grant_status,r.status reservation_status from payment_attempts p join execution_grants g on g.id=p.grant_id join authorization_reservations r on r.id=p.reservation_id`;
+      expect(s).toMatchObject({
+        status: "FAILED",
+        grant_status: "FAILED",
+        reservation_status: "FAILED",
+        provider_order_id: null,
+        provider_capture_id: null,
+        provider_capture_status: null,
+        failure_classification: "PAYPAL_DEFINITIVE_CREATE_REJECTION",
+      });
+      expect(provider.captureIds).toHaveLength(0);
+      expect(provider.logicalOrders).toBe(0);
+      expect(await repo.authorityAccounting(mandate.id, 10000)).toMatchObject({
+        committedMinor: 0,
+        activeReservedMinor: 0,
+        availableMinor: 10000,
+      });
+      const evidence = await repo.evidence();
+      expect(
+        evidence.filter((e) => e.type === "PAYMENT_COMMITTED"),
+      ).toHaveLength(0);
+      expect(
+        evidence.filter((e) => e.type === "PAYMENT_EXECUTION_FAILED"),
+      ).toHaveLength(1);
+      expect(JSON.stringify(evidence)).not.toContain("UNCONTROLLED");
+      expect(PostgresTrustRepository.verifyEvidence(evidence)).toBe(true);
+      const before = JSON.stringify(evidence);
+      expect(await restartRecovery(provider, attemptId)).toBe("FAILED");
+      expect(JSON.stringify(await repo.evidence())).toBe(before);
+      const another = {
+        ...proposal,
+        id: "replacement-after-proven-failure",
+        nonce: "new-authority-after-no-effect",
+      };
+      await repo.saveProposal(another);
+      expect(
+        (await auth.authorizeProposal(another.id, "LOW", now)).receipt.decision,
+      ).toBe("ALLOW");
+    });
+    it.each([
+      "AMBIGUOUS",
+      "TRANSIENT",
+      "MALFORMED",
+      "STATE_MISMATCH",
+      "AUTHENTICATION",
+      "VALIDATION",
+    ])("first %s failure remains quarantined", async (classification) => {
+      const provider = new RecoveryProvider();
+      reject(provider, classification);
+      const { token } = await initial(provider);
+      await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+        "PAYPAL_ORDER_CREATE_UNKNOWN",
+      );
+      await states();
+      expect(
+        (await repo.sql`select status from payment_attempts`)[0]?.status,
+      ).toBe("ORDER_CREATE_UNKNOWN");
+      expect(provider.captureIds).toHaveLength(0);
+    });
+    it("a definitive retry after UNKNOWN cannot release original authority or change request IDs", async () => {
+      const provider = new RecoveryProvider();
+      provider.createLosses = 1;
+      const { token } = await initial(provider);
+      await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+        "PAYPAL_ORDER_CREATE_UNKNOWN",
+      );
+      const [a] = await repo.sql`select * from payment_attempts`;
+      const keys: string[] = [];
+      provider.beforeCreate = async (input) => {
+        await Promise.resolve();
+        keys.push(input.requestId);
+        throw new PayPalProviderError("DEFINITIVE_REJECTION", "RETRY_REJECTED");
+      };
+      expect(await restartRecovery(provider, String(a!.id))).toBe(
+        "ORDER_CREATE_UNKNOWN",
+      );
+      expect(keys).toEqual([a!.create_order_request_id]);
+      expect(provider.createIds).toEqual([a!.create_order_request_id]);
+      await states();
+      expect(
+        (await repo.authorityAccounting(mandate.id, 10000)).activeReservedMinor,
+      ).toBe(8900);
+      expect(
+        (await repo.evidence()).filter(
+          (e) => e.type === "PAYMENT_EXECUTION_FAILED",
+        ),
+      ).toHaveLength(0);
+      expect(provider.captureIds).toHaveLength(0);
+    });
+    it("a caller-shaped classification is not a trusted definitive provider rejection", async () => {
+      const provider = new RecoveryProvider();
+      provider.beforeCreate = () =>
+        Promise.reject(
+          Object.assign(new Error("CALLER_SHAPED_CLASSIFICATION"), {
+            classification: "DEFINITIVE_REJECTION",
+          }),
+        );
+      const { token } = await initial(provider);
+      await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+        "PAYPAL_ORDER_CREATE_UNKNOWN",
+      );
+      await states();
+      expect(provider.captureIds).toHaveLength(0);
+    });
+    it.each([false, true])(
+      "a finalizing sink's unproven rejection cannot release authority (UNKNOWN attempt=%s)",
+      async (createUnknown) => {
+        const provider = new RecoveryProvider();
+        reject(provider, "AMBIGUOUS");
+        const { token } = await initial(provider);
+        const rail = new PayPalExecutionRail(repo, provider, () => now);
+        const execution = new ExecutionBoundary(
+          repo,
+          new StaticPublicKeyRing(new Map([["2d-key", publicKey]])),
+          {
+            finalizesAuthority: true,
+            requiredCapability: "CAPTURE_PAYMENT",
+            execute: async (claims) => {
+              if (createUnknown) {
+                try {
+                  return await rail.execute(claims);
+                } catch {
+                  throw new ExecutionRejectedError("UNPROVEN_SINK_REJECTION");
+                }
+              }
+              return Promise.reject(
+                new ExecutionRejectedError("UNPROVEN_SINK_REJECTION"),
+              );
+            },
+          },
+        );
+        await expect(execution.execute(token, now)).rejects.toThrow(
+          "PAYMENT_FAILURE_FINALIZATION_STATE_INVALID",
+        );
+        await states();
+        if (createUnknown)
+          expect(
+            (await repo.sql`select status from payment_attempts`)[0]?.status,
+          ).toBe("ORDER_CREATE_UNKNOWN");
+        expect(
+          (await repo.evidence()).filter(
+            (e) => e.type === "PAYMENT_EXECUTION_FAILED",
+          ),
+        ).toHaveLength(0);
+        expect(provider.captureIds).toHaveLength(0);
+      },
+    );
+    it("restart from ORDER_CREATING cannot prove a first call, even on definitive rejection", async () => {
+      const provider = new RecoveryProvider();
+      reject(provider);
+      const { claims } = await claimed();
+      const spy = vi
+        .spyOn(repo, "appendEvidenceInTransaction")
+        .mockImplementation(async (tx, type, data, time) => {
+          if (type === "PAYPAL_OPERATION_DISPATCHED")
+            throw new Error("CRASH_BEFORE_HANDOFF");
+          return original(tx, type, data, time);
+        });
+      const original =
+        PostgresTrustRepository.prototype.appendEvidenceInTransaction.bind(
+          repo,
+        );
+      await expect(
+        new PayPalExecutionRail(repo, provider, () => now).execute(claims),
+      ).rejects.toThrow();
+      spy.mockRestore();
+      // Simulate the durable state left by a process dying after dispatch intent.
+      await repo.sql`update payment_attempts set status='ORDER_CREATING'`;
+      const [a] = await repo.sql`select id from payment_attempts`;
+      expect(await restartRecovery(provider, String(a!.id))).toBe(
+        "ORDER_CREATE_UNKNOWN",
+      );
+      await states();
+      expect(provider.captureIds).toHaveLength(0);
+    });
+    it.each([
+      ["grant", "CLAIMED"],
+      ["grant", "CONSUMED"],
+      ["reservation", "EXECUTING"],
+      ["reservation", "COMMITTED"],
+      ["capture", "FORGED-CAPTURE"],
+      ["classification", "UNPROVEN_FAILURE"],
+      ["order", "FORGED-ORDER"],
+    ])(
+      "failed triplet corruption %s=%s cannot release budget",
+      async (kind, value) => {
+        const { attemptId } = await failed();
+        if (kind === "grant")
+          await repo.sql`update execution_grants set status=${value},consumed_at=${value === "CONSUMED" ? now : null}`;
+        else if (kind === "reservation")
+          await repo.sql`update authorization_reservations set status=${value}`;
+        else if (kind === "capture")
+          await repo.sql`update payment_attempts set provider_capture_id=${value} where id=${attemptId}`;
+        else if (kind === "order")
+          await repo.sql`update payment_attempts set provider_order_id=${value} where id=${attemptId}`;
+        else
+          await repo.sql`update payment_attempts set failure_classification=${value} where id=${attemptId}`;
+        await expect(
+          repo.authorityAccounting(mandate.id, 10000),
+        ).rejects.toThrow("CORRUPT_PAYMENT_ACCOUNTING");
+      },
+    );
+    it("a failed transition suppressed by PostgreSQL rolls back every terminal write and evidence", async () => {
+      const provider = new RecoveryProvider();
+      reject(provider);
+      const { token } = await initial(provider);
+      await repo.sql.unsafe(
+        `create function suppress_failed_grant() returns trigger language plpgsql as $$ begin if NEW.status='FAILED' then return null; end if; return NEW; end $$; create trigger suppress_failed_grant before update on execution_grants for each row execute function suppress_failed_grant()`,
+      );
+      try {
+        await expect(boundary(provider).execute(token, now)).rejects.toThrow(
+          "INVESTIGATION",
+        );
+        await states();
+        expect(
+          (await repo.sql`select status from payment_attempts`)[0]?.status,
+        ).toBe("ORDER_CREATING");
+        expect(
+          (await repo.evidence()).filter(
+            (e) => e.type === "PAYMENT_EXECUTION_FAILED",
+          ),
+        ).toHaveLength(0);
+        expect(provider.captureIds).toHaveLength(0);
+      } finally {
+        await repo.sql.unsafe(
+          "drop trigger suppress_failed_grant on execution_grants; drop function suppress_failed_grant()",
+        );
+      }
+    });
+    it("failed proof evidence corruption is detected rather than releasing capacity", async () => {
+      await failed();
+      await repo.sql`update evidence_events set data=jsonb_set(data,'{firstDispatch}','false') where type='PAYMENT_EXECUTION_FAILED'`;
+      await expect(repo.authorityAccounting(mandate.id, 10000)).rejects.toThrow(
+        "CORRUPT_PAYMENT_ACCOUNTING",
+      );
+    });
   });
 
   it("quarantines unknown capture and restart reconciliation discovers the existing capture exactly once", async () => {

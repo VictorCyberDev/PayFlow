@@ -204,7 +204,16 @@ export function traceOverall(
   if (legacy) return "LEGACY";
   if (
     stages.some((s) => s.status === "INCOMPLETE" || s.status === "UNKNOWN") ||
-    outcome !== "CAPTURED"
+    (outcome !== "CAPTURED" &&
+      !(
+        outcome === "FAILED" &&
+        stages.some(
+          (s) =>
+            s.stage === "FINANCIAL_FINALIZATION" &&
+            s.status === "VERIFIED" &&
+            s.reasonCode === "PROVEN_NO_EFFECT_CREATE_REJECTION",
+        )
+      ))
   )
     return "INCOMPLETE";
   return "VERIFIED";
@@ -951,7 +960,14 @@ export class OperationTraceService {
             stage("PROVIDER", "INCOMPLETE", "TRACE_LIMIT_EXCEEDED");
             return finish(legacy);
           }
-          if (!observations.length)
+          if (a.status === "FAILED") {
+            await this.repo.assertDefinitiveCreateFailure(String(a.id), db);
+            stage(
+              "PROVIDER",
+              "NOT_APPLICABLE",
+              "DEFINITIVE_CREATE_REJECTION_NO_ORDER",
+            );
+          } else if (!observations.length)
             stage("PROVIDER", "INCOMPLETE", "PROVIDER_OBSERVATIONS_ABSENT");
           for (const o of observations) {
             const view = ProviderObservationSchema.parse(o.document);
@@ -1095,7 +1111,13 @@ export class OperationTraceService {
             stage("QUARANTINE", "INVALID", "COMMERCE_PROVIDER_MISMATCH");
             initial.financialOutcome = "QUARANTINED";
           }
-          if (a.status === "CAPTURED")
+          if (a.status === "FAILED")
+            stage(
+              "FINANCIAL_FINALIZATION",
+              "VERIFIED",
+              "PROVEN_NO_EFFECT_CREATE_REJECTION",
+            );
+          else if (a.status === "CAPTURED")
             check(
               "FINANCIAL_FINALIZATION",
               r.status === "COMMITTED" &&
