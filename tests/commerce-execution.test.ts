@@ -3,7 +3,11 @@ import {
   paypalCommerceRequest,
   verifyPayPalCommerce,
 } from "../src/paypal-commerce.js";
-import { PayPalOAuthClient, PayPalPaymentProvider } from "../src/paypal.js";
+import {
+  PayPalOAuthClient,
+  PayPalPaymentProvider,
+  paypalObservedMinorUnits,
+} from "../src/paypal.js";
 import { vi } from "vitest";
 import type { PayPalOrderView } from "../src/paypal.js";
 import { checkoutFixture } from "./checkout-fixture.js";
@@ -35,6 +39,150 @@ function order(): PayPalOrderView {
   };
 }
 describe("M4C provider conformance", () => {
+  it.each(["0", "0.0", "0.00"])(
+    "accepts exact zero breakdown representation %s",
+    (value) => {
+      const o = order();
+      const u = o.purchaseUnits[0]!;
+      verifyPayPalCommerce(checkoutFixture().manifest, {
+        ...o,
+        purchaseUnits: [
+          {
+            ...u,
+            breakdown: {
+              ...u.breakdown,
+              discount: { value, currency_code: "USD" },
+              handling: { value, currency_code: "USD" },
+            },
+          },
+        ],
+      });
+    },
+  );
+  it.each([
+    "",
+    " ",
+    "0x0",
+    "0e0",
+    "-0",
+    "+0",
+    "00",
+    "0.000",
+    ".0",
+    "0.",
+    "NaN",
+    "Infinity",
+    "0.01",
+    "1e-999",
+  ])(
+    "rejects invalid/nonzero extra charge %s without floating point coercion",
+    (value) => {
+      const o = order();
+      const u = o.purchaseUnits[0]!;
+      expect(() =>
+        verifyPayPalCommerce(checkoutFixture().manifest, {
+          ...o,
+          purchaseUnits: [
+            {
+              ...u,
+              breakdown: {
+                ...u.breakdown,
+                handling: { value, currency_code: "USD" },
+              },
+            },
+          ],
+        }),
+      ).toThrow("COMMERCE_AMOUNT_MISMATCH");
+    },
+  );
+  it.each(["discount", "item_total"])(
+    "rejects changed %s despite decimal comparison",
+    (key) => {
+      const o = order(),
+        u = o.purchaseUnits[0]!;
+      expect(() =>
+        verifyPayPalCommerce(checkoutFixture().manifest, {
+          ...o,
+          purchaseUnits: [
+            {
+              ...u,
+              breakdown: {
+                ...u.breakdown,
+                [key]: {
+                  value: key === "discount" ? "0.01" : "84.01",
+                  currency_code: "USD",
+                },
+              },
+            },
+          ],
+        }),
+      ).toThrow("COMMERCE_AMOUNT_MISMATCH");
+    },
+  );
+  it("rejects zero in a different currency", () => {
+    const o = order(),
+      u = o.purchaseUnits[0]!;
+    expect(() =>
+      verifyPayPalCommerce(checkoutFixture().manifest, {
+        ...o,
+        purchaseUnits: [
+          {
+            ...u,
+            breakdown: {
+              ...u.breakdown,
+              discount: { value: "0.0", currency_code: "EUR" },
+            },
+          },
+        ],
+      }),
+    ).toThrow("COMMERCE_AMOUNT_MISMATCH");
+  });
+  it.each(["constructor", "toString"])(
+    "cannot hide a nonzero extra charge behind %s",
+    (key) => {
+      const o = order(),
+        u = o.purchaseUnits[0]!;
+      expect(() =>
+        verifyPayPalCommerce(checkoutFixture().manifest, {
+          ...o,
+          purchaseUnits: [
+            {
+              ...u,
+              breakdown: {
+                ...u.breakdown,
+                [key]: { value: "0.01", currency_code: "USD" },
+              },
+            },
+          ],
+        }),
+      ).toThrow("COMMERCE_AMOUNT_MISMATCH");
+    },
+  );
+  it.each([
+    ["84", "USD", 8400],
+    ["84.0", "USD", 8400],
+    ["84.01", "USD", 8401],
+    ["84", "JPY", 84],
+    ["90071992547409.91", "USD", Number.MAX_SAFE_INTEGER],
+  ])(
+    "parses exact bounded provider money %s %s",
+    (value, currency, expected) => {
+      expect(paypalObservedMinorUnits(value, String(currency))).toBe(expected);
+    },
+  );
+  it.each([
+    ["84.0", "JPY"],
+    ["0.001", "USD"],
+    ["90071992547409.92", "USD"],
+    ["1".repeat(33), "USD"],
+    ["0", "XXX"],
+    [undefined, "USD"],
+    [0, "USD"],
+  ])("rejects invalid provider money %s %s", (value, currency) => {
+    expect(() => paypalObservedMinorUnits(value, String(currency))).toThrow(
+      "INVALID_PAYPAL_MONEY_REPRESENTATION",
+    );
+  });
   it("constructs supported exact Orders v2 fields from immutable terms", () => {
     const r = paypalCommerceRequest(checkoutFixture().manifest);
     expect(r).toMatchObject({

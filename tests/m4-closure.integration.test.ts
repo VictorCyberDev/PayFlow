@@ -23,6 +23,7 @@ import { demoCommerceCatalog } from "../src/demo-commerce-catalog.js";
 import { authorize } from "../src/kernel.js";
 import { mandateFingerprint } from "../src/canonical.js";
 import { CheckoutQuoteSchema } from "../src/checkout-contracts.js";
+import { ProviderObservationSchema } from "../src/trace-material.js";
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)(
   "M4F independently verifiable vertical slice (PostgreSQL)",
@@ -88,6 +89,59 @@ const url = process.env.TEST_DATABASE_URL;
     it("additive upgrade preserves historical financial rows and fabricates no proof", () => {
       expect(upgradePreserved).toBe(true);
     });
+    it.each([true, false])(
+      "real Sandbox zero discount verifies the full persisted M4 chain, payer=%s",
+      async (payer) => {
+        s.provider.payer = payer;
+        const capture = s.provider.captureOrder.bind(s.provider);
+        vi.spyOn(s.provider, "captureOrder").mockImplementation(
+          async (id, key) => {
+            const order = await capture(id, key),
+              unit = order.purchaseUnits[0]!;
+            return {
+              ...order,
+              purchaseUnits: [
+                {
+                  ...unit,
+                  breakdown: {
+                    ...unit.breakdown,
+                    discount: { value: "0.0", currency_code: "USD" },
+                    handling: { value: "0.00", currency_code: "USD" },
+                    insurance: { value: "0.00", currency_code: "USD" },
+                    shipping_discount: { value: "0.00", currency_code: "USD" },
+                  },
+                },
+              ],
+            };
+          },
+        );
+        if (payer) {
+          await pending();
+          s.provider.approve();
+          await s.resume();
+        } else await s.execute();
+        const before = await s.project();
+        expect(before.status).toBe("VERIFIED");
+        expect(before.financialOutcome).toBe("CAPTURED");
+        const [observation] =
+          await repo.sql`select document from paypal_provider_observations where phase='CAPTURE'`;
+        expect(
+          ProviderObservationSchema.parse(observation!.document)
+            .purchaseUnits[0]!.breakdown!.discount!.value,
+        ).toBe("0.0");
+        const restarted = await new OperationTraceService(
+          other,
+          new StaticPublicKeyRing(new Map([["m4f", s.keys.publicKey]])),
+        ).project({ proposalId: s.proposalId! }, s.time);
+        expect(restarted.status).toBe("VERIFIED");
+        expect(restarted.financialOutcome).toBe("CAPTURED");
+        expect(s.provider.createCalls).toBe(1);
+        expect(s.provider.captureCalls).toBe(1);
+        expect(
+          PostgresTrustRepository.verifyEvidence(await repo.evidence()),
+        ).toBe(true);
+      },
+    );
     describe("M4 acceptance correction: commerce no-effect rejection", () => {
       function definitiveRejection() {
         return vi

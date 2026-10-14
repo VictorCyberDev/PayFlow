@@ -31,6 +31,7 @@ import {
   checkoutNow,
 } from "./checkout-fixture.js";
 import { checkoutManifestFingerprint } from "../src/checkout-contracts.js";
+import { OperationTraceService } from "../src/operation-trace.js";
 
 const url = process.env.TEST_DATABASE_URL;
 class Provider implements PaymentProvider {
@@ -40,6 +41,8 @@ class Provider implements PaymentProvider {
   order?: PayPalOrderView;
   attack?: string;
   loseCapture = false;
+  captureDiscount?: string;
+  captureExtraCharge?: string;
   async createOrder(
     input: Parameters<PaymentProvider["createOrder"]>[0],
   ): Promise<PayPalOrderView> {
@@ -99,6 +102,39 @@ class Provider implements PaymentProvider {
         },
       ],
     };
+    if (
+      this.captureDiscount !== undefined ||
+      this.captureExtraCharge !== undefined
+    ) {
+      const u = this.order.purchaseUnits[0]!;
+      this.order = {
+        ...this.order,
+        purchaseUnits: [
+          {
+            ...u,
+            breakdown: {
+              ...u.breakdown,
+              ...(this.captureDiscount !== undefined
+                ? {
+                    discount: {
+                      value: this.captureDiscount,
+                      currency_code: "USD",
+                    },
+                  }
+                : {}),
+              ...(this.captureExtraCharge !== undefined
+                ? {
+                    handling: {
+                      value: this.captureExtraCharge,
+                      currency_code: "USD",
+                    },
+                  }
+                : {}),
+            },
+          },
+        ],
+      };
+    }
     if (this.loseCapture) throw new Error("lost response");
     return this.order;
   }
@@ -203,6 +239,65 @@ class Provider implements PaymentProvider {
       );
       expect(provider.captureCalls).toBe(1);
     });
+    it("real Sandbox zero-discount representation commits and verifies after restart without another capture", async () => {
+      provider.captureDiscount = "0.0";
+      provider.captureExtraCharge = "0.00";
+      expect(await boundary.execute(token, time)).toEqual({
+        executionId: "CAPTURE-1",
+      });
+      const [a] =
+        await repo.sql`select p.id,p.status,g.status grant_state,r.status reservation_state from payment_attempts p join execution_grants g on g.id=p.grant_id join authorization_reservations r on r.id=p.reservation_id`;
+      expect(a).toMatchObject({
+        status: "CAPTURED",
+        grant_state: "CONSUMED",
+        reservation_state: "COMMITTED",
+      });
+      const trace = await new OperationTraceService(other, ring).project(
+        { proposalId },
+        time,
+      );
+      // This checkout-only fixture intentionally has no discovery provenance.
+      expect(trace.status).toBe("INCOMPLETE");
+      expect(trace.stages).toContainEqual({
+        stage: "PROVIDER_COMMERCE",
+        status: "VERIFIED",
+        reasonCode: "RELATIONSHIP_VERIFIED",
+      });
+      expect(trace.financialOutcome).toBe("CAPTURED");
+      await new PayPalExecutionRail(other, provider, clock).reconcile(
+        String(a!.id),
+        time,
+      );
+      expect(provider.createCalls).toBe(1);
+      expect(provider.captureCalls).toBe(1);
+      expect(
+        PostgresTrustRepository.verifyEvidence(await repo.evidence()),
+      ).toBe(true);
+    });
+    it.each(["0.01", "0e0", "0.000", "0x0", ""])(
+      "capture extra charge %s remains quarantined and cannot retry",
+      async (value) => {
+        provider.captureDiscount = "0.0";
+        provider.captureExtraCharge = value;
+        await expect(boundary.execute(token, time)).rejects.toThrow();
+        const [a] =
+          await repo.sql`select p.id,p.status,p.failure_classification,g.status grant_state,r.status reservation_state from payment_attempts p join execution_grants g on g.id=p.grant_id join authorization_reservations r on r.id=p.reservation_id`;
+        expect(a).toMatchObject({
+          status: "CAPTURE_UNKNOWN",
+          failure_classification: "COMMERCE_AMOUNT_MISMATCH",
+          grant_state: "CLAIMED",
+          reservation_state: "EXECUTING",
+        });
+        await expect(
+          new PayPalExecutionRail(other, provider, clock).reconcile(
+            String(a!.id),
+            time,
+          ),
+        ).rejects.toThrow("COMMERCE_PROVIDER_MISMATCH_QUARANTINED");
+        expect(provider.createCalls).toBe(1);
+        expect(provider.captureCalls).toBe(1);
+      },
+    );
     it.each([
       "fingerprint",
       "principal",

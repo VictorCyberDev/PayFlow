@@ -118,3 +118,27 @@ current authority and binding changes, provider substitution, lost capture,
 restart before dispatch/after create, direct rail calls and two independent
 PostgreSQL pools. Existing Foundation/M4A/M4B regressions remain required. No
 normal test requires credentials or makes live provider calls.
+
+# Real Sandbox acceptance: zero discount representation
+
+The real Phase B capture observation reported an authorized zero discount as
+`"0.0"`; Show Order reported `"0.00"`. Both denote exactly zero USD minor units.
+The initial byte-for-byte breakdown comparison quarantined the completed capture
+as `COMMERCE_AMOUNT_MISMATCH`. The bounded provider observation was retained; the
+historical attempt is not rewritten or retrospectively released by this repair.
+
+Breakdown comparisons now parse bounded nonnegative ASCII decimal strings into
+exact minor units using BigInt and the existing PayPal currency precision table.
+Omitted trailing decimals are padded; no rounding or floating-point conversion
+of decimal money occurs. Excess precision, signs, whitespace, exponents,
+hexadecimal, leading zeros, non-finite values, unsupported currencies and values
+outside the safe integer range fail closed. Currency equality remains mandatory.
+Unrequested breakdown components are permitted only when they parse to exact
+zero in the authorized currency, preserving the existing zero-component rule.
+
+This is a prospective representation repair, not a reduced conformance contract.
+Required provider fields, order/capture identity, item, recipient, total, currency,
+authority freshness, idempotency, UNKNOWN and mismatch quarantine rules remain
+unchanged. No capture retry, follow-up GET fallback, migration or authority renewal
+is introduced. Real payment acceptance still requires an independently authorized
+run after review; a completed provider effect does not itself clear local quarantine.

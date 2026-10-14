@@ -39,6 +39,31 @@ export function paypalMoney(minor: number, currency: string): string {
   return `${Math.floor(minor / d)}.${String(minor % d).padStart(p, "0")}`;
 }
 
+/** Exact, bounded provider decimal parsing. Allows zero and omitted trailing
+ * decimal places, never signs, exponents, rounding, or excess precision. */
+export function paypalObservedMinorUnits(
+  value: unknown,
+  currency: string,
+): number {
+  const precision = PRECISION[currency];
+  if (
+    precision === undefined ||
+    typeof value !== "string" ||
+    value.length > 32 ||
+    !/^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(value)
+  )
+    throw new Error("INVALID_PAYPAL_MONEY_REPRESENTATION");
+  const [whole, fraction = ""] = value.split(".");
+  if (fraction.length > precision)
+    throw new Error("INVALID_PAYPAL_MONEY_REPRESENTATION");
+  const minor =
+    BigInt(whole!) * 10n ** BigInt(precision) +
+    BigInt(fraction.padEnd(precision, "0") || "0");
+  if (minor > BigInt(Number.MAX_SAFE_INTEGER))
+    throw new Error("INVALID_PAYPAL_MONEY_REPRESENTATION");
+  return Number(minor);
+}
+
 export type ProviderFailureClass =
   | "AUTHENTICATION"
   | "VALIDATION"
