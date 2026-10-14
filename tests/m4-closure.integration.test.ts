@@ -10,7 +10,7 @@ import {
 import { readFile, readdir } from "node:fs/promises";
 import { PostgresTrustRepository } from "../src/persistence.js";
 import { OperationTraceService } from "../src/operation-trace.js";
-import { PayPalExecutionRail } from "../src/paypal.js";
+import { PayPalExecutionRail, PayPalProviderError } from "../src/paypal.js";
 import { StaticPublicKeyRing } from "../src/execution-grant.js";
 import {
   BREAK_PAYFLOW_ATTACKS,
@@ -87,6 +87,169 @@ const url = process.env.TEST_DATABASE_URL;
     }
     it("additive upgrade preserves historical financial rows and fabricates no proof", () => {
       expect(upgradePreserved).toBe(true);
+    });
+    describe("M4 acceptance correction: commerce no-effect rejection", () => {
+      function definitiveRejection() {
+        return vi
+          .spyOn(s.provider, "createOrder")
+          .mockImplementation(async () => {
+            await Promise.resolve();
+            s.provider.createCalls++;
+            throw new PayPalProviderError(
+              "DEFINITIVE_REJECTION",
+              "UNTRUSTED_PROVIDER_TEXT",
+            );
+          });
+      }
+      it("a failed first commerce create has a verifiable no-effect trace after restart", async () => {
+        definitiveRejection();
+        await expect(s.execute()).rejects.toThrow(
+          "PAYPAL_DEFINITIVE_CREATE_REJECTION",
+        );
+        const trace = await s.project();
+        expect(trace.status).toBe("VERIFIED");
+        expect(trace.financialOutcome).toBe("FAILED");
+        expect(trace.stages).toContainEqual({
+          stage: "PROVIDER",
+          status: "NOT_APPLICABLE",
+          reasonCode: "DEFINITIVE_CREATE_REJECTION_NO_ORDER",
+        });
+        expect(trace.stages).toContainEqual({
+          stage: "FINANCIAL_FINALIZATION",
+          status: "VERIFIED",
+          reasonCode: "PROVEN_NO_EFFECT_CREATE_REJECTION",
+        });
+        expect(s.provider.createCalls).toBe(1);
+        expect(s.provider.captureCalls).toBe(0);
+        expect(trace.authorityMeter.financial.reservedMinor).toBe(0);
+        expect(trace.authorityMeter.financial.committedMinor).toBe(0);
+        const restarted = new OperationTraceService(
+          other,
+          new StaticPublicKeyRing(new Map([["m4f", s.keys.publicKey]])),
+        );
+        expect(
+          await restarted.project({ proposalId: s.proposalId! }, s.time),
+        ).toEqual(trace);
+        expect(JSON.stringify(trace)).not.toContain("UNTRUSTED_PROVIDER_TEXT");
+      });
+      it("independent reconcilers serialize: a first failure wins and the waiting worker cannot create or capture", async () => {
+        let entered!: () => void, release!: () => void;
+        const ready = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        vi.spyOn(s.provider, "createOrder").mockImplementation(async () => {
+          s.provider.createCalls++;
+          entered();
+          await gate;
+          throw new PayPalProviderError(
+            "DEFINITIVE_REJECTION",
+            "FIRST_REJECTED",
+          );
+        });
+        const first = s.execute().catch((error) => error as Error);
+        await ready;
+        const [a] = await repo.sql`select id from payment_attempts`;
+        const second = new PayPalExecutionRail(
+          other,
+          s.provider,
+          () => s.time,
+        ).reconcile(String(a!.id), s.time);
+        try {
+          let waiting = false;
+          for (let i = 0; i < 100 && !waiting; i++) {
+            const [w] =
+              await repo.sql`select count(*) count from pg_locks where locktype='advisory' and not granted`;
+            waiting = Number(w!.count) > 0;
+          }
+          expect(waiting).toBe(true);
+        } finally {
+          release();
+        }
+        const firstResult = await first;
+        expect(firstResult).toBeInstanceOf(Error);
+        if (!(firstResult instanceof Error))
+          throw new Error("REJECTION_REQUIRED");
+        expect(firstResult.message).toBe("PAYPAL_DEFINITIVE_CREATE_REJECTION");
+        expect(await second).toBe("FAILED");
+        expect(s.provider.createCalls).toBe(1);
+        expect(s.provider.captureCalls).toBe(0);
+        expect(
+          (await repo.evidence()).filter(
+            (e) => e.type === "PAYMENT_EXECUTION_FAILED",
+          ),
+        ).toHaveLength(1);
+        expect(
+          (await repo.authorityAccounting("commerce-m", 9999))
+            .activeReservedMinor,
+        ).toBe(0);
+      });
+      it("failure-evidence write failure rolls back the entire triplet; later rejection remains UNKNOWN", async () => {
+        definitiveRejection();
+        const original = repo.appendEvidenceInTransaction.bind(repo);
+        const spy = vi
+          .spyOn(repo, "appendEvidenceInTransaction")
+          .mockImplementation(async (tx, type, data, time) => {
+            if (type === "PAYMENT_EXECUTION_FAILED")
+              throw new Error("FAILURE_LEDGER_WRITE_LOST");
+            return original(tx, type, data, time);
+          });
+        await expect(s.execute()).rejects.toThrow("INVESTIGATION");
+        spy.mockRestore();
+        const [a] = await repo.sql`select status from payment_attempts`;
+        expect(a!.status).toBe("ORDER_CREATING");
+        expect(
+          (await repo.sql`select status from execution_grants`)[0]!.status,
+        ).toBe("CLAIMED");
+        expect(
+          (await repo.sql`select status from authorization_reservations`)[0]!
+            .status,
+        ).toBe("EXECUTING");
+        expect(
+          await new PayPalExecutionRail(
+            other,
+            s.provider,
+            () => s.time,
+          ).reconcile(s.attemptId!, s.time),
+        ).toBe("ORDER_CREATE_UNKNOWN");
+        expect(
+          (await repo.authorityAccounting("commerce-m", 9999))
+            .activeReservedMinor,
+        ).toBe(8400);
+        expect(s.provider.captureCalls).toBe(0);
+      });
+      it("corrupted failed triplet cannot masquerade as a verified no-effect trace", async () => {
+        definitiveRejection();
+        await expect(s.execute()).rejects.toThrow(
+          "PAYPAL_DEFINITIVE_CREATE_REJECTION",
+        );
+        await repo.sql`update payment_attempts set provider_capture_id='FORGED-CAPTURE'`;
+        expect((await s.project()).status).toBe("INVALID");
+        await expect(
+          repo.authorityAccounting("commerce-m", 9999),
+        ).rejects.toThrow("CORRUPT_PAYMENT_ACCOUNTING");
+        expect(s.provider.captureCalls).toBe(0);
+      });
+      it("commerce corruption still blocks before the provider rejection path", async () => {
+        definitiveRejection();
+        await s.authorize();
+        await repo.sql`alter table checkout_manifests disable trigger immutable_checkout_manifest`;
+        try {
+          await repo.sql`update checkout_manifests set document=jsonb_set(document,'{sku}','"SUBSTITUTED-SKU"'),document_hash=encode(sha256(convert_to(jsonb_set(document,'{sku}','"SUBSTITUTED-SKU"')::text,'UTF8')),'hex')`;
+        } finally {
+          await repo.sql`alter table checkout_manifests enable trigger immutable_checkout_manifest`;
+        }
+        await expect(s.execute()).rejects.toThrow();
+        expect(s.provider.createCalls).toBe(0);
+        expect(s.provider.captureCalls).toBe(0);
+        expect(
+          (await repo.evidence()).filter(
+            (e) => e.type === "PAYMENT_EXECUTION_FAILED",
+          ),
+        ).toHaveLength(0);
+      });
     });
     it("complete discovery-to-capture chain verifies and reloads with retained public key", async () => {
       s.provider.payer = false;

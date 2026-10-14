@@ -7,6 +7,7 @@ const legal: Readonly<Record<string, readonly string[]>> = {
     "PAYER_ACTION_REQUIRED",
     "ORDER_CREATE_UNKNOWN",
     "CAPTURED",
+    "FAILED",
   ],
   ORDER_CREATE_UNKNOWN: ["ORDER_CREATING", "CAPTURED"],
   ORDER_CREATED: [

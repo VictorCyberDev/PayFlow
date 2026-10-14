@@ -16,7 +16,13 @@ Each execution grant/reservation maps to one durable Payment Attempt. Separate c
 
 `NOT_STARTED -> ORDER_CREATING -> ORDER_CREATED -> PAYER_ACTION_REQUIRED | CAPTURE_IN_FLIGHT -> CAPTURED`
 
-Ambiguous order creation enters `ORDER_CREATE_UNKNOWN`. Ambiguous capture enters `CAPTURE_UNKNOWN`. Provider-pending capture enters `CAPTURE_PENDING_PROVIDER`. Legacy/proven no-effect failures may be terminal `FAILED`; UNKNOWN is never collapsed into FAILED. Milestone 2E conservatively quarantines PayPal rejection as well, because a rejection of a retry is not proof that an earlier request had no effect.
+Ambiguous order creation enters `ORDER_CREATE_UNKNOWN`. Ambiguous capture enters `CAPTURE_UNKNOWN`. Provider-pending capture enters `CAPTURE_PENDING_PROVIDER`. Legacy/proven no-effect failures may be terminal `FAILED`; UNKNOWN is never collapsed into FAILED. A rejection of a retry is not proof that an earlier request had no effect.
+
+The Milestone 4 real-provider acceptance correction preserves the adapter's definitive rejection classification only for the original first create dispatch: the lock-owning process observed durable `NOT_STARTED`, wrote `ORDER_CREATING`, and that exact call synchronously threw `PayPalProviderError` classified `DEFINITIVE_REJECTION`, with no provider identity or successful response. The rail atomically commits attempt `FAILED`, grant `FAILED`, reservation `FAILED`, and one bounded `PAYMENT_EXECUTION_FAILED` event classified `PAYPAL_DEFINITIVE_CREATE_REJECTION`. The ExecutionBoundary verifies this terminal triplet instead of finalizing it again. A crash before this atomic commit leaves authority quarantined; restart cannot recreate the in-process first-dispatch proof.
+
+Recovery entering from `ORDER_CREATING` or `ORDER_CREATE_UNKNOWN` remains UNKNOWN even if the current retry returns the same definitive rejection. Network/transient, malformed and ambiguous outcomes do not release authority. This correction changes neither capture-rejection handling nor the six-hour retry window. The historical Phase B UNKNOWN attempt is not retrospectively terminalized.
+
+Authority accounting accepts only the exactly bound failed triplet with no order/capture, no successful provider observation or commitment, exactly one create dispatch, and intact hash-linked first-dispatch failure evidence. Corrupt or arbitrary FAILED combinations remain invalid. The read-only Trust Trace may verify this no-effect terminal outcome as `VERIFIED` with financial outcome `FAILED` and reason `PROVEN_NO_EFFECT_CREATE_REJECTION`; that verifies failure provenance, never payment success. No provider order evidence is fabricated.
 
 While capture is UNKNOWN or pending, the reservation remains `EXECUTING` and the execution grant remains `CLAIMED`. Authority is quarantined and is not returned to the mandate budget.
 

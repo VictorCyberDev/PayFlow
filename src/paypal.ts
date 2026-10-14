@@ -4,7 +4,11 @@ import { z } from "zod";
 import type { Sql } from "postgres";
 import type { ExecutionGrantClaims, ExecutionSink } from "./execution-grant.js";
 import { mandateFingerprint, proposalDigest } from "./canonical.js";
-import { ExecutionQuarantinedError } from "./execution-outcome.js";
+import {
+  ExecutionQuarantinedError,
+  ExecutionRejectedError,
+  PAYPAL_DEFINITIVE_CREATE_REJECTION,
+} from "./execution-outcome.js";
 import { persistedDate, type PostgresTrustRepository } from "./persistence.js";
 
 import { commerceExecutionTerms } from "./commerce-execution.js";
@@ -510,7 +514,11 @@ export class PayPalExecutionRail implements ExecutionSink {
         ),
       };
     } catch (error) {
-      if (error instanceof ExecutionQuarantinedError) throw error;
+      if (
+        error instanceof ExecutionQuarantinedError ||
+        error instanceof ExecutionRejectedError
+      )
+        throw error;
       // Once authority is claimed, an infrastructure/validation error is not
       // evidence that the provider did not act. Never release its reservation.
       throw new ExecutionQuarantinedError("PAYMENT_REQUIRES_INVESTIGATION");
@@ -555,8 +563,11 @@ export class PayPalExecutionRail implements ExecutionSink {
           "COMMERCE_PROVIDER_MISMATCH_QUARANTINED",
         );
       let capability: unknown;
-      if (["FAILED", "CANCELLED"].includes(String(a.status)))
-        return String(a.status);
+      if (a.status === "FAILED") {
+        await this.repo.assertDefinitiveCreateFailure(String(a.id), db);
+        return "FAILED";
+      }
+      if (a.status === "CANCELLED") return String(a.status);
       await this.reconciliationTransaction(db, async (tx) => {
         const attempts =
           await tx`select * from payment_attempts where id=${attemptId} for update`;
@@ -596,6 +607,12 @@ export class PayPalExecutionRail implements ExecutionSink {
         )
           throw new Error("PAYMENT_ATTEMPT_ORDER_MISSING");
         if (!this.retryWindow(a, now)) return String(a.status);
+        // This fact exists only in this lock-owning process. Recovery from
+        // ORDER_CREATING or UNKNOWN cannot reconstruct proof of a first call.
+        const firstCreateDispatch =
+          a.status === "NOT_STARTED" &&
+          a.provider_order_id === null &&
+          a.provider_capture_id === null;
         const dispatchCommerce = await this.dispatch(
           db,
           a,
@@ -621,7 +638,17 @@ export class PayPalExecutionRail implements ExecutionSink {
               "CREATE_REQUEST_ID",
             ),
           });
-        } catch {
+        } catch (error) {
+          if (
+            firstCreateDispatch &&
+            error instanceof PayPalProviderError &&
+            error.classification === "DEFINITIVE_REJECTION"
+          ) {
+            await this.definitiveCreateFailure(db, a, currentTime());
+            throw new ExecutionRejectedError(
+              PAYPAL_DEFINITIVE_CREATE_REJECTION,
+            );
+          }
           await this.reconciliationState(
             db,
             a,
@@ -1025,6 +1052,53 @@ export class PayPalExecutionRail implements ExecutionSink {
       )
         throw new Error("PAYMENT_AUTHORITY_NOT_CURRENT");
       return commerce;
+    });
+  }
+  /** Same attempt session lock as dispatch/recovery. All three local terminal
+   * transitions and bounded failure evidence commit together, or none do. */
+  private async definitiveCreateFailure(
+    db: Sql,
+    a: Record<string, unknown>,
+    now: string,
+  ): Promise<void> {
+    await this.reconciliationTransaction(db, async (tx) => {
+      const [current] =
+        await tx`select * from payment_attempts where id=${String(a.id)} for update`;
+      if (!current) throw new Error("PAYMENT_ATTEMPT_NOT_FOUND");
+      this.assertUnchanged(a, asRow(current));
+      await this.assertAuthority(tx, asRow(current));
+      if (
+        current.status !== "ORDER_CREATING" ||
+        current.provider_order_id !== null ||
+        current.provider_capture_id !== null
+      )
+        throw new Error("PAYMENT_NO_EFFECT_PROOF_INVALID");
+      const attempt =
+        await tx`update payment_attempts set status='FAILED',failure_classification=${PAYPAL_DEFINITIVE_CREATE_REJECTION},last_reconciled_at=${now},updated_at=${now} where id=${String(a.id)} and status='ORDER_CREATING' returning id`;
+      const grant =
+        await tx`update execution_grants set status='FAILED',failed_at=${now} where id=${String(a.grant_id)} and status='CLAIMED' returning id`;
+      const reservation =
+        await tx`update authorization_reservations set status='FAILED',updated_at=${now} where id=${String(a.reservation_id)} and status='EXECUTING' returning id`;
+      if (
+        attempt.length !== 1 ||
+        grant.length !== 1 ||
+        reservation.length !== 1
+      )
+        throw new Error("PAYMENT_FAILURE_FINALIZATION_STATE_INVALID");
+      await this.repo.appendEvidenceInTransaction(
+        tx,
+        "PAYMENT_EXECUTION_FAILED",
+        {
+          paymentAttemptId: String(a.id),
+          grantId: String(a.grant_id),
+          reservationId: String(a.reservation_id),
+          classification: PAYPAL_DEFINITIVE_CREATE_REJECTION,
+          previousStatus: "NOT_STARTED",
+          firstDispatch: true,
+        },
+        now,
+      );
+      await this.repo.assertDefinitiveCreateFailure(String(a.id), tx);
     });
   }
   async claimedGrantsWithoutAttempts(): Promise<readonly string[]> {

@@ -52,6 +52,23 @@ const payload = canonicalDurableValue(claims),
     "." +
     sign(null, Buffer.from(payload), keys.privateKey).toString("base64url");
 describe("M4F trace proof and output contracts", () => {
+  it("VERIFIED no-effect failure requires an explicit verified finalization stage and never means CAPTURED", () => {
+    const stages = [
+      {
+        stage: "FINANCIAL_FINALIZATION",
+        status: "VERIFIED" as const,
+        reasonCode: "PROVEN_NO_EFFECT_CREATE_REJECTION",
+      },
+    ];
+    expect(traceOverall(stages, "FAILED")).toBe("VERIFIED");
+    expect(traceOverall([], "FAILED")).toBe("INCOMPLETE");
+    expect(traceOverall(stages, "ORDER_CREATE_UNKNOWN")).toBe(
+      "UNKNOWN_FINANCIAL_OUTCOME",
+    );
+    expect(traceOverall([{ ...stages[0]!, status: "INVALID" }], "FAILED")).toBe(
+      "INVALID",
+    );
+  });
   it("verifies an expired historical signed delegation without permitting execution", () => {
     expect(verifyHistoricalExecutionGrant(token, ring).proposalDigest).toBe(
       claims.proposalDigest,
