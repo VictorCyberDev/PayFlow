@@ -1,6 +1,10 @@
 import type { CheckoutManifest } from "./checkout-contracts.js";
 import type { PayPalOrderView } from "./paypal.js";
-import { paypalMoney, PayPalProviderError } from "./paypal.js";
+import {
+  paypalMoney,
+  paypalObservedMinorUnits,
+  PayPalProviderError,
+} from "./paypal.js";
 
 export interface PayPalCommerceItem {
   readonly name: string;
@@ -97,21 +101,28 @@ export function verifyPayPalCommerce(
   const breakdown = u.breakdown;
   if (!breakdown) fail("COMMERCE_PROVIDER_RESPONSE_INVALID");
   const components = paypalCommerceRequest(m).breakdown;
+  const minor = (value: unknown): number => {
+    try {
+      return paypalObservedMinorUnits(value, m.currency);
+    } catch {
+      return fail("COMMERCE_AMOUNT_MISMATCH");
+    }
+  };
   for (const [key, value] of Object.entries(components)) {
     const actual = breakdown![key];
     // Providers may omit zero components; nonzero authorized components must exist.
-    if (!actual && Number(value.value) === 0) continue;
+    if (!actual && minor(value.value) === 0) continue;
     if (
       !actual ||
-      actual.value !== value.value ||
+      minor(actual.value) !== minor(value.value) ||
       actual.currency_code !== value.currency_code
     )
       fail("COMMERCE_AMOUNT_MISMATCH");
   }
   for (const [key, value] of Object.entries(breakdown!)) {
     if (
-      !(key in components) &&
-      (Number(value.value) !== 0 || value.currency_code !== m.currency)
+      !Object.hasOwn(components, key) &&
+      (minor(value.value) !== 0 || value.currency_code !== m.currency)
     )
       fail("COMMERCE_AMOUNT_MISMATCH");
   }
