@@ -15,6 +15,15 @@ describe("M3F bounded PayPal state-machine oracle", () => {
           );
       }
   });
+  it("allows only the first creating state to reach no-effect FAILED", () => {
+    expect(() =>
+      assertPayPalTransitions(["NOT_STARTED", "ORDER_CREATING", "FAILED"]),
+    ).not.toThrow();
+    for (const uncertain of ["ORDER_CREATE_UNKNOWN", "CAPTURE_UNKNOWN"])
+      expect(() => assertPayPalTransitions([uncertain, "FAILED"])).toThrow(
+        "ILLEGAL_PAYMENT_TRANSITION",
+      );
+  });
   it("models persisted-key recovery and terminal observation without resurrecting dispatch", () => {
     assertPayPalTransitions([
       "NOT_STARTED",

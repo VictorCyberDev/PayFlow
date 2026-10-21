@@ -13,7 +13,21 @@ import {
   type Principal,
   type TransactionProposal,
 } from "./domain.js";
-import { mandateFingerprint } from "./canonical.js";
+import { mandateFingerprint, proposalDigest } from "./canonical.js";
+import { PAYPAL_DEFINITIVE_CREATE_REJECTION } from "./execution-outcome.js";
+import {
+  CheckoutManifestSchema,
+  CheckoutQuoteSchema,
+  checkoutManifestFingerprint,
+  checkoutQuoteFingerprint,
+  COMMERCE_METADATA_KEYS,
+  hasCommerceMetadata,
+} from "./checkout-contracts.js";
+import {
+  MerchantBindingSchema,
+  controlledOfferFingerprint,
+  merchantBindingFingerprint,
+} from "./commerce.js";
 
 export const ReservationStatusSchema = z.enum([
   "PENDING",
@@ -141,9 +155,11 @@ export class PostgresTrustRepository {
   async getAgent(
     id: string,
     db: Sql = this.sql,
+    lock = true,
   ): Promise<AgentPassport | null> {
-    const rows =
-      await db`select * from agent_passports where id=${id} for update`;
+    const rows = lock
+      ? await db`select * from agent_passports where id=${id} for update`
+      : await db`select * from agent_passports where id=${id}`;
     if (!rows[0]) return null;
     const r = row(rows[0]);
     return AgentPassportSchema.parse({
@@ -229,6 +245,8 @@ export class PostgresTrustRepository {
   }
   async saveProposal(p: TransactionProposal): Promise<void> {
     const v = TransactionProposalSchema.parse(p);
+    if (hasCommerceMetadata(v.metadata))
+      throw new Error("RESERVED_COMMERCE_METADATA");
     await this
       .sql`insert into transaction_proposals(id,mandate_id,agent_id,nonce,amount_minor,currency,document,proposed_at) values(${v.id},${v.mandateId},${v.agentId},${v.nonce},${v.amount.minor},${v.amount.currency},${this.sql.json(v)},${v.proposedAt})`;
   }
@@ -253,6 +271,80 @@ export class PostgresTrustRepository {
       p.amount.currency !== r.currency
     )
       throw new Error("MALFORMED_PERSISTED_PROPOSAL");
+    if (hasCommerceMetadata(p.metadata)) {
+      const links =
+        await db`select l.proposal_digest,m.id commerce_manifest_id,m.document manifest,m.fingerprint manifest_fingerprint,m.document_hash manifest_hash,encode(sha256(convert_to(m.document::text,'UTF8')),'hex') actual_manifest_hash,q.document quote,q.id quote_id,q.principal_id commerce_principal_id,q.agent_id commerce_agent_id,q.mandate_id commerce_mandate_id,q.mandate_fingerprint commerce_mandate_fingerprint,q.merchant_id commerce_merchant_id,q.binding_revision commerce_binding_revision,q.binding_fingerprint commerce_binding_fingerprint,q.fingerprint quote_fingerprint,q.quantity commerce_quantity,q.unit_minor commerce_unit_minor,q.subtotal_minor commerce_subtotal_minor,q.tax_minor commerce_tax_minor,q.shipping_minor commerce_shipping_minor,q.discount_minor commerce_discount_minor,q.fee_minor commerce_fee_minor,q.total_minor commerce_total_minor,q.currency commerce_currency,q.quoted_at commerce_quoted_at,q.expires_at commerce_expires_at,q.document_hash quote_hash,encode(sha256(convert_to(q.document::text,'UTF8')),'hex') actual_quote_hash,q.offer_document,q.offer_document_hash offer_hash,encode(sha256(convert_to(q.offer_document::text,'UTF8')),'hex') actual_offer_hash,b.document binding,b.fingerprint binding_fingerprint from checkout_manifest_proposals l join checkout_manifests m on m.id=l.manifest_id join commerce_quotes q on q.id=m.quote_id join commerce_merchant_bindings b on b.merchant_id=q.merchant_id and b.revision=q.binding_revision where l.proposal_id=${p.id}`;
+      if (links.length !== 1) throw new Error("COMMERCE_PROPOSAL_LINK_INVALID");
+      const link = row(links[0]),
+        m = CheckoutManifestSchema.parse(link.manifest),
+        q = CheckoutQuoteSchema.parse(link.quote),
+        b = MerchantBindingSchema.parse(link.binding);
+      const expectedMetadata = {
+        [COMMERCE_METADATA_KEYS.id]: m.manifestId,
+        [COMMERCE_METADATA_KEYS.version]: m.version,
+        [COMMERCE_METADATA_KEYS.fingerprint]: checkoutManifestFingerprint(m),
+      };
+      const { version: quoteVersion, expiresAt: quoteExpiresAt, ...terms } = q;
+      const expectedManifest = {
+        ...terms,
+        version: m.version,
+        manifestId: m.manifestId,
+        quoteVersion,
+        quoteExpiresAt,
+        owner: m.owner,
+        expectedPayPalMerchantId: b.expectedPayPalMerchantId,
+        environment: b.environment,
+      };
+      if (
+        m.manifestId !== link.commerce_manifest_id ||
+        m.logicalMerchantId !== link.commerce_merchant_id ||
+        m.merchantBindingRevision !==
+          asNumber(link.commerce_binding_revision) ||
+        m.merchantBindingFingerprint !== link.commerce_binding_fingerprint ||
+        m.quoteId !== link.quote_id ||
+        q.quoteId !== link.quote_id ||
+        m.owner.principalId !== link.commerce_principal_id ||
+        m.owner.agentId !== link.commerce_agent_id ||
+        m.owner.mandateId !== link.commerce_mandate_id ||
+        m.owner.mandateFingerprint !== link.commerce_mandate_fingerprint ||
+        canonical(p.metadata) !== canonical(expectedMetadata) ||
+        proposalDigest(p) !== link.proposal_digest ||
+        checkoutManifestFingerprint(m) !== link.manifest_fingerprint ||
+        checkoutManifestFingerprint(expectedManifest) !==
+          link.manifest_fingerprint ||
+        checkoutQuoteFingerprint(q) !== link.quote_fingerprint ||
+        link.quote_hash !== link.actual_quote_hash ||
+        link.offer_hash !== link.actual_offer_hash ||
+        q.currency !== link.commerce_currency ||
+        q.quotedAt !== persistedDate(link.commerce_quoted_at).toISOString() ||
+        q.expiresAt !== persistedDate(link.commerce_expires_at).toISOString() ||
+        q.quantity !== asNumber(link.commerce_quantity) ||
+        q.unitAmountMinor !== asNumber(link.commerce_unit_minor) ||
+        q.subtotalMinor !== asNumber(link.commerce_subtotal_minor) ||
+        q.taxMinor !== asNumber(link.commerce_tax_minor) ||
+        q.shippingMinor !== asNumber(link.commerce_shipping_minor) ||
+        q.customerDiscountMinor !== asNumber(link.commerce_discount_minor) ||
+        q.customerFeeMinor !== asNumber(link.commerce_fee_minor) ||
+        q.totalMinor !== asNumber(link.commerce_total_minor) ||
+        controlledOfferFingerprint(link.offer_document) !==
+          q.controlledOfferFingerprint ||
+        merchantBindingFingerprint(b) !== link.binding_fingerprint ||
+        m.merchantBindingFingerprint !== link.binding_fingerprint ||
+        m.merchantBindingRevision !== b.bindingRevision ||
+        link.manifest_hash !== link.actual_manifest_hash ||
+        p.mandateId !== m.owner.mandateId ||
+        p.agentId !== m.owner.agentId ||
+        p.mandateFingerprint !== m.owner.mandateFingerprint ||
+        p.amount.minor !== m.totalMinor ||
+        p.amount.currency !== m.currency ||
+        p.quantity !== m.quantity ||
+        p.condition !== m.condition ||
+        p.category !== "KEYBOARD" ||
+        p.merchant.id !== m.logicalMerchantId ||
+        p.requestedCapability !== "CAPTURE_PAYMENT"
+      )
+        throw new Error("COMMERCE_PROPOSAL_LINK_INVALID");
+    }
     return p;
   }
   async claimReplay(
@@ -352,6 +444,16 @@ export class PostgresTrustRepository {
     cumulativeLimitMinor: number | undefined,
     db: Sql = this.sql,
   ): Promise<AuthorityAccounting> {
+    // Validate terminal PayPal failures before general grant accounting so an
+    // inconsistent FAILED triplet cannot make released capacity spendable.
+    const attempts =
+      await db`select 1 from information_schema.columns where table_schema='public' and table_name='payment_attempts' and column_name='grant_id'`;
+    if (attempts.length) {
+      const failed =
+        await db`select p.id from payment_attempts p where p.mandate_id=${mandateId} and p.provider='PAYPAL' and p.status='FAILED'`;
+      for (const attempt of failed)
+        await this.assertDefinitiveCreateFailure(String(attempt.id), db);
+    }
     const corruptReservations =
       await db`select r.id from authorization_reservations r join transaction_proposals p on p.id=r.proposal_id join decision_receipts d on d.id=r.receipt_id where r.mandate_id=${mandateId} and (r.mandate_id<>p.mandate_id or d.proposal_id<>r.proposal_id or d.mandate_id<>r.mandate_id or d.agent_id<>p.agent_id or r.amount_minor<>p.amount_minor or r.currency<>p.currency or (d.document->'amount'->'minor') is distinct from to_jsonb(r.amount_minor) or (d.document->'amount'->'currency') is distinct from to_jsonb(r.currency::text) or d.proposal_snapshot<>p.document or d.document_hash<>encode(sha256(convert_to(d.document::text,'UTF8')),'hex') or d.decision not in ('ALLOW','ESCALATE')) limit 1`;
     if (corruptReservations.length)
@@ -362,11 +464,9 @@ export class PostgresTrustRepository {
         await db`select g.id from execution_grants g join authorization_reservations r on r.id=g.reservation_id join mandates m on m.id=r.mandate_id where r.mandate_id=${mandateId} and (g.proposal_id<>r.proposal_id or g.receipt_id<>r.receipt_id or g.mandate_id<>r.mandate_id or g.principal_id<>m.principal_id or g.amount_minor<>r.amount_minor or g.currency<>r.currency or g.authority_snapshot is distinct from (to_jsonb(g)-ARRAY['status','claimed_at','consumed_at','failed_at','authority_snapshot']) or (g.status='ISSUED' and r.status not in ('AUTHORIZED','RELEASED','EXPIRED','FAILED')) or (g.status='FAILED' and r.status<>'FAILED') or (g.status='CLAIMED' and r.status<>'EXECUTING') or (g.status='CONSUMED' and r.status<>'COMMITTED') or (r.status='COMMITTED' and g.status<>'CONSUMED')) limit 1`;
       if (inconsistent.length) throw new Error("CORRUPT_AUTHORITY_ACCOUNTING");
     }
-    const attempts =
-      await db`select 1 from information_schema.columns where table_schema='public' and table_name='payment_attempts' and column_name='grant_id'`;
     if (attempts.length) {
       const inconsistent =
-        await db`select p.id from payment_attempts p join authorization_reservations r on r.id=p.reservation_id left join execution_grants g on g.id=p.grant_id where r.mandate_id=${mandateId} and p.provider='PAYPAL' and (g.id is null or p.proposal_id is distinct from r.proposal_id or p.mandate_id is distinct from r.mandate_id or p.principal_id is distinct from g.principal_id or p.grant_id is distinct from g.id or g.reservation_id is distinct from r.id or p.amount_minor is distinct from r.amount_minor or p.currency is distinct from r.currency or p.merchant_reference is distinct from g.merchant_id or p.status in ('FAILED','CANCELLED') or (p.status='CAPTURED' and (g.status<>'CONSUMED' or r.status<>'COMMITTED' or p.provider_capture_id is null or p.provider_capture_status is distinct from 'COMPLETED')) or (p.status<>'CAPTURED' and (g.status<>'CLAIMED' or r.status<>'EXECUTING'))) limit 1`;
+        await db`select p.id from payment_attempts p join authorization_reservations r on r.id=p.reservation_id left join execution_grants g on g.id=p.grant_id where r.mandate_id=${mandateId} and p.provider='PAYPAL' and (g.id is null or p.proposal_id is distinct from r.proposal_id or p.mandate_id is distinct from r.mandate_id or p.principal_id is distinct from g.principal_id or p.grant_id is distinct from g.id or g.reservation_id is distinct from r.id or p.amount_minor is distinct from r.amount_minor or p.currency is distinct from r.currency or p.merchant_reference is distinct from g.merchant_id or p.status='CANCELLED' or (p.status='CAPTURED' and (g.status<>'CONSUMED' or r.status<>'COMMITTED' or p.provider_capture_id is null or p.provider_capture_status is distinct from 'COMPLETED')) or (p.status not in ('CAPTURED','FAILED') and (g.status<>'CLAIMED' or r.status<>'EXECUTING'))) limit 1`;
       if (inconsistent.length) throw new Error("CORRUPT_PAYMENT_ACCOUNTING");
     }
     const rows =
@@ -384,6 +484,98 @@ export class PostgresTrustRepository {
           ? null
           : Math.max(0, cumulativeLimitMinor - consumedMinor),
     });
+  }
+  /** Verify the one supported no-effect PayPal terminal failure, not arbitrary
+   * FAILED rows. Used by accounting, the finalizing rail, boundary and trace. */
+  async assertDefinitiveCreateFailure(
+    attemptId: string,
+    db: Sql = this.sql,
+  ): Promise<void> {
+    try {
+      const rows =
+        await db`select p.*,g.proposal_digest,g.agent_id,g.receipt_id,g.mandate_fingerprint from payment_attempts p join execution_grants g on g.id=p.grant_id join authorization_reservations r on r.id=p.reservation_id join mandates m on m.id=p.mandate_id where p.id=${attemptId} and p.provider='PAYPAL' and p.operation='CAPTURE' and p.status='FAILED' and p.failure_classification=${PAYPAL_DEFINITIVE_CREATE_REJECTION} and g.status='FAILED' and r.status='FAILED' and g.reservation_id=r.id and g.proposal_id=p.proposal_id and r.proposal_id=p.proposal_id and g.receipt_id=r.receipt_id and g.mandate_id=p.mandate_id and r.mandate_id=p.mandate_id and g.principal_id=p.principal_id and m.principal_id=p.principal_id and g.amount_minor=p.amount_minor and r.amount_minor=p.amount_minor and g.currency=p.currency and r.currency=p.currency and g.merchant_id=p.merchant_reference and p.provider_order_id is null and p.provider_capture_id is null and p.provider_capture_status is null and p.provider_status is null and p.payer_action_url is null and p.captured_at is null and g.consumed_at is null and g.failed_at=p.updated_at and r.updated_at=p.updated_at`;
+      if (rows.length !== 1) throw new Error("INVALID_FAILED_TRIPLET");
+      const a = rows[0]!;
+      await this.assertGrantSnapshot(String(a.grant_id), db);
+      const proposal = await this.getProposal(String(a.proposal_id), db);
+      const mandate = await this.getMandate(String(a.mandate_id), db);
+      const agent = await this.getAgent(String(a.agent_id), db, false);
+      const receipt = await this.getReceipt(String(a.receipt_id), db);
+      if (
+        !proposal ||
+        !mandate ||
+        !agent ||
+        !receipt ||
+        !["ALLOW", "ESCALATE"].includes(receipt.decision) ||
+        receipt.proposalId !== a.proposal_id ||
+        receipt.mandateId !== a.mandate_id ||
+        receipt.agentId !== a.agent_id ||
+        receipt.mandateFingerprint !== a.mandate_fingerprint ||
+        receipt.amount.minor !== Number(a.amount_minor) ||
+        receipt.amount.currency !== a.currency ||
+        proposalDigest(proposal) !== a.proposal_digest ||
+        mandateFingerprint(mandate) !== a.mandate_fingerprint ||
+        proposal.agentId !== a.agent_id ||
+        proposal.mandateId !== a.mandate_id ||
+        proposal.mandateFingerprint !== a.mandate_fingerprint ||
+        proposal.requestedCapability !== "CAPTURE_PAYMENT" ||
+        agent.principalId !== a.principal_id ||
+        mandate.authorizedAgentId !== a.agent_id ||
+        proposal.amount.minor !== Number(a.amount_minor) ||
+        proposal.amount.currency !== a.currency ||
+        proposal.merchant.id !== a.merchant_reference
+      )
+        throw new Error("FAILED_AUTHORITY_BINDING_INVALID");
+      await this.assertReceiptProposal(String(a.receipt_id), proposal, db);
+      const ledger = await this.evidence(db);
+      if (!PostgresTrustRepository.verifyEvidence(ledger))
+        throw new Error("EVIDENCE_INTEGRITY_FAILURE");
+      const related = ledger.filter(
+        (e) =>
+          e.data.paymentAttemptId === attemptId ||
+          e.data.grantId === a.grant_id ||
+          e.data.reservationId === a.reservation_id,
+      );
+      const dispatches = related.filter(
+        (e) => e.type === "PAYPAL_OPERATION_DISPATCHED",
+      );
+      const failures = related.filter(
+        (e) => e.type === "PAYMENT_EXECUTION_FAILED",
+      );
+      const failure = failures[0];
+      if (
+        dispatches.length !== 1 ||
+        dispatches[0]?.data.status !== "ORDER_CREATING" ||
+        failures.length !== 1 ||
+        !failure ||
+        failure.data.grantId !== a.grant_id ||
+        failure.data.reservationId !== a.reservation_id ||
+        failure.data.classification !== PAYPAL_DEFINITIVE_CREATE_REJECTION ||
+        failure.data.previousStatus !== "NOT_STARTED" ||
+        failure.data.firstDispatch !== true ||
+        failure.sequence <= dispatches[0].sequence ||
+        failure.occurredAt !== persistedDate(a.updated_at).toISOString() ||
+        related.some((e) =>
+          [
+            "PAYMENT_COMMITTED",
+            "PAYMENT_EXECUTION_SUCCEEDED",
+            "PAYPAL_RECONCILIATION_UNRESOLVED",
+            "PAYPAL_ORDER_RECOVERED",
+            "PAYPAL_PROVIDER_OBSERVED",
+          ].includes(e.type),
+        )
+      )
+        throw new Error("FIRST_DISPATCH_REJECTION_PROOF_INVALID");
+      const [observations] =
+        await db`select to_regclass('paypal_provider_observations') present`;
+      if (observations?.present) {
+        const found =
+          await db`select id from paypal_provider_observations where payment_attempt_id=${attemptId} limit 1`;
+        if (found.length) throw new Error("PROVIDER_EFFECT_UNPROVEN");
+      }
+    } catch {
+      throw new Error("CORRUPT_PAYMENT_ACCOUNTING");
+    }
   }
   /** Caller holds the mandate lock when acquiring/reserving authority. */
   async quantityAccounting(
@@ -613,3 +805,6 @@ export class PostgresTrustRepository {
     return true;
   }
 }
+
+// Read-only consumers reuse the historical canonical format; hashes are unchanged.
+export { canonical as canonicalDurableValue };

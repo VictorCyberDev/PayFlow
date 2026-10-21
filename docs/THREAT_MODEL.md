@@ -141,3 +141,99 @@ positive replay-absence validation, response limits, deployment assumptions and
 M4 entry contract. The AI interprets your intention. It does not grant itself
 permission. This does not claim production login, verified PayPal payee routing,
 privileged-administrator-proof evidence or exactly-once distributed execution.
+
+## M4B quote and manifest boundary
+
+Copied/parsed/foreign offers, discovery observations and reserved caller metadata
+cannot establish checkout provenance. Immutable snapshots and revision history
+prevent current catalog/binding changes from reinterpreting sealed terms. Strict
+arithmetic and complete charge fields prevent hidden totals; read-time fingerprint
+and relationship checks detect corruption. Quote locks serialize sealing/linking;
+observed expiry is durable and survives clock rollback. These controls do not
+prove external commerce truth or withstand privileged administrators rewriting
+all records/constraints. Host authentication and execution-time recipient/item
+conformance remain separate requirements. See [ADR-011](ADR-011-durable-checkout-manifests.md).
+
+## M4C execution-boundary commerce conformance
+
+Commerce-linked signed execution independently reloads the immutable M4B
+relationship before claim and provider dispatch. Exact PayPal item, amount,
+currency and provider-reported recipient conformance is mandatory; known
+provider conflicts durably quarantine authority without replacement purchases.
+Historical generic operations retain Foundation behavior. See [ADR-012](ADR-012-execution-boundary-commerce-conformance.md) for provider omissions, trusted host composition, recovery and claim limits.
+
+## M4D untrusted browser return and post-approval authority
+
+| Attack                                         | Control                                                                               | Result                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Forged return URL / approved or COMPLETED flag | Strict browser schema, exact-action authentication and server-side provider retrieval | No false approval or capture                         |
+| Order-ID substitution                          | Durable Payment Attempt owns order identity; optional returned ID is comparison only  | Cannot redirect capture to another order             |
+| Cross-attempt/principal resume                 | Random hashed capability and authenticated exact local action / owner                 | Cannot transfer A's authentication to B              |
+| Mandate revoked while payer is away            | Current authority checked at capture dispatch handoff                                 | No new capture                                       |
+| Principal disabled / agent suspended           | Existing rail's locked current identity checks                                        | No new capture                                       |
+| Quote expires during approval                  | M4C freshness before new dispatch                                                     | No stale-price capture                               |
+| Grant / reservation expires                    | Original deadlines preserved; no implicit renewal                                     | No new capture                                       |
+| PayPal APPROVED but PayFlow authority expired  | Provider approval is not PayFlow authorization                                        | Unresolved operation, no success claim or capture    |
+| Duplicate callback / concurrent resume         | Existing attempt lock, one-time authority claim, stable idempotency keys              | Existing operation reused; no second local operation |
+| Lost capture response                          | UNKNOWN quarantine plus authoritative GET reconciliation                              | Observe original capture without dispatching another |
+| Provider recipient / item / amount conflict    | M4C mandatory conformance and durable mismatch marker                                 | No false completion or replacement order             |
+| Malicious payer navigation URL                 | Bounded provider schema and exact reviewed Sandbox HTTPS origin before presentation   | No arbitrary redirect presented by resume service    |
+
+Resume secrets/authentication assertions/provider credentials never enter evidence.
+Hosts supply protected browser session storage, CSRF/origin/audience enforcement
+and exact-action authentication; production login is not implemented here. The
+successful dispatch transaction COMMIT remains the revocation cutoff. Already
+executed conforming financial effects remain truthfully reconcilable after expiry.
+See [ADR-013](ADR-013-secure-payer-approval-resumption.md) for capability lifetime,
+provider omissions, trusted host assumptions and distributed execution limitations.
+
+## M4E discovery and ranking attacks
+
+| Attack                                                         | Local control                                                                          | Result                                                     |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Prompt instructions in provider title/snippet/merchant         | Data-only bounded fields; deterministic eligibility and strict membership              | Text cannot create financial authority                     |
+| USED/UNKNOWN described as new                                  | Exact enumerated offer-level normalization                                             | NEW-only ranking excludes these offers                     |
+| Invented or ineligible candidate ID                            | Exact current request candidate set                                                    | No controlled offer loading or downstream financial calls  |
+| Cross-request candidate replay, including restart              | Fresh request UUID, candidate digest and immutable persisted request binding           | Other-context candidate rejected                           |
+| Model adds amount/merchant/SKU/authorized fields               | Strict flat output schema and byte bounds                                              | Entire ranking result rejected                             |
+| Discovery $84 replaces trusted $184, or hides shipping         | Independent controlled handle and complete M4B quote; existing budget checks/Kernel    | Executable terms use trusted total, not observed price     |
+| Merchant display/title/price impersonates Demo Merchant        | Explicit operator source-local mapping and pinned identity                             | No promotion without mapping                               |
+| External retailer silently routed to Demo Merchant             | Mapping restricted to named Demo observations; DISCOVERY_ONLY mode                     | No retailer execution claim or substituted checkout        |
+| Mapping revision repoints old selection                        | Pinned mapping ID/revision/fingerprint, independent reload                             | Historical selection cannot be reinterpreted               |
+| Persisted condition/variant/price/provider/identity corruption | Domain-separated canonical fingerprints, strict parsing, redundant relationship checks | Fail before quote/manifest/proposal/authorization/provider |
+| Oversized provider response or model output                    | Aggregate byte/node/count/text/provenance/reference/input limits                       | Entire overflowing provider response/result rejected       |
+| Malformed sibling offer contaminates valid offer               | Independent normalization; duplicate identities discarded                              | No inferred condition/price/merchant/availability defaults |
+| Provider refresh alters an old selected observation            | Immutable durable snapshot; no discovery refetch on resolution                         | Historical selection stays unchanged                       |
+| Duplicate resolution from independent workers                  | Selection advisory lock and unique immutable quote link                                | Concurrent normal callers reuse one quote                  |
+
+Prompt injection is not claimed impossible. Deterministic boundaries prevent
+provider/model output from directly becoming authority. Adapter code and operator
+mapping configuration remain trusted host composition. Channel3/real LLM live
+integration and production authentication are not implemented. Discovery does not
+prove inventory, fulfillment, authenticity, merchant legal identity or guaranteed
+checkout price. See [ADR-014](ADR-014-untrusted-discovery-bounded-ranking.md).
+
+## M4 closure: boundaries, controls and residual limits
+
+| Surface / attack                                                               | Boundary and defense                                                                               | Residual limit                                                         |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Prompt injection / condition laundering                                        | Offer-level exact normalization and local eligibility                                              | Provider can lie; trusted checkout still resolves independently        |
+| Invented/cross-request candidate / AI authority fields                         | Strict membership and schema; immutable ranking snapshot                                           | Host/ranker adapter code is trusted composition                        |
+| Discovery price / hidden charges                                               | Fresh complete trusted terms and existing budget checks/Kernel                                     | Demo issuer has zero shipping; observed price is not guaranteed        |
+| Merchant / SKU / variant / mapping revision / retailer impersonation           | Explicit pinned mapping, source handle and immutable manifest                                      | No arbitrary retailer checkout or fulfillment proof                    |
+| Quote/mandate/grant/reservation expiry                                         | Unchanged pre-dispatch rail checks and intersection of windows                                     | Provider may finish a previously initiated effect later                |
+| Mandate revocation / agent suspension / principal disablement                  | Current authority revalidation before NEW capture                                                  | Already-existing effects still require truthful reconciliation         |
+| Forged browser approval / browser financial data / substituted order           | M4D exact-action authentication, opaque resume identity, durable order and server GET              | Production login/session/WebAuthn implementation remains external      |
+| Recipient / amount / currency / item mismatch                                  | M4C provider conformance and quarantine                                                            | No merchant legal-identity or physical-delivery guarantee              |
+| Lost create/capture response / UNKNOWN replacement                             | Stable operation/request identity, held authority and reconciliation                               | Provider idempotency windows; no exactly-once claim                    |
+| Duplicate execution/resume                                                     | Independent PostgreSQL locks, one-time claim, unique attempt and stable IDs                        | Distributed/network uncertainty remains                                |
+| Discovery/quote/manifest/proposal/receipt/reservation/grant/attempt corruption | Canonical recomputation, Kernel replay, signatures and relationship checks                         | Privileged storage/host rewrite is outside tamper-proof claims         |
+| Provider evidence / ledger corruption / trace spoofing                         | Observation facts independently compared; existing complete ledger verifier; durable trace service | Unsigned REST observations and no external evidence anchor             |
+| Orphaned discovery quote                                                       | Missing immutable link stays INCOMPLETE; no matching-based inference                               | Crash may leave a harmless unauthorized unlinked quote                 |
+| Trace racing capture / reconciliation                                          | Read-only repeatable-read snapshot                                                                 | Intermediate states remain incomplete/unknown                          |
+| Oversized trace/history                                                        | Explicit stage, observation, ledger and byte caps                                                  | Large histories return INCOMPLETE rather than partial VERIFIED         |
+| Secret leakage                                                                 | Explicit projection allowlist; no raw tokens/keys/assertions/URLs/provider blobs                   | Trusted host must also protect database proof material and owner reads |
+
+M4F does not replace any M1–M4E defense. Historical proof gaps are not fabricated.
+Real PayPal conformance and Channel3 discovery are pending; normal CI uses no live
+provider. See [ADR-015](ADR-015-verifiable-trust-trace-and-m4-closure.md).

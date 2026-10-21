@@ -135,3 +135,74 @@ positive replay-absence validation, response limits, deployment assumptions and
 M4 entry contract. The AI interprets your intention. It does not grant itself
 permission. This does not claim production login, verified PayPal payee routing,
 privileged-administrator-proof evidence or exactly-once distributed execution.
+
+## M4B controlled checkout binding
+
+`DurableCheckoutService` issues complete controlled Sandbox quotes, seals immutable
+manifests and links them to ordinary proposals through server-owned metadata.
+Merchant-binding and offer fingerprints, exact SKU/variant/condition/quantity,
+recipient expectation and complete payable charges survive restart. Quotes expire
+within five minutes; changed terms require a new lifecycle. This creates no
+financial permission and makes no provider calls. Normal authorization is still
+required. Recipient/item conformance and payer approval are not implemented here.
+See [ADR-011](docs/ADR-011-durable-checkout-manifests.md).
+
+## M4C execution-boundary commerce conformance
+
+Commerce-linked signed execution independently reloads the immutable M4B
+relationship before claim and provider dispatch. Exact PayPal item, amount,
+currency and provider-reported recipient conformance is mandatory; known
+provider conflicts durably quarantine authority without replacement purchases.
+Historical generic operations retain Foundation behavior. See [ADR-012](docs/ADR-012-execution-boundary-commerce-conformance.md) for provider omissions, trusted host composition, recovery and claim limits.
+
+### M4D payer approval and secure resume
+
+Payer approval may temporarily leave PayFlow for PayPal. Browser return parameters
+are untrusted notifications: an opaque durable resume capability and the existing
+human authentication boundary identify the original attempt. PayFlow retrieves the
+persisted PayPal order server-side and revalidates current authority and commerce
+before any new capture. Revocation or expiry during approval prevents new financial
+dispatch. Already-existing conforming captures remain truthfully reconcilable.
+No authority is automatically renewed. Host browser sessions/login remain outside
+this repository. See [ADR-013](docs/ADR-013-secure-payer-approval-resumption.md).
+
+### M4E discovery and bounded ranking
+
+External discovery is untrusted evidence. PayFlow normalizes each offer separately,
+filters it deterministically, and gives the ranker only eligible request-scoped
+candidates. Model output contains a candidate ID and optional bounded explanation;
+local membership validation rejects invented IDs and extra authority fields.
+
+Only explicit operator mappings can resolve selected Demo Merchant observations
+to independently loaded controlled offers. Unmapped retailers remain
+**DISCOVERY_ONLY**: no silent Demo Merchant substitution. Discovery prices are
+observations; fresh M4B quotes supply executable price and merchant terms. Selected
+provenance is bounded, immutable, fingerprinted and verified on restart. Channel3
+and real LLM adapters remain pending; normal validation makes no live provider calls.
+See [ADR-014](docs/ADR-014-untrusted-discovery-bounded-ranking.md) for bounds,
+mapping revisions, corruption checks and security claim limits.
+
+### Milestone 4: authority from human intent to financial outcome
+
+AI agents can reason about spending. PayFlow determines what an agent is allowed
+to do with a user's money: the human defines authority, AI ranks constrained
+candidates, the existing Kernel authorizes exact trusted commerce terms, PayPal
+executes, and a read-only Trust Trace verifies the durable relationships.
+
+For “buy one NEW keyboard under $100,” deterministic eligibility excludes cheaper
+USED/UNKNOWN and unsupported offers. The ranker selects an eligible candidate; an
+operator mapping reloads the controlled Demo Merchant offer. A trusted $84 quote
+becomes a manifest/proposal, ALLOW, reservation and signed grant. M4C/M4D constrain
+order, payer approval/resume and capture. A completed conforming operation can then
+have a VERIFIED trace and a separate financial/commercial Authority Meter.
+
+A trusted price drift to $184 is refused before an executable quote/proposal is
+issued; the trace preserves $84 observed and $184 refused trusted terms. Revocation
+during payer approval produces zero capture. A lost capture response produces
+UNKNOWN and reconciliation of the original effect, rather than another purchase.
+
+`OperationTraceService`, `projectM4Demo` and the 37-scenario Break PayFlow contracts
+provide bounded data for a later frontend. PostgreSQL integration tests exercise
+the actual vertical path, corruption, restart, races and recovery. No major UI or
+production login is added. See [ADR-015](docs/ADR-015-verifiable-trust-trace-and-m4-closure.md).
+Real Sandbox conformance and Channel3 remain pending; normal CI makes zero live calls.

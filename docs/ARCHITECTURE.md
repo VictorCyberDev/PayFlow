@@ -127,3 +127,76 @@ positive replay-absence validation, response limits, deployment assumptions and
 M4 entry contract. The AI interprets your intention. It does not grant itself
 permission. This does not claim production login, verified PayPal payee routing,
 privileged-administrator-proof evidence or exactly-once distributed execution.
+
+## M4B durable commerce terms
+
+A source-instance controlled offer and operator binding become an immutable durable
+quote, manifest and ordinary proposal. Migration 006 preserves binding history,
+owner snapshots and unique linkage. Reserved server metadata puts the manifest
+fingerprint inside the existing proposal digest; grant formats remain unchanged.
+The compiler validates projection bounds but never returns a financial decision
+or reserves authority. See [ADR-011](ADR-011-durable-checkout-manifests.md) for lock
+order, expiry, recovery and execution-conformance work deferred beyond M4B.
+
+## M4C execution-boundary commerce conformance
+
+Commerce-linked signed execution independently reloads the immutable M4B
+relationship before claim and provider dispatch. Exact PayPal item, amount,
+currency and provider-reported recipient conformance is mandatory; known
+provider conflicts durably quarantine authority without replacement purchases.
+Historical generic operations retain Foundation behavior. See [ADR-012](ADR-012-execution-boundary-commerce-conformance.md) for provider omissions, trusted host composition, recovery and claim limits.
+
+## M4D payer approval and durable resume
+
+Execution Grant → Commerce Revalidation → PayPal Create Order → Payer Action →
+Secure Resume → PayPal GET of persisted Order → Authority + Commerce Revalidation →
+Capture → Reconciliation.
+
+`PaymentResumeService` extends the existing M3C exact-action authentication boundary
+and uses migration 007 only for immutable hashed resume metadata. The existing
+Payment Attempt owns the operation, order and idempotency identity. APPROVED is
+provider state, not PayFlow authority. The rail itself checks current authority
+before every new capture, including direct reconciliation. Completed captures can
+still be observed after revocation/expiry. See [ADR-013](ADR-013-secure-payer-approval-resumption.md)
+for host session duties, failure states and the short grant lifetime.
+
+## M4E discovery to controlled checkout
+
+`CommerceDiscoveryProvider` supplies untrusted offer-level observations. The engine
+bounds complete responses before strict normalization, filters conditions, observed
+price/currency, availability, variant and configured checkout eligibility, then
+passes only the bounded eligible set to `CommerceRanker`. The model returns only
+`candidateId` and optional explanation. Membership is scoped to one fresh request;
+invalid output fails before controlled offer resolution.
+
+`ControlledDiscoveryResolver` reads immutable operator mapping ID/revision and
+reloads a branded offer from the trusted controlled source. `DiscoveryCheckoutService`
+persists bounded immutable selection provenance, verifies it on restart, and
+serializes quote resolution across PostgreSQL workers. No discovery refresh can
+reinterpret a historical selection or mapping revision. The current controlled
+price supplies the normal M4B quote, manifest and proposal; the existing Kernel,
+signed grant, M4C conformance and M4D payer-resume boundaries remain authoritative.
+Unmapped external retailers stay discovery-only. [ADR-014](ADR-014-untrusted-discovery-bounded-ranking.md)
+defines complete limits and the crash window that can leave an unlinked, unauthorized
+quote between quote issuance and provenance linking.
+
+## M4F final composition and verification
+
+Human mandate and Agent Passport → **untrusted** discovery → deterministic
+eligibility → bounded ranking → exact request-membership validation → **trusted
+operator mapping** → controlled source-issued offer → trusted complete quote →
+immutable manifest → ordinary proposal → **existing Trust Kernel** → receipt /
+human escalation approval → reservation → signed v1 execution grant → **M4C
+execution revalidation** → PayPal order → payer action / **M4D authenticated resume
+and server GET** → current authority and commerce revalidation → capture / UNKNOWN /
+reconciliation → durable financial outcome → **read-only Trust Trace**.
+
+The trace and Authority Meter are projections, not policy authorities. New immutable
+verification material preserves original ranking inputs, existing Kernel context,
+grant signature bytes and normalized provider facts. Historical absence remains
+explicit. Quote refusals preserve non-executable trusted terms. Original evidence
+hashes and financial state machines remain unchanged. One read-only repeatable-read
+snapshot prevents hybrid states; overflow never becomes VERIFIED. Internal integrity
+is not external immutable anchoring. [ADR-015](ADR-015-verifiable-trust-trace-and-m4-closure.md)
+records bounds, lookup/index behavior, historical/restart semantics and external
+acceptance requirements.
