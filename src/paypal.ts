@@ -306,6 +306,12 @@ export class PayPalPaymentProvider implements PaymentProvider {
       const u = new URL(raw);
       if (
         raw.length > 2048 ||
+        raw !== raw.trim() ||
+        [...raw].some(
+          (c) => c.charCodeAt(0) <= 32 || c.charCodeAt(0) === 127,
+        ) ||
+        raw.includes("?") ||
+        raw.includes("#") ||
         u.protocol !== "https:" ||
         u.username ||
         u.password ||
@@ -1528,6 +1534,10 @@ export function paypalProviderFromEnv(
 ): PayPalPaymentProvider {
   if (env.PAYPAL_ENVIRONMENT !== "sandbox")
     throw new Error("PAYPAL_2D_SANDBOX_ONLY");
+  const returnUrl = env.PAYPAL_RETURN_URL;
+  const cancelUrl = env.PAYPAL_CANCEL_URL;
+  if (!returnUrl || !cancelUrl)
+    throw new Error("PAYPAL_PAYER_RETURN_CONFIGURATION_REQUIRED");
   return new PayPalPaymentProvider(
     new PayPalOAuthClient(
       env.PAYPAL_CLIENT_ID ?? "",
@@ -1536,5 +1546,6 @@ export function paypalProviderFromEnv(
     ),
     fetcher,
     env.PAYPAL_ENVIRONMENT,
+    { returnUrl, cancelUrl },
   );
 }

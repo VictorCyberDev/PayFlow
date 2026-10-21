@@ -5,10 +5,83 @@ import {
   PayPalProviderError,
   paypalMoney,
   PAYPAL_RESPONSE_LIMITS,
+  paypalProviderFromEnv,
   withinPayPalRetryWindow,
 } from "../src/paypal.js";
 
 describe("Milestone 2D PayPal provider", () => {
+  it("requires deterministic payer return endpoints for env-backed checkout", () => {
+    expect(() =>
+      paypalProviderFromEnv({
+        PAYPAL_ENVIRONMENT: "sandbox",
+        PAYPAL_CLIENT_ID: "client",
+        PAYPAL_CLIENT_SECRET: "secret",
+      }),
+    ).toThrow("PAYPAL_PAYER_RETURN_CONFIGURATION_REQUIRED");
+  });
+
+  it("injects env-backed return and cancel URLs into payer approval", async () => {
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const fetcher: typeof fetch = (input, init) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      calls.push({ url, init });
+      return Promise.resolve(
+        url.endsWith("/v1/oauth2/token")
+          ? new Response(
+              JSON.stringify({ access_token: "token", expires_in: 60 }),
+              { status: 200 },
+            )
+          : new Response(
+              JSON.stringify({
+                id: "order",
+                status: "CREATED",
+                purchase_units: [],
+              }),
+              { status: 200 },
+            ),
+      );
+    };
+    const provider = paypalProviderFromEnv(
+      {
+        PAYPAL_ENVIRONMENT: "sandbox",
+        PAYPAL_CLIENT_ID: "client",
+        PAYPAL_CLIENT_SECRET: "secret",
+        PAYPAL_RETURN_URL: "https://payflow.example/paypal/return",
+        PAYPAL_CANCEL_URL: "https://payflow.example/paypal/cancel",
+      },
+      fetcher,
+    );
+    await provider.createOrder({
+      amountValue: "1.00",
+      currency: "USD",
+      merchantReference: "proposal",
+      requestId: "request",
+    });
+    const orderRequest = calls.find((call) =>
+      call.url.endsWith("/v2/checkout/orders"),
+    );
+    expect(orderRequest).toBeDefined();
+    const body = orderRequest?.init?.body;
+    expect(typeof body).toBe("string");
+    if (typeof body !== "string") throw new Error("ORDER_BODY_NOT_STRING");
+    expect(JSON.parse(body)).toMatchObject({
+      payment_source: {
+        paypal: {
+          experience_context: {
+            return_url: "https://payflow.example/paypal/return",
+            cancel_url: "https://payflow.example/paypal/cancel",
+            user_action: "PAY_NOW",
+          },
+        },
+      },
+    });
+  });
+
   it("M3F bounds an oversized provider response before accepting an order", async () => {
     const oauth = new PayPalOAuthClient(
       "client",
