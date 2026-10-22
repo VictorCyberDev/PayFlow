@@ -579,3 +579,11 @@ summary {
 .authority-progress-copy {
   color: #535b55;
 }
+
+/* Small secondary text meets AA contrast on the light wallet surfaces. */
+.eyebrow,
+.amount-block span,
+.authority-card p,
+.sidebar-note span:not(.status-dot) {
+  color: #535b55;
+}
