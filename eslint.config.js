@@ -18,5 +18,20 @@ export default tseslint.config(
       "@typescript-eslint/consistent-type-imports": "error",
     },
   },
+  {
+    ...tseslint.configs.disableTypeChecked,
+    files: ["public/**/*.js"],
+    languageOptions: {
+      parserOptions: { projectService: false, project: false },
+      globals: {
+        document: "readonly",
+        window: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        AbortController: "readonly",
+        fetch: "readonly",
+      },
+    },
+  },
   { ignores: ["dist/**", "coverage/**"] },
 );

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/paypal/return", "destination": "/api/paypal" },
+    { "source": "/paypal/cancel", "destination": "/api/paypal" },
+    { "source": "/paypal/status", "destination": "/api/paypal" }
+  ],
+  "functions": { "api/paypal.ts": { "maxDuration": 10 } },
+  "headers": [
+    {
+      "source": "/payer-return.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    }
+  ]
+}

@@ -1,4 +1,8 @@
 import {
+  PostgresPaymentStatusReader,
+  presentPayment,
+} from "../src/payer-return.js";
+import {
   beforeAll,
   beforeEach,
   afterAll,
@@ -261,6 +265,35 @@ import {
     const prepared = await service.prepare(attemptId, "commerce-p");
     secret = prepared.resumeSecret;
     expiresAt = prepared.expiresAt;
+    expect(provider.captureCalls).toBe(0);
+  });
+
+  it("payer return reads durable pending and captured state without execution", async () => {
+    const reader = new PostgresPaymentStatusReader(repo.sql);
+    const pending = await reader.find("ORDER-1");
+    expect(pending).not.toBeNull();
+    expect(presentPayment(pending!, "ORDER-1", false).state).toBe(
+      "CHECKING_PAYMENT_STATUS",
+    );
+    expect(provider.captureCalls).toBe(0);
+    approve();
+    await resume({ resumeSecret: secret, returnedOrderId: "ORDER-1" });
+    const before =
+      await repo.sql`select * from payment_attempts where id=${attemptId}`;
+    for (let n = 0; n < 3; n++) {
+      const captured = await reader.find("ORDER-1");
+      expect(presentPayment(captured!, "ORDER-1", n === 2).state).toBe(
+        "PAYMENT_COMPLETE",
+      );
+    }
+    const after =
+      await repo.sql`select * from payment_attempts where id=${attemptId}`;
+    expect(after).toEqual(before);
+    expect(provider.captureCalls).toBe(1);
+  });
+  it("payer status unknown order is read-only and unavailable", async () => {
+    const reader = new PostgresPaymentStatusReader(repo.sql);
+    expect(await reader.find("UNKNOWNSANDBOX000")).toBeNull();
     expect(provider.captureCalls).toBe(0);
   });
 
