@@ -33,5 +33,5 @@ export default tseslint.config(
       },
     },
   },
-  { ignores: ["dist/**", "coverage/**"] },
+  { ignores: ["dist/**", "coverage/**", "apps/console/**"] },
 );

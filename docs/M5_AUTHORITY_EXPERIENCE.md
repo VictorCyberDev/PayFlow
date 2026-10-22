@@ -259,3 +259,15 @@ M5 is PASS only when a user can:
 10. complete the hosted journey with M1–M4 regressions unchanged.
 
 M6 MUST NOT start before M5 is independently reviewed and explicitly merged/closed.
+
+## M5A implementation review boundary
+
+The original candidate was inspected against ADR-016, domain schemas, intent activation and HumanConfirmationBoundary, repository accounting, and OperationTraceService. It preserved the kernel but lacked a read contract/security tests, working navigation/disclosures, a lockfile and independent console gates. This continuation repairs those gaps rather than replacing accepted services.
+
+`src/authority-projection.ts` defines a bounded display-only contract and a read coordinator with trusted host authentication and owner-scoped store ports. It does **not** implement authentication, durable projection wiring, accounting, authorization or payment execution. A future adapter must read passport, mandate, revocation and accounting in one durable owner-bound snapshot, using the existing repository and server clock. `freshDispatchBlocked: null` means not established; an active display is never dispatch permission. Inactive views require blocked=true. Null cumulative/quantity values mean unavailable or not configured, not unlimited permission. The contract checks structural consistency only; it is not a replacement policy engine. No route exposes these ports in M5A.
+
+The console has its own installed dependency graph, lockfile, ESLint, type generation/typecheck, Node tests and static production export. Root ESLint and Vitest exclude the console, whose checks run in a separate CI job. Root format still checks authored console files. ADR-016 has only five heading-spacing corrections required by the existing format gate; its roadmap is unchanged.
+
+Fixtures use a distinct presentation-only shape marked NON_AUTHORITATIVE_FIXTURE; they are never serialized as the server projection. All visible amounts and outcomes are labelled examples. The composer reveals a fixed, explicitly non-interpreting preview marked NOT YET AUTHORIZED. No model integration, mandate activation, controls or live Activity reads are implemented. Verification disclosure reports fixture provenance, not invented live verification.
+
+Authenticated durable projection wiring is a later trusted-host dependency for GUIDE to scope, not bypassed here. M5B and M6 are NOT STARTED. PR #12 must remain DRAFT / OPEN / UNMERGED pending independent GUIDE review.

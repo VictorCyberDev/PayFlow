@@ -6,3 +6,7 @@ coverage/
 !.env.example
 *.log
 .DS_Store
+
+apps/console/.next/
+apps/console/out/
+*.tsbuildinfo
