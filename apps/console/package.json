@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "lint": "eslint app tests",
+    "lint": "eslint app lib tests",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --import tsx --test tests/*.test.mjs tests/*.test.tsx"
   },
   "dependencies": {
     "next": "^16.0.0",
@@ -18,8 +18,9 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.6.3",
     "eslint": "^9.13.0",
-    "eslint-config-next": "^16.0.0"
+    "eslint-config-next": "^16.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.6.3"
   }
 }

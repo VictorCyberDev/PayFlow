@@ -271,3 +271,29 @@ The console has its own installed dependency graph, lockfile, ESLint, type gener
 Fixtures use a distinct presentation-only shape marked NON_AUTHORITATIVE_FIXTURE; they are never serialized as the server projection. All visible amounts and outcomes are labelled examples. The composer reveals a fixed, explicitly non-interpreting preview marked NOT YET AUTHORIZED. No model integration, mandate activation, controls or live Activity reads are implemented. Verification disclosure reports fixture provenance, not invented live verification.
 
 Authenticated durable projection wiring is a later trusted-host dependency for GUIDE to scope, not bypassed here. M5B and M6 are NOT STARTED. PR #12 must remain DRAFT / OPEN / UNMERGED pending independent GUIDE review.
+
+## M5B — Ask PayFlow review implementation
+
+M5A at `e8988d7a4fde62ff03ad8b3323b5180f4f823ff3` is accepted for progression. Its Authority projection/security contract and financial foundations remain unchanged.
+
+M5B connects the composer to `IntentReviewService`, which reuses `interpretIntent` (existing strict model contract, deterministic compiler and conservative semantic validation). The result is a bounded, non-production display projection: source, interpretation/review status, fingerprint for valid drafts only, human-facing terms, fixed clarification/error text, minimal provenance, and a display deadline no later than five minutes or the proposed expiry. No raw provider output, reasoning, identity, activation requirement material, challenge, confirmation token, execution grant or resume capability is serialized. Model explanations do not become clarification questions. Secrets deliberately typed by a user remain user source; this layer does not claim general secret detection.
+
+The compiler and semantic limitations documented in ADR-005/006 are preserved. Semantic disagreement cannot reach a valid review. This is not formal verification of arbitrary language; interpretation and even a valid draft remain untrusted. Rendering an active-looking review never authorizes a purchase.
+
+### Non-production host boundary
+
+`intent-review-demo-host.ts` serves the console static export and same-origin review endpoints, on loopback only when launched directly. It reads no credentials and constructs no live Groq/PayPal provider. It provides fixed server-owned demo bounds: USD 100, one new item, DemoMerchant, create-order/payment proposal capabilities, at most one day. Browser input accepts only source text; any client bounds, owner, agent or activation field is rejected before interpretation. There is no authentication implementation, durable write or financial service. The port is deliberately local, not a production deployment or substitute for M5C.
+
+The recorded fake provider accepts one exact, explicitly specified sample (generated with a fresh expiry). This is fixture selection, not a second natural-language parser. Other text produces missing-field clarification without inferring any permissions. The UI labels recorded model behavior; arbitrary live NL interpretation has not been proven by this demo. A provider implementing the existing interface can be injected into server tests; normal CI never needs a live provider. The accepted Groq adapter and opt-in smoke guard remain unchanged.
+
+To inspect the local full flow, build the isolated console, then run `node --import tsx src/intent-review-demo-host.ts` from repository root. This is an optional development command, not a deployment. Static export alone has no review API; if the local host is absent, the UI shows a safe unavailable state.
+
+### Product states and tests
+
+The display controller covers empty, interpreting, valid/untrusted review, clarification, rejection, safe failure, edited-source stale state and expired review. Edits and out-of-order responses invalidate prior results, including edit-away-and-back. A reload starts empty and issues no review, activation or payment automatically. Review state is memory-only. Provider/transport waits are bounded. No confirmation action is rendered.
+
+Root tests cover real compiler/semantic processing through fake model fixtures, model widening/mismatch/activation injection, client-bound injection, provider errors/timeouts, output exclusion, and local HTTP handling. Console tests exercise the actual controller and server-rendered React review surface, including clarification/rejection without fabricated terms, escaped source text, accessibility announcements, stale responses, expiry and reload. Read-only M5A projection tests remain intact.
+
+M5B has no financial migration, no activation, no mandate creation, and no payment/provider dispatch. Console and root CI remain independently validated. No hosted console is deployed; obtaining a hosted API would require separate infrastructure scope. Existing payer-return hosting/configuration is untouched.
+
+M5B implementation stops for independent GUIDE review. M5C and M6 are NOT STARTED. PR #12 remains DRAFT / OPEN / UNMERGED.

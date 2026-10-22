@@ -587,3 +587,62 @@ summary {
 .sidebar-note span:not(.status-dot) {
   color: #535b55;
 }
+
+.composer label {
+  display: block;
+  padding: 20px 22px 0;
+  font-weight: 600;
+}
+.demo-note {
+  color: #535b55;
+  font-size: 13px;
+  line-height: 1.7;
+  margin-top: 20px;
+}
+.sample-button {
+  background: transparent;
+  color: #18382f;
+  border: 1px solid #aebdb3;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-top: 16px;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.interpretation dl {
+  margin: 20px 0;
+}
+.interpretation dl > div {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid #d2d8d2;
+}
+.interpretation dt {
+  color: #535b55;
+}
+.interpretation dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.interpretation blockquote {
+  margin: 16px 0;
+  padding-left: 16px;
+  border-left: 3px solid #aebdb3;
+  overflow-wrap: anywhere;
+}
+.technical-reference {
+  overflow-wrap: anywhere;
+}
+.clarification {
+  font-weight: 600;
+}
+@media (max-width: 620px) {
+  .interpretation dl > div {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}

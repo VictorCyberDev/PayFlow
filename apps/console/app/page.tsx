@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import AskPayFlow from "./ask-payflow";
 import { demoAuthority } from "../fixtures/authority";
 
 const nav = ["Home", "Ask PayFlow", "Authority", "Activity", "Agents"];
@@ -19,7 +20,6 @@ const recent = [
 ];
 
 export default function HomePage() {
-  const [review, setReview] = useState(false);
   const [active, setActive] = useState("Home");
   return (
     <main className="app-shell" id="home">
@@ -81,40 +81,7 @@ export default function HomePage() {
               clear limits you can review before anything becomes authorized.
             </p>
 
-            <div
-              id="ask"
-              className="composer"
-              role="group"
-              aria-label="Ask PayFlow"
-            >
-              <textarea
-                aria-label="Describe what your agent should handle"
-                defaultValue="Buy me one new mechanical keyboard under $100 this week. Never buy used or refurbished."
-                rows={3}
-              />
-              <div className="composer-footer">
-                <span>
-                  Nothing is authorized until you review and confirm it.
-                </span>
-                <button type="button" onClick={() => setReview(true)}>
-                  Preview interpretation
-                </button>
-              </div>
-            </div>
-            {review && (
-              <div className="interpretation" role="status">
-                <p className="eyebrow">AI interpretation · Example</p>
-                <h2>Not yet authorized</h2>
-                <p>
-                  One new mechanical keyboard. Up to $100. No used or
-                  refurbished items.
-                </p>
-                <p>
-                  This fixed example does not interpret your edited text. Live
-                  interpretation and authenticated activation are not connected.
-                </p>
-              </div>
-            )}
+            <AskPayFlow />
           </section>
 
           <section
