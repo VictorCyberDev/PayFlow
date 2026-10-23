@@ -1,32 +1,201 @@
 # PayFlow
 
-**PayFlow is a programmable trust layer for agentic commerce.** AI agents may propose commerce actions; the deterministic Trust Kernel remains the financial authority. PayPal is only an execution provider.
+**Verifiable financial authority for AI agents.**
 
-## Milestone 2D — PayPal Sandbox execution
+> Give AI agents permission to spend — not control of your money.
 
-The trusted path is:
+PayFlow sits between probabilistic AI intent and deterministic money movement. An AI agent may interpret, rank and propose a commerce action; PayFlow decides whether exact financial authority exists, enforces that authority at execution time, reconciles the payment provider outcome and preserves verifiable evidence of what actually happened.
 
-`Trust Kernel -> durable reservation -> Ed25519 execution grant -> immediate durable revalidation -> one-time authority claim -> durable Payment Attempt -> PayPal Orders v2 -> reconciliation -> COMMITTED`.
+## Why PayFlow exists
 
-2D uses PayPal Sandbox only (`https://api-m.sandbox.paypal.com`), server-side OAuth, Orders v2 and `intent=CAPTURE`. Non-sandbox configuration is rejected. Credentials and OAuth tokens are never committed or written to evidence.
+AI agents are becoming capable of shopping, procurement and other money-moving actions. The hard problem is not making an agent click “Pay.” It is proving:
 
-A Payment Attempt is durable and unique per execution grant/reservation. It stores separate stable create-order and capture idempotency IDs before provider side effects, plus the PayPal order/capture IDs, local/provider statuses, authoritative integer-minor amount/currency, failure classification and reconciliation timestamps. Order creation is not payment success.
+- who authorized the agent;
+- which agent is acting;
+- what exact authority was delegated;
+- whether the proposed merchant/item/amount/quantity is allowed now;
+- whether that authority is still active at dispatch time;
+- whether the provider actually moved money;
+- whether the result can be verified after retries, redirects, failures or ambiguity.
 
-### Ambiguous outcomes
+PayFlow is the authority and evidence layer for those questions. PayPal is the current execution rail, not the source of PayFlow authority.
 
-PostgreSQL and PayPal cannot participate in one atomic transaction. A timeout/reset/ambiguous 5xx after a capture request therefore enters `CAPTURE_UNKNOWN`, not `FAILED`. The grant remains `CLAIMED` and the reservation remains `EXECUTING`; authority is quarantined and is not returned to the mandate budget.
+## Product status
 
-Reconciliation uses Show Order. If PayPal proves the exact expected capture completed, PayFlow validates amount/currency and transactionally records `CAPTURED`, `CONSUMED` and `COMMITTED` without sending another capture. If provider state remains ambiguous, PayFlow remains fail-closed.
+Accepted milestones on `main`:
 
-Payer approval is represented explicitly. If PayPal requires payer action, the order and approval URL are persisted and no capture is claimed as successful. The final redirect UI is intentionally out of scope.
+| Milestone | Result |
+| --- | --- |
+| M1 — Trust Kernel | CLOSED / MERGED |
+| M2 — Durable authorization, signed execution grants, PayPal recovery | CLOSED / MERGED |
+| M3 — AI intent + authenticated mandate activation | CLOSED / MERGED |
+| M4 — Trusted commerce + PayPal Sandbox acceptance | CLOSED / MERGED |
+| Post-M4 — deterministic payer-return UX | CLOSED / MERGED |
+| M5 — Authority Experience | CLOSED / PASS / MERGED |
+| M6 — Delegated / Human-Not-Present Commerce | **NOT STARTED** |
 
-Money conversion uses integer minor units and explicit currency precision (`8900 USD -> 89.00`); binary floating point is not used.
+The post-M5 roadmap is frozen in [`docs/ADR-016-post-m4-product-roadmap.md`](docs/ADR-016-post-m4-product-roadmap.md).
 
-See `docs/ADR-003-paypal-execution-reconciliation.md` for the distributed-systems decision.
+## Live previews
+
+### M5 Authority Experience
+
+**https://payflow-m5-acceptance.vercel.app**
+
+This is the accepted **non-production** Authority Experience. It demonstrates:
+
+- Ask PayFlow;
+- untrusted AI interpretation presented as not yet authorized;
+- exact authenticated confirmation;
+- durable Authority views;
+- remaining budget/constraints/expiry;
+- Activity projections;
+- authenticated revoke controls;
+- durable hosted sessions and pending review state;
+- stale/replay/tamper protections.
+
+The hosted M5 environment intentionally uses a fixed-owner non-production demo identity and recorded model behavior. It is not a production identity system and M5 performs no PayPal capture.
+
+### Real PayPal Sandbox terminal-payment proof
+
+A separate accepted post-M4 deployment proves the real payment path and deterministic payer-return UX:
+
+**https://payflow-git-post-payment-ux-reconciliation-start-up16.vercel.app/paypal/return?token=6P5145740X635133T**
+
+Accepted Sandbox evidence for that operation:
+
+- amount: **$84.00 USD**;
+- PayPal order: COMPLETED;
+- capture: COMPLETED;
+- Payment Attempt: CAPTURED;
+- execution grant: CONSUMED;
+- reservation: COMMITTED;
+- Trust Trace: VERIFIED;
+- completed provider capture count: **exactly 1**;
+- safe terminal resume: **0 additional captures**.
+
+The public demos are deliberately separated today: M5 proves the premium Authority product and durable authenticated controls; the accepted M4/post-M4 environment proves real PayPal execution. M6 has not started.
+
+## The authority chain
+
+```text
+Human instruction
+        ↓
+AI interpretation (untrusted)
+        ↓
+Exact authenticated activation
+        ↓
+Mandate + AgentPassport
+        ↓
+Deterministic Trust Kernel
+        ↓
+Durable reservation
+        ↓
+Signed one-time execution grant
+        ↓
+Immediate authority revalidation
+        ↓
+PayPal execution
+        ↓
+UNKNOWN-safe reconciliation
+        ↓
+Durable evidence + Trust Trace
+```
+
+The model never grants itself financial permission.
+
+## Core security invariants
+
+- AI/model output is untrusted until exact authenticated confirmation.
+- Browser state is never financial truth.
+- `Mandate` is the durable financial-authority object.
+- `AgentPassport` is the durable agent identity/capability object.
+- DENY never reaches the payment provider.
+- Escalation requires a separate authenticated human action.
+- Budget and quantity consumption use durable transactional reservations.
+- Execution grants are signed, exact-bound, short-lived and one-time claimable.
+- Authority is revalidated immediately before new provider effects.
+- Revoked or expired authority cannot authorize new dispatch.
+- Ambiguous provider outcomes enter UNKNOWN/quarantine rather than being guessed as failed.
+- Reconciliation observes existing provider effects without silently creating a replacement purchase.
+- Checkout quote/manifest terms are bound to exact merchant/item/SKU/condition/quantity/amount/currency expectations.
+- PayPal return parameters are notifications, not financial authority.
+- `OperationTraceService` verifies historical relationships from durable state.
+- Historical evidence is not rewritten to make a demo look cleaner.
+
+## PayPal integration
+
+The accepted payment path uses the **PayPal Sandbox Orders v2 API** with server-side OAuth and `intent=CAPTURE`.
+
+PayFlow persists a durable Payment Attempt before provider side effects and keeps stable provider idempotency identifiers. It explicitly represents payer approval, capture ambiguity and reconciliation.
+
+A PayPal order being created is **not** treated as payment success. A successful operation requires provider conformance plus durable local finalization.
+
+Normal tests and CI do not contact PayPal. Live Sandbox smoke/acceptance paths require explicit opt-in and external credentials.
+
+## AI integration
+
+PayFlow's intent pipeline can use a server-side model provider to interpret natural-language delegation into a strict structured draft. The accepted implementation includes a bounded Groq integration and deterministic local compilation/semantic checks.
+
+The model:
+
+- receives untrusted source intent;
+- cannot create a trusted Mandate directly;
+- cannot authenticate the user;
+- cannot issue execution grants;
+- cannot dispatch PayPal;
+- cannot widen local review bounds;
+- cannot override deterministic authorization.
+
+The product rule is simple:
+
+> **The AI interprets your intention. It does not grant itself permission.**
+
+## Authority Experience
+
+M5 adds a premium product layer above the accepted kernel rather than a second permission model.
+
+Top-level surfaces:
+
+- Home
+- Ask PayFlow
+- Authority
+- Activity
+- Agents
+
+The primary UX uses human language such as:
+
+- “Up to $100”
+- “1 new item”
+- “Approved merchants only”
+- “Expires Friday at 6:00 PM”
+- “Your agent can complete this without asking again”
+
+Technical details remain behind progressive disclosure.
+
+See [`docs/M5_AUTHORITY_EXPERIENCE.md`](docs/M5_AUTHORITY_EXPERIENCE.md) for the accepted M5 evidence and boundaries.
+
+## Repository structure
+
+```text
+apps/console/      premium Authority Experience
+api/               bounded deployment/API entry points
+db/migrations/     forward-only PostgreSQL migrations
+hosting/            hosted M5 adapter and operator-only provisioning tooling
+src/                trust kernel, intent, authority, commerce and provider services
+tests/              deterministic, adversarial and PostgreSQL integration suites
+docs/               architecture decisions and acceptance evidence
+```
 
 ## Development
 
-Set `TEST_DATABASE_URL` to a disposable PostgreSQL database. Normal CI uses deterministic fake provider/HTTP boundaries and does not need PayPal credentials.
+Requirements:
+
+- Node.js / npm compatible with the lockfile;
+- PostgreSQL for integration tests;
+- no external provider credentials required for normal validation.
+
+Install and run the main validation gates:
 
 ```bash
 npm ci
@@ -40,169 +209,96 @@ npm audit --omit=dev --audit-level=high
 npm run build
 ```
 
-Optional real Sandbox smoke test:
+Console validation:
 
 ```bash
-PAYPAL_ENVIRONMENT=sandbox PAYPAL_CLIENT_ID=... PAYPAL_CLIENT_SECRET=... npm run test:paypal:sandbox
+cd apps/console
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
 ```
 
-The smoke path never stores or automates a Sandbox payer password. Manual payer approval may be required before capture.
+For integration tests, point `TEST_DATABASE_URL` at a disposable PostgreSQL database.
 
-## Scope boundary
+### Optional live provider smoke tests
 
-Milestones 1, 2A, 2B and 2C security invariants remain in force. 2D does not implement live PayPal, LLM mandate parsing, product discovery, final UI, autonomous shopping, subscriptions, refunds, disputes, multi-provider payments or Milestone 3. Webhook mutation is intentionally deferred rather than accepting an insecure unsigned placeholder; explicit provider reconciliation is authoritative in 2D.
+Live providers are always explicit opt-in. Credentials alone do not enable them.
 
-## Milestone 2E security boundary
-
-Normal execution and reconciliation share atomic Payment Attempt/grant/reservation
-finalization. Unknown outcomes retain authority; recovery dispatch rechecks current
-revocation/expiration and reuses persisted provider keys. Apply the forward
-`db/migrations/004_milestone_2e_security_boundary.sql` after migrations 001–003.
-See [ADR 004](docs/ADR-004-integrated-security-boundary.md) for crash windows,
-revocation handoff, evidence semantics, recovery APIs and residual dependencies.
-
-## Milestone 3A — intent contract and draft compiler
-
-`src/intent.ts` accepts an untrusted structured interpretation and independently
-supplied source/review bounds. It returns `VALID_DRAFT`, `NEEDS_CLARIFICATION` or
-`REJECTED`. A draft is never a trusted mandate; explicit human confirmation is
-still required. No LLM provider, activation/persistence operation or payment route
-is added. Quantity and merchant restrictions remain visible activation blockers
-where M2 lacks enforcement. See [ADR-005](docs/ADR-005-ai-intent-trust-boundary.md)
-for provenance, widening protections and semantic-verification limitations.
-
-## Milestone 3B — Groq interpretation, never authorization
-
-`src/intent-model.ts` connects natural-language source to Groq strict JSON Schema
-output, local 3A validation/compiler, conservative semantic checks and deterministic
-clarification. The model receives only the current source/reference; independent
-review bounds stay local. The output remains an untrusted draft for human review,
-with quantity/merchant activation requirements intact. The model has no
-confirmation/activation or financial route. The AI interprets your intention. It does not grant itself
-permission.
-
-Configure server-side `INTENT_MODEL_PROVIDER=groq`,
-`INTENT_MODEL_NAME=openai/gpt-oss-20b` and an external `GROQ_API_KEY`.
-Standard tests/CI use fake providers or mocked HTTP, require no key and make no
-Groq requests. Optional live interpretation smoke (no payment):
+Groq intent smoke:
 
 ```bash
 RUN_GROQ_SMOKE_TEST=true npm run test:groq:smoke
 ```
 
-See [ADR-006](docs/ADR-006-model-intent-integration.md) for the checked free-tier
-model, resource limits, safe failures and semantic limitations. Live smoke has not
-been verified without a runtime credential. Milestone 3C adds the separate authenticated activation boundary described below.
+PayPal Sandbox smoke:
 
-### Milestone 3C domain boundary
+```bash
+PAYPAL_ENVIRONMENT=sandbox \
+RUN_PAYPAL_SANDBOX_SMOKE_TEST=true \
+PAYPAL_CLIENT_ID=... \
+PAYPAL_CLIENT_SECRET=... \
+npm run test:paypal:sandbox
+```
 
-“The AI interprets your intention. It does not grant itself permission.”
+Never commit provider credentials, database URLs, bootstrap/operator codes, PayPal payer credentials, resume capabilities or signing secrets.
 
-The server can now persist an intent review, present its exact draft, authenticate an explicit human confirmation through a host-supplied verifier, and atomically activate a trusted mandate. Reviews expire within five minutes and are durably single-use. New activated mandates enforce quantity reservations and exact logical merchant allowlists. No web authentication server or final UI is included; a production host must implement the authentication guarantees in [ADR-007](docs/ADR-007-authenticated-intent-activation.md). Normal tests require no Groq or PayPal credentials. Migration 005 preserves legacy mandate semantics.
+## Accepted M5 verification baseline
 
-### Milestone 3D adversarial trust-boundary review
+Final M5 branch head: `773de321e8ed6f262e22c4a2f489b6021b3ba3de`.
 
-The full interpretation → authenticated activation → quantity/merchant authorization → signed grant → PayPal/evidence path is exercised with deterministic adversarial inputs and real PostgreSQL concurrency. A reproduced rejection-evidence privacy defect is fixed without changing financial semantics. See [ADR-008](docs/ADR-008-adversarial-trust-boundary-hardening.md) for the attack matrix, executable controls and residual limits.
+Merged main baseline: `771a1128392390c2015e40a543db496f5bda8fc9`.
 
-### Live-provider smoke tests
+Accepted exact-head CI: GitHub Actions run `39968156114` — SUCCESS.
 
-Provider credentials alone never enable live tests. Normal tests and CI use fake
-providers/mocked transport and consume no external-provider quota. Only the exact
-lowercase value `true` enables a live smoke switch; absent, `false`, `1`, `yes`
-and other values leave it disabled. Explicit opt-in without required configuration
-fails before a provider is constructed.
+Final reported M5 validation included:
 
-- Groq: `RUN_GROQ_SMOKE_TEST=true npm run test:groq:smoke`, with external `GROQ_API_KEY`.
-- PayPal Sandbox: `RUN_PAYPAL_SANDBOX_SMOKE_TEST=true npm run test:paypal:sandbox`,
-  with external Sandbox client ID/secret and `PAYPAL_ENVIRONMENT=sandbox`.
-  This optional test obtains OAuth and creates an order; it must never run merely
-  because credentials are configured.
-- Channel3: `RUN_CHANNEL3_SMOKE_TEST=false` is reserved; no Channel3 live test or
-  provider is implemented yet.
+- root tests: **1,679 passed, 0 failed, 3 skipped**;
+- PostgreSQL integration list: **755 passed, 0 failed**;
+- statements coverage: **95.37%**;
+- branches: **90.03%**;
+- functions: **94.16%**;
+- console tests: **67 / 67**;
+- Chromium E2E: **10 / 10**;
+- root and console production audits: **0 vulnerabilities**;
+- hosted acceptance: PASS.
 
-All switches default OFF. Never commit credentials or persist PayPal OAuth tokens.
+Migration `010` adds only durable non-production host/session/pending-action state for M5. Migrations `001` through `010` are frozen by ADR-016; future schema work, if explicitly authorized by a later milestone, begins at `011`.
 
-## M3F capability and authority conservation
+## Roadmap — frozen, M6 not started
 
-The current PayPal rail is a combined capture-capable lifecycle: fresh entry
-requires explicit CAPTURE_PAYMENT throughout upstream authority and the signed
-grant. CREATE_ORDER alone cannot dispatch create or capture. Historical external
-effects remain truthfully observable/finalizable; insufficient-capability recovery
-cannot dispatch a new provider operation or release uncertainty.
+The accepted sequence is:
 
-See [ADR-009](docs/ADR-009-foundation-authority-conservation.md) for the bounded conservation audit, read-only Trust Trace verifier,
-positive replay-absence validation, response limits, deployment assumptions and
-M4 entry contract. The AI interprets your intention. It does not grant itself
-permission. This does not claim production login, verified PayPal payee routing,
-privileged-administrator-proof evidence or exactly-once distributed execution.
+1. **M6 — Delegated / Human-Not-Present Commerce**
+2. **M7 — Live Agent Commerce Gateway**
+3. **M8 — Interoperable Verifiable Authority**
+4. **M9 — Trust Experience + Break PayFlow Arena**
+5. **M10 — Judge-Proof Acceptance and Submission**
 
-## M4B controlled checkout binding
+ADR-016 also locks later work around protocol-neutral interoperability, merchant-verifiable agent identity, scoped external-agent access, portable outcome evidence, the Break PayFlow benchmark and final judge-repository/Devpost acceptance gates.
 
-`DurableCheckoutService` issues complete controlled Sandbox quotes, seals immutable
-manifests and links them to ordinary proposals through server-owned metadata.
-Merchant-binding and offer fingerprints, exact SKU/variant/condition/quantity,
-recipient expectation and complete payable charges survive restart. Quotes expire
-within five minutes; changed terms require a new lifecycle. This creates no
-financial permission and makes no provider calls. Normal authorization is still
-required. Recipient/item conformance and payer approval are not implemented here.
-See [ADR-011](docs/ADR-011-durable-checkout-manifests.md).
+None of those later milestones are implemented merely because they are described here.
 
-## M4C execution-boundary commerce conformance
+## Current non-goals
 
-Commerce-linked signed execution independently reloads the immutable M4B
-relationship before claim and provider dispatch. Exact PayPal item, amount,
-currency and provider-reported recipient conformance is mandatory; known
-provider conflicts durably quarantine authority without replacement purchases.
-Historical generic operations retain Foundation behavior. See [ADR-012](docs/ADR-012-execution-boundary-commerce-conformance.md) for provider omissions, trusted host composition, recovery and claim limits.
+PayFlow is deliberately not trying to become:
 
-### M4D payer approval and secure resume
+- a bank;
+- wallet/custody infrastructure;
+- a card issuer;
+- a lender;
+- a proprietary LLM;
+- a generic browser agent;
+- a replacement for PayPal/Stripe/Visa/Mastercard payment rails;
+- a second protocol-specific policy engine.
 
-Payer approval may temporarily leave PayFlow for PayPal. Browser return parameters
-are untrusted notifications: an opaque durable resume capability and the existing
-human authentication boundary identify the original attempt. PayFlow retrieves the
-persisted PayPal order server-side and revalidates current authority and commerce
-before any new capture. Revocation or expiry during approval prevents new financial
-dispatch. Already-existing conforming captures remain truthfully reconcilable.
-No authority is automatically renewed. Host browser sessions/login remain outside
-this repository. See [ADR-013](docs/ADR-013-secure-payer-approval-resumption.md).
+The product moat is the complete conserved authority chain from human instruction to independently verifiable financial outcome.
 
-### M4E discovery and bounded ranking
+## Open source
 
-External discovery is untrusted evidence. PayFlow normalizes each offer separately,
-filters it deterministically, and gives the ranker only eligible request-scoped
-candidates. Model output contains a candidate ID and optional bounded explanation;
-local membership validation rejects invented IDs and extra authority fields.
+PayFlow is released under the [MIT License](LICENSE).
 
-Only explicit operator mappings can resolve selected Demo Merchant observations
-to independently loaded controlled offers. Unmapped retailers remain
-**DISCOVERY_ONLY**: no silent Demo Merchant substitution. Discovery prices are
-observations; fresh M4B quotes supply executable price and merchant terms. Selected
-provenance is bounded, immutable, fingerprinted and verified on restart. Channel3
-and real LLM adapters remain pending; normal validation makes no live provider calls.
-See [ADR-014](docs/ADR-014-untrusted-discovery-bounded-ranking.md) for bounds,
-mapping revisions, corruption checks and security claim limits.
+## Safety / environment note
 
-### Milestone 4: authority from human intent to financial outcome
-
-AI agents can reason about spending. PayFlow determines what an agent is allowed
-to do with a user's money: the human defines authority, AI ranks constrained
-candidates, the existing Kernel authorizes exact trusted commerce terms, PayPal
-executes, and a read-only Trust Trace verifies the durable relationships.
-
-For “buy one NEW keyboard under $100,” deterministic eligibility excludes cheaper
-USED/UNKNOWN and unsupported offers. The ranker selects an eligible candidate; an
-operator mapping reloads the controlled Demo Merchant offer. A trusted $84 quote
-becomes a manifest/proposal, ALLOW, reservation and signed grant. M4C/M4D constrain
-order, payer approval/resume and capture. A completed conforming operation can then
-have a VERIFIED trace and a separate financial/commercial Authority Meter.
-
-A trusted price drift to $184 is refused before an executable quote/proposal is
-issued; the trace preserves $84 observed and $184 refused trusted terms. Revocation
-during payer approval produces zero capture. A lost capture response produces
-UNKNOWN and reconciliation of the original effect, rather than another purchase.
-
-`OperationTraceService`, `projectM4Demo` and the 37-scenario Break PayFlow contracts
-provide bounded data for a later frontend. PostgreSQL integration tests exercise
-the actual vertical path, corruption, restart, races and recovery. No major UI or
-production login is added. See [ADR-015](docs/ADR-015-verifiable-trust-trace-and-m4-closure.md).
-Real Sandbox conformance and Channel3 remain pending; normal CI makes zero live calls.
+This repository currently demonstrates financial authorization and PayPal integration in **Sandbox/non-production environments**. It is not production banking infrastructure, a custody service or a claim of regulatory certification.
