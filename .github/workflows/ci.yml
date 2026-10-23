@@ -80,6 +80,7 @@ jobs:
       - run: npm run build
   console-e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17
@@ -107,7 +108,15 @@ jobs:
         working-directory: apps/console
       - run: npm run build
         working-directory: apps/console
-      - run: npx playwright-core install --with-deps chromium
+      # The browser download/apt step has hung on the runner mirror; bound and retry it.
+      - name: Install Chromium (bounded retry)
         working-directory: apps/console
+        timeout-minutes: 10
+        run: |
+          for attempt in 1 2 3; do
+            timeout 240 npx playwright-core install --with-deps chromium && exit 0
+            echo "Chromium install attempt $attempt failed"
+          done
+          exit 1
       - run: npm run test:e2e
         working-directory: apps/console
