@@ -16,6 +16,7 @@
   "include": [
     "src/**/*.ts",
     "api/**/*.ts",
+    "hosting/**/*.ts",
     "tests/**/*.ts",
     "eslint.config.js",
     "vitest.config.ts"

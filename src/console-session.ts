@@ -12,6 +12,36 @@ export interface ConsoleRequest {
   csrf?: string | undefined;
   host?: string | undefined;
 }
+export interface ConsoleLogin {
+  cookie: string;
+  view: {
+    mode: "NON_PRODUCTION_DEMO";
+    authenticated: true;
+    csrfToken: string;
+    expiresAt: string;
+  };
+}
+/** What the host, activation, controls and activity adapters need from a session store.
+ * Methods may be synchronous (process-local demo) or asynchronous (durable host state):
+ * callers always `await`. Both implementations keep the accepted M5C guarantees. */
+export interface ConsoleSessionPort extends HumanActionAuthenticator {
+  checkOrigin(req: ConsoleRequest): void;
+  login(
+    req: ConsoleRequest,
+    raw: unknown,
+  ): ConsoleLogin | Promise<ConsoleLogin>;
+  read(req: ConsoleRequest): object | Promise<object>;
+  view(context: unknown): ConsoleLogin["view"];
+  requirePrincipal(context: unknown): Promise<string>;
+  /** Opaque stable reference to the authenticated session (never the raw token). */
+  ownerRef(context: unknown): string;
+  mutation(req: ConsoleRequest, charge?: boolean): object | Promise<object>;
+  seal(
+    req: ConsoleRequest,
+    binding: HumanActionBinding,
+  ): object | Promise<object>;
+  logout(req: ConsoleRequest): string | Promise<string>;
+}
 type Session = {
   principalId: string;
   csrf: string;
@@ -25,7 +55,7 @@ const equal = (a: string, b: string) => timingSafeEqual(digest(a), digest(b));
 const token = () => randomBytes(32).toString("base64url");
 /** NON-PRODUCTION fixed-identity bootstrap, opaque in-memory sessions. No identity
  * provider claim. Bootstrap key must be configured privately by the operator. */
-export class ConsoleSessions implements HumanActionAuthenticator {
+export class ConsoleSessions implements ConsoleSessionPort {
   readonly #sessions = new Map<string, Session>();
   readonly #handles = new WeakMap<object, Session>();
   readonly #actions = new WeakMap<
@@ -145,6 +175,9 @@ export class ConsoleSessions implements HumanActionAuthenticator {
   }
   requirePrincipal(context: unknown): Promise<string> {
     return Promise.resolve(this.#session(context).principalId);
+  }
+  ownerRef(context: unknown) {
+    return this.#session(context).key;
   }
   sameSession(a: unknown, b: unknown) {
     return this.#session(a) === this.#session(b);

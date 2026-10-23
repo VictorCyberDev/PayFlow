@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ConsoleRequest, ConsoleSessions } from "./console-session.js";
+import type { ConsoleRequest, ConsoleSessionPort } from "./console-session.js";
 import type { PostgresTrustRepository } from "./persistence.js";
 import { AuthorityViewService } from "./authority-projection.js";
 import { PostgresAuthorityViewReader } from "./authority-postgres.js";
@@ -9,7 +9,7 @@ export class ConsoleControls {
   readonly #views: AuthorityViewService;
   constructor(
     private readonly repo: PostgresTrustRepository,
-    private readonly sessions: ConsoleSessions,
+    private readonly sessions: ConsoleSessionPort,
     private readonly clock: () => Date = () => new Date(),
   ) {
     this.#views = new AuthorityViewService(
@@ -19,7 +19,7 @@ export class ConsoleControls {
   }
   async list(req: ConsoleRequest, raw: unknown) {
     z.object({}).strict().parse(raw);
-    const context = this.sessions.read(req);
+    const context = await this.sessions.read(req);
     const principal = await this.sessions.requirePrincipal(context);
     const rows = await this.repo
       .sql`select id from mandates where principal_id=${principal} order by created_at desc,id desc limit 20`;
@@ -36,7 +36,7 @@ export class ConsoleControls {
     return { version: "payflow.authorities.v1", items, limit: 20 };
   }
   async revoke(req: ConsoleRequest, raw: unknown) {
-    const context = this.sessions.mutation(req);
+    const context = await this.sessions.mutation(req);
     const principal = await this.sessions.requirePrincipal(context);
     const q = z
       .object({ action: z.literal("REVOKE_AUTHORITY"), mandateId: id })

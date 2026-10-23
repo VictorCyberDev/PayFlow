@@ -3,13 +3,13 @@ import { OperationTraceService } from "./operation-trace.js";
 import { activityItem, type ActivityItem } from "./activity-projection.js";
 import type { PublicKeyResolver } from "./execution-grant.js";
 import { persistedDate, type PostgresTrustRepository } from "./persistence.js";
-import type { ConsoleRequest, ConsoleSessions } from "./console-session.js";
+import type { ConsoleRequest, ConsoleSessionPort } from "./console-session.js";
 /** Bounded, owner-scoped read adapter. No provider or execution capability. */
 export class ConsoleActivity {
   readonly #trace: OperationTraceService;
   constructor(
     private readonly repo: PostgresTrustRepository,
-    private readonly sessions: ConsoleSessions,
+    private readonly sessions: ConsoleSessionPort,
     keys: PublicKeyResolver,
     private readonly clock: () => Date = () => new Date(),
   ) {
@@ -20,7 +20,7 @@ export class ConsoleActivity {
       .object({ operationId: z.string().min(1).max(128).optional() })
       .strict()
       .parse(raw);
-    const context = this.sessions.read(req),
+    const context = await this.sessions.read(req),
       principal = await this.sessions.requirePrincipal(context);
     const rows = q.operationId
       ? await this.repo

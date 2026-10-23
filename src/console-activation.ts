@@ -11,8 +11,8 @@ import type { IntentCompileContext, MandateDraft } from "./intent.js";
 import type { PostgresTrustRepository } from "./persistence.js";
 import { AuthorityViewService } from "./authority-projection.js";
 import { PostgresAuthorityViewReader } from "./authority-postgres.js";
-import type { ConsoleSessions } from "./console-session.js";
-import { type ConsoleRequest } from "./console-session.js";
+import type { ConsoleRequest, ConsoleSessionPort } from "./console-session.js";
+import { MemoryPendingStore, type PendingStore } from "./console-pending.js";
 const term = z
   .object({
     label: z.string().min(1).max(80),
@@ -33,35 +33,26 @@ export const PendingAuthoritySchema = z
   })
   .strict();
 type PendingAuthority = z.infer<typeof PendingAuthoritySchema>;
-type Pending = {
-  owner: object;
-  view: PendingAuthority;
-  request: {
-    action: "CONFIRM_EXACT_TERMS";
-    reviewId: string;
-    agentId: string;
-    draftFingerprint: string;
-    reviewedHash: string;
-    challenge: string;
-  };
-};
 /** Host orchestration only. Every durable creation/confirmation delegates to M3C. */
 export class ConsoleActivation {
-  readonly #pending = new Map<string, Pending>();
+  readonly #pending: PendingStore;
   #preparing = 0;
   readonly #boundary: HumanConfirmationBoundary;
   readonly #activation: IntentActivationService;
   readonly #authority: AuthorityViewService;
   constructor(
     private readonly repo: PostgresTrustRepository,
-    readonly sessions: ConsoleSessions,
+    readonly sessions: ConsoleSessionPort,
     private readonly config: {
       agentId: string;
       provider: IntentModelProvider;
       bounds: (now: Date) => IntentCompileContext["reviewBounds"];
+      /** Defaults to the process-local store; hosted deployments inject the durable store. */
+      pending?: PendingStore;
     },
     private readonly clock: () => Date = () => new Date(),
   ) {
+    this.#pending = config.pending ?? new MemoryPendingStore();
     this.#boundary = new HumanConfirmationBoundary(sessions, clock);
     this.#activation = new IntentActivationService(repo, this.#boundary, clock);
     this.#authority = new AuthorityViewService(
@@ -70,11 +61,8 @@ export class ConsoleActivation {
     );
   }
   async prepare(req: ConsoleRequest, raw: unknown): Promise<PendingAuthority> {
-    const owner = this.sessions.mutation(req);
-    for (const [id, p] of this.#pending)
-      if (Date.parse(p.view.expiresAt) <= this.clock().getTime())
-        this.#pending.delete(id);
-    if (this.#pending.size + this.#preparing >= 128)
+    const owner = await this.sessions.mutation(req);
+    if ((await this.#pending.count(this.clock())) + this.#preparing >= 128)
       throw new Error("REVIEW_LIMIT");
     this.#preparing++;
     try {
@@ -115,7 +103,7 @@ export class ConsoleActivation {
         agentId: this.config.agentId,
       };
       const authenticated = await this.#boundary.authenticate(
-        this.sessions.seal(req, binding),
+        await this.sessions.seal(req, binding),
         binding,
       );
       const r = await this.#activation.createReview(
@@ -196,18 +184,23 @@ export class ConsoleActivation {
         ...display,
         displayHash: reviewHash(display),
       });
-      this.#pending.set(r.reviewId, {
-        owner,
-        view,
-        request: {
-          action: "CONFIRM_EXACT_TERMS",
+      await this.#pending.put(
+        {
           reviewId: r.reviewId,
-          agentId: this.config.agentId,
-          draftFingerprint: r.draftFingerprint,
-          reviewedHash: r.reviewedHash,
-          challenge: r.challenge,
+          ownerRef: this.sessions.ownerRef(owner),
+          displayHash: view.displayHash,
+          expiresAt: view.expiresAt,
+          request: {
+            action: "CONFIRM_EXACT_TERMS",
+            reviewId: r.reviewId,
+            agentId: this.config.agentId,
+            draftFingerprint: r.draftFingerprint,
+            reviewedHash: r.reviewedHash,
+            challenge: r.challenge,
+          },
         },
-      });
+        this.clock(),
+      );
       return view;
     } finally {
       this.#preparing--;
@@ -219,7 +212,7 @@ export class ConsoleActivation {
   ): Promise<
     { status: "ACTIVATED"; mandateId: string } | { status: "REJECTED" }
   > {
-    const owner = this.sessions.mutation(req);
+    const owner = await this.sessions.mutation(req);
     const q = z
       .object({
         action: z.literal("CONFIRM_EXACT_TERMS"),
@@ -228,24 +221,28 @@ export class ConsoleActivation {
       })
       .strict()
       .parse(raw);
-    const p = this.#pending.get(q.reviewId);
-    if (
-      !p ||
-      !this.sessions.sameSession(owner, p.owner) ||
-      p.view.displayHash !== q.displayHash
-    )
-      return { status: "REJECTED" };
-    const { challenge, ...rest } = p.request;
+    // Durable stores consume the pending action atomically: at most one caller (on any host
+    // instance) obtains it. The M3C service still enforces its own replay/epoch/expiry rules.
+    const request = await this.#pending.claim(
+      {
+        reviewId: q.reviewId,
+        ownerRef: this.sessions.ownerRef(owner),
+        displayHash: q.displayHash,
+      },
+      this.clock(),
+    );
+    if (!request) return { status: "REJECTED" };
+    const { challenge, ...rest } = request;
     const binding = { ...rest, challengeHash: reviewHash(challenge) };
     const result = await this.#activation.confirmReviewedIntent(
-      p.request,
-      this.sessions.seal(req, binding),
+      request,
+      await this.sessions.seal(req, binding),
     );
     return result.status === "ACTIVATED"
       ? { status: "ACTIVATED", mandateId: result.mandate.id }
       : { status: "REJECTED" };
   }
   async authority(req: ConsoleRequest, raw: unknown) {
-    return this.#authority.read(this.sessions.read(req), raw);
+    return this.#authority.read(await this.sessions.read(req), raw);
   }
 }

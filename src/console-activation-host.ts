@@ -28,14 +28,18 @@ import { PostgresTrustRepository } from "./persistence.js";
 export function activationHttpHandler(
   app: ConsoleActivation,
   options: {
-    sample: string;
+    /** A function lets multi-instance hosts compute the recorded sample deterministically. */
+    sample: string | (() => string);
     review: IntentReviewService;
-    outputDirectory: string;
+    /** Local development serves the static console itself; hosted deployments do not. */
+    outputDirectory?: string;
     controls?: ConsoleControls;
     activity?: ConsoleActivity;
   },
 ) {
-  const staticHost = createReviewDemoHost(options.outputDirectory);
+  const staticHost = options.outputDirectory
+    ? createReviewDemoHost(options.outputDirectory)
+    : undefined;
   function json(
     res: ServerResponse,
     code: number,
@@ -53,7 +57,8 @@ export function activationHttpHandler(
   return async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (!url.pathname.startsWith("/api/")) {
-      staticHost.emit("request", req, res);
+      if (staticHost) staticHost.emit("request", req, res);
+      else json(res, 404, { status: "UNAVAILABLE" });
       return;
     }
     const meta: ConsoleRequest = {
@@ -68,7 +73,11 @@ export function activationHttpHandler(
     try {
       if (req.method === "GET") {
         if (url.pathname === "/api/activation/session")
-          return json(res, 200, app.sessions.view(app.sessions.read(meta)));
+          return json(
+            res,
+            200,
+            app.sessions.view(await app.sessions.read(meta)),
+          );
         if (
           url.pathname === "/api/activation/authorities" &&
           options.controls
@@ -105,7 +114,10 @@ export function activationHttpHandler(
         if (url.pathname === "/api/intent-review/sample")
           return json(res, 200, {
             mode: "NON_PRODUCTION_REVIEW",
-            sample: options.sample,
+            sample:
+              typeof options.sample === "function"
+                ? options.sample()
+                : options.sample,
           });
         return json(res, 405, { status: "UNAVAILABLE" });
       }
@@ -119,7 +131,7 @@ export function activationHttpHandler(
         url.pathname.startsWith("/api/activation/") &&
         url.pathname !== "/api/activation/session"
       )
-        app.sessions.mutation(meta, true);
+        await app.sessions.mutation(meta, true);
       const chunks: Buffer[] = [];
       let size = 0;
       for await (const chunk of req) {
@@ -130,17 +142,13 @@ export function activationHttpHandler(
       }
       const body: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       if (url.pathname === "/api/activation/session") {
-        const login = app.sessions.login(meta, body);
+        const login = await app.sessions.login(meta, body);
         return json(res, 200, login.view, login.cookie);
       }
       if (url.pathname === "/api/activation/logout") {
         z.object({}).strict().parse(body);
-        return json(
-          res,
-          200,
-          { authenticated: false },
-          app.sessions.logout(meta),
-        );
+        const cleared = await app.sessions.logout(meta);
+        return json(res, 200, { authenticated: false }, cleared);
       }
       if (url.pathname === "/api/activation/revoke" && options.controls)
         return json(res, 200, await options.controls.revoke(meta, body));
