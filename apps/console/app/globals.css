@@ -775,14 +775,16 @@ button:disabled {
   .nav-item,
   .sidebar a[href],
   .authority-actions a,
-  a.text-button {
+  a.text-button,
+  .skip-link {
     min-height: 44px;
   }
   button,
   .nav-item,
   .sidebar a[href],
   .authority-actions a,
-  a.text-button {
+  a.text-button,
+  .skip-link {
     display: inline-flex;
     align-items: center;
     justify-content: center;
