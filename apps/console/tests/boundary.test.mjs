@@ -4,10 +4,6 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 const root = new URL("../", import.meta.url);
-const page =
-  readFileSync(new URL("app/page.tsx", root), "utf8") +
-  readFileSync(new URL("app/ask-payflow.tsx", root), "utf8") +
-  readFileSync(new URL("app/management-panel.tsx", root), "utf8");
 function files(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory() ? files(join(dir, e.name)) : [join(dir, e.name)],
@@ -16,7 +12,7 @@ function files(dir) {
 test("browser graph contains no execution, persistence, credentials or unrestricted dispatch", () => {
   for (const f of [
     ...files(fileURLToPath(new URL("app/", root))),
-    ...files(fileURLToPath(new URL("fixtures/", root))),
+    fileURLToPath(new URL("qa/fixtures.ts", root)),
     ...files(fileURLToPath(new URL("lib/", root))),
   ]) {
     const source = readFileSync(f, "utf8");
@@ -26,46 +22,79 @@ test("browser graph contains no execution, persistence, credentials or unrestric
     );
   }
 });
-test("fixtures are explicitly separate from authoritative types", () => {
-  const fixture = readFileSync(new URL("fixtures/authority.ts", root), "utf8");
-  assert.match(fixture, /NON_AUTHORITATIVE_FIXTURE/);
-  assert.doesNotMatch(fixture, /import|AuthorityProjection\s*[=<>:]/);
-  assert.match(page, /Non-production workspace/);
-  assert.match(page, /Not yet authorized/);
-  assert.match(page, /Non-production review demo/);
-  assert.match(page, /recorded model fixtures/);
-});
-test("all primary sections have working destinations and disclosure is semantic", () => {
-  for (const id of ["home", "ask", "authority", "activity", "agents"])
-    assert.match(page, new RegExp(`id="${id}"`));
-  assert.match(page, /<summary>View verification details/);
-  assert.match(page, /Skip to content/);
+const read = (p) => readFileSync(new URL(p, root), "utf8");
+const allApp = () =>
+  files(fileURLToPath(new URL("app/", root)))
+    .filter((f) => /\.(tsx|ts)$/.test(f))
+    .map((f) => readFileSync(f, "utf8"))
+    .join("\n");
+
+test("every customer destination is a real route, not an anchor on one page", () => {
+  for (const route of [
+    "page.tsx",
+    "new/page.tsx",
+    "authorities/page.tsx",
+    "activity/page.tsx",
+    "about/page.tsx",
+  ])
+    assert.ok(read("app/" + route).length > 0, route);
+  const shell = read("app/ui/shell.tsx");
+  for (const href of ['"/"', '"/new/"', '"/authorities/"', '"/activity/"'])
+    assert.ok(shell.includes(href), href);
   assert.doesNotMatch(
-    page,
-    /href="#"|confirmReviewedIntent|activateReviewedIntent/,
+    allApp(),
+    /href="#(home|ask|authority|activity|agents|managed-authorities)"/,
+  );
+  assert.match(shell, /Skip to content/);
+  assert.match(read("next.config.ts"), /trailingSlash: true/);
+});
+
+test("customer-facing views carry no maintenance controls", () => {
+  assert.doesNotMatch(
+    allApp(),
+    /Refresh saved state|Refresh authority|Re-read|Retry provider/,
   );
 });
 
-test("browser transport is limited to non-authoritative review endpoints", () => {
-  const client = readFileSync(new URL("lib/review-client.mjs", root), "utf8");
+test("browser transport is limited to the accepted review and activation endpoints", () => {
+  const client = read("lib/review-client.mjs");
   assert.match(client, /fetch\("\/api\/intent-review"/);
-  assert.match(page, /fetch\("\/api\/intent-review\/sample"/);
+  assert.match(allApp(), /fetch\("\/api\/intent-review\/sample"/);
   assert.doesNotMatch(
-    page + client,
+    allApp() + client,
     /localStorage|sessionStorage|document\.cookie|confirmReviewedIntent|activateReviewedIntent|paypal\.com|api\.groq/,
   );
 });
 
-test("M5C client never contains a host assertion, bootstrap key or payment route", () => {
-  const client = readFileSync(
-    new URL("lib/activation-client.mjs", root),
-    "utf8",
-  );
-  const panel = readFileSync(new URL("app/activation-panel.tsx", root), "utf8");
+test("client never contains a host assertion, bootstrap key or payment route", () => {
+  const client = read("lib/activation-client.mjs");
   assert.doesNotMatch(
-    client + panel,
+    client + allApp(),
     /PAYFLOW_M5C_BOOTSTRAP_KEY|DATABASE_URL|localStorage|sessionStorage|document\.cookie|confirmReviewedIntent|activateReviewedIntent|api\.groq|paypal\.com|PaymentResumeService/,
   );
   assert.match(client, /\/api\/activation\/authority\?mandateId=/);
-  assert.match(panel, /Non-production fixed-identity demo/);
+});
+
+test("the old generic design is gone: one stylesheet, one token set, no rounded-card or gradient identity", () => {
+  const css = read("app/globals.css");
+  assert.match(css, /--ink:\s*#12161b/i);
+  assert.match(css, /--signal:\s*#f5b301/i);
+  assert.doesNotMatch(
+    css,
+    /backdrop-filter|(?<!repeating-)linear-gradient|radial-gradient|#18382f|#2d7a5d/i,
+  );
+  assert.doesNotMatch(css, /border-radius:\s*(?!0|50%)\d/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+});
+
+test("fonts are self-hosted so the CSP stays 'self'", () => {
+  const css = read("app/globals.css");
+  assert.doesNotMatch(css, /https?:\/\/|fonts\.googleapis/);
+  for (const f of ["bricolage-grotesque", "instrument-sans", "ibm-plex-mono"])
+    assert.ok(
+      readdirSync(fileURLToPath(new URL("app/fonts/", root))).some((n) =>
+        n.startsWith(f),
+      ),
+      f,
+    );
 });

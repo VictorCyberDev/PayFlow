@@ -62,7 +62,7 @@ export function createReviewDemoHost(outputDirectory: string) {
     const base = resolve(outputDirectory),
       file = resolve(
         base,
-        `.${decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname)}`,
+        `.${decodeURIComponent(url.pathname.endsWith("/") ? url.pathname + "index.html" : url.pathname)}`,
       );
     const mime: Record<string, string> = {
       ".html": "text/html; charset=utf-8",
@@ -71,6 +71,8 @@ export function createReviewDemoHost(outputDirectory: string) {
       ".json": "application/json",
       ".ico": "image/x-icon",
       ".svg": "image/svg+xml",
+      ".woff2": "font/woff2",
+      ".txt": "text/plain; charset=utf-8",
     };
     if (!file.startsWith(base + "/") || !mime[extname(file)])
       return json(res, 404, { error: "NOT_FOUND" });

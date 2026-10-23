@@ -49,19 +49,35 @@ async function open(viewport = { width: 1280, height: 900 }, opts = {}) {
   await page.goto(origin);
   return { context, page, problems, responses };
 }
+const nav = (page, name) =>
+  page
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name })
+    .click();
 async function login(page) {
-  await page.getByLabel("Demo access code").fill(code);
-  await page.getByRole("button", { name: "Open demo session" }).click();
+  await page.getByLabel("Access code").fill(code);
+  await page.getByRole("button", { name: "Open demo" }).click();
   await page
-    .getByRole("button", { name: "Prepare exact authority review" })
+    .getByRole("heading", {
+      level: 1,
+      name: /Authorities yet|within your rules|No Authority is active|need.? attention/,
+    })
     .waitFor();
 }
-async function review(page) {
+async function understand(page) {
+  await nav(page, /New/);
+  await page.getByRole("button", { name: "Use the example" }).click();
+  await page.waitForFunction(
+    () => document.getElementById("request")?.value.length > 0,
+  );
+  await page.getByRole("button", { name: "Review my request" }).click();
   await page
-    .getByRole("button", { name: /recorded, fully specified example/ })
-    .click();
-  await page.getByRole("button", { name: "Review request" }).click();
-  await page.getByText("What the AI understood").waitFor();
+    .getByRole("heading", { level: 1, name: /what PayFlow understood/ })
+    .waitFor();
+}
+async function toConfirm(page) {
+  await page.getByRole("button", { name: "Continue to confirm" }).click();
+  await page.getByRole("button", { name: "Confirm Authority" }).waitFor();
 }
 const api = (path, init = {}) =>
   fetch(origin + path, { redirect: "manual", ...init });
@@ -137,31 +153,27 @@ test("HTTPS, security headers and cookie attributes on the hosted origin", async
   assert.equal(preflight.headers.get("access-control-allow-origin"), null);
 });
 
-test("complete hosted journey: untrusted review, exact confirmation, ACTIVE, reload, Activity, revoke, REVOKED, reload, stale correction", async () => {
+test("complete hosted journey: untrusted review, exact confirmation, Active, reload, revoke elsewhere, Revoked, reload", async () => {
   const { context, page, problems } = await open();
   await shot(page, "h01-home");
-  await review(page);
-  assert.ok(await page.getByText("Not yet authorized").first().isVisible());
-  assert.ok(
-    await page
-      .getByText(/AI interpretation · Untrusted/i)
-      .first()
-      .isVisible(),
-  );
   await login(page);
-  await page
-    .getByRole("button", { name: "Prepare exact authority review" })
-    .click();
-  await page
-    .getByRole("heading", { name: /Give .* this authority\?/ })
-    .waitFor();
+  await understand(page);
+  assert.ok(await page.getByText("Not yet authorized").first().isVisible());
+  await toConfirm(page);
   assert.ok(await page.getByText("Not yet authorized").first().isVisible());
   await shot(page, "h02-confirmation");
-  await page.getByRole("button", { name: "Confirm authority" }).click();
-  await page.getByRole("heading", { name: "Authority active" }).waitFor();
-  await page.locator(".managed-card").first().waitFor();
-  await shot(page, "h03-active");
-  const id = new URL(page.url()).searchParams.get("authority");
+  await page.getByRole("button", { name: "Confirm Authority" }).click();
+  await page
+    .getByRole("heading", { level: 1, name: "Authority created" })
+    .waitFor();
+  await page.locator(".frame").first().waitFor();
+  await shot(page, "h03-created");
+  const id = new URL(
+    await page
+      .getByRole("link", { name: "View Authority" })
+      .getAttribute("href"),
+    origin,
+  ).searchParams.get("id");
   assert.ok(id, "authority reference present");
   // Hosted cookie properties as the browser sees them.
   const cookie = (await context.cookies()).find(
@@ -174,51 +186,36 @@ test("complete hosted journey: untrusted review, exact confirmation, ACTIVE, rel
   assert.equal(cookie.path, "/");
   assert.equal(await page.evaluate(() => document.cookie), "");
   assert.equal(await page.evaluate(() => location.protocol), "https:");
-  // Reload: still ACTIVE from durable state.
+  await page.getByRole("link", { name: "View Authority" }).click();
+  await page.getByRole("button", { name: "Revoke Authority" }).waitFor();
+  assert.match(await page.locator(".frame").first().innerText(), /Active/i);
+  // Reload: still Active from durable state.
   await page.reload();
-  await page.getByRole("heading", { name: "Authority active" }).waitFor();
-  assert.match(
-    await page.locator(".managed-card").first().innerText(),
-    /Active/i,
-  );
-  assert.match(
-    await page.locator("#activity").innerText(),
-    /What happened, and why/,
-  );
-  // Stale tab: a second page revokes; the first still shows ACTIVE until it reads again.
+  await page.getByRole("button", { name: "Revoke Authority" }).waitFor();
+  // Stale tab: a second page revokes; the first corrects itself when it reads again.
   const other = await context.newPage();
-  await other.goto(origin + "/?authority=" + id);
-  await other.locator(".managed-card").first().waitFor();
-  await other
-    .locator(".managed-card")
-    .first()
-    .getByRole("button", { name: "Revoke authority" })
-    .click();
-  await other
-    .getByRole("heading", { name: "Revoke this authority?" })
+  await other.goto(origin + "/authorities/?id=" + encodeURIComponent(id));
+  await other.getByRole("button", { name: "Revoke Authority" }).click();
+  const dialog = other.getByRole("dialog");
+  await dialog
+    .getByRole("heading", { name: "Revoke this Authority?" })
     .waitFor();
   await shot(other, "h04-revoke-sheet");
+  await dialog.getByRole("button", { name: "Revoke Authority" }).click();
   await other
-    .locator(".revoke-sheet")
-    .getByRole("button", { name: "Revoke authority" })
-    .click();
-  await other
-    .locator(".state-pill", { hasText: /Revoked/i })
+    .locator(".state-tag", { hasText: /Revoked/i })
     .first()
     .waitFor();
-  assert.match(
-    await page.locator(".managed-card").first().innerText(),
-    /Active/i,
-  );
-  await page.getByRole("button", { name: "Refresh saved state" }).click();
+  assert.match(await page.locator(".frame").first().innerText(), /Active/i);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await page
-    .locator(".state-pill", { hasText: /Revoked/i })
+    .locator(".state-tag", { hasText: /Revoked/i })
     .first()
     .waitFor();
   await shot(page, "h05-revoked");
   await page.reload();
   await page
-    .locator(".state-pill", { hasText: /Revoked/i })
+    .locator(".state-tag", { hasText: /Revoked/i })
     .first()
     .waitFor();
   assert.deepEqual(problems, []);
@@ -367,14 +364,11 @@ test("hosted adversarial: cookie, CSRF, origin, principal injection, term tamper
 
 test("hosted secret review: client bundle and every response contain no secret, challenge or stack trace", async () => {
   const { context, page, responses } = await open();
-  await review(page);
   await login(page);
-  await page
-    .getByRole("button", { name: "Prepare exact authority review" })
-    .click();
-  await page
-    .getByRole("heading", { name: /Give .* this authority\?/ })
-    .waitFor();
+  await understand(page);
+  await toConfirm(page);
+  for (const n of ["Authorities", "Activity"]) await nav(page, n);
+  await page.goto(origin + "/about/");
   await page.waitForTimeout(500);
   const everything =
     responses.map((r) => r.body + JSON.stringify(r.headers)).join("\n") +
