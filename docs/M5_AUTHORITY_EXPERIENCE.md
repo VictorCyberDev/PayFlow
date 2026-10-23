@@ -297,3 +297,37 @@ Root tests cover real compiler/semantic processing through fake model fixtures, 
 M5B has no financial migration, no activation, no mandate creation, and no payment/provider dispatch. Console and root CI remain independently validated. No hosted console is deployed; obtaining a hosted API would require separate infrastructure scope. Existing payer-return hosting/configuration is untouched.
 
 M5B implementation stops for independent GUIDE review. M5C and M6 are NOT STARTED. PR #12 remains DRAFT / OPEN / UNMERGED.
+
+## M5C — Authenticated exact activation candidate
+
+M5A and M5B are CLOSED / PASS at their accepted heads. M5C adds a separate opt-in host; it does not change the accepted intent/compiler, HumanConfirmationBoundary, IntentActivationService, domain, financial accounting/execution or migrations 001–009.
+
+### Authentication and exact action
+
+`ConsoleSessions` is deliberately **NON-PRODUCTION DEMO**, not an external identity provider. An operator privately supplies a high-entropy bootstrap key (generate at least 32 random bytes), a fixed existing principal and agent, and a dedicated database. The browser cannot select an identity or provision principals, passports or activation policies. Session tokens are 256-bit random opaque values; only their SHA-256 digest indexes server memory. Cookies are HttpOnly, Path=/, SameSite=Strict, explicit 15-minute expiry, and Secure with the __Host- prefix for HTTPS audiences. HTTP is allowed only on loopback. Login has a bounded guessing window; authenticated mutation traffic and session/review caches are bounded. Production authentication is not claimed.
+
+A same-origin session read exposes a synchronizer CSRF nonce and expiry, **not** the HttpOnly session credential. The nonce is not an authentication assertion and is insufficient without the cookie. State changes require JSON, the exact configured origin/host audience, the valid cookie and the session CSRF header (bootstrap instead requires the private operator code and exact origin). No CORS access is granted. Logout revokes the server session; expiry rejects reads and future confirmations. As with the accepted boundary, an already authenticated action that has entered activation follows the existing transaction linearization semantics; logout does not retroactively undo a committed mandate.
+
+The host seals explicit create-review/confirm HTTP actions into one-use, exact-binding, short-lived in-memory assertions. Fabricated, cloned, expired or mismatched assertions cannot pass the existing HumanConfirmationBoundary. No assertion, bootstrap key, raw cookie, activation challenge or private session material is serialized to product output or written to evidence.
+
+### Durable review, confirmation and fresh display
+
+`ConsoleActivation.prepare` reuses the existing interpret/compile/semantic pipeline, then invokes the existing authenticated `createReview`. Principal and agent bindings, epochs, hashes, challenge and provenance are persisted by M3C. A server-only cache retains the challenge and exact service request. The bounded pending sheet includes exact source, agent, spend/cumulative/quantity/merchant/condition/capability/threshold/expiry terms and a display hash. The client may submit only an explicit confirmation action, review reference and matching display hash. It cannot submit replacement terms or any activation capability. The service recompiles and revalidates the real durable review at activation.
+
+`confirmReviewedIntent` alone creates the durable Mandate and existing activation evidence. The host returns only ACTIVATED and mandate ID, or a safe rejection. The client then performs a separate owner-bound fresh Authority read through the **unchanged M5A AuthorityViewService/schema** and new `PostgresAuthorityViewReader`. The adapter uses one read-only repeatable snapshot and the accepted repository accounting/integrity checks. It represents current revocation, identity status and earliest passport/mandate expiry; it never authorizes a proposal. Active display is withheld when the read fails, is expired, revoked, unavailable or belongs to another owner. Fresh-dispatch permission remains unknown (null) for an active projection: a displayed Authority cannot replace kernel revalidation.
+
+No optimistic client activation occurs. Reload restores only via session and Authority GETs; the mandate ID in the URL is an untrusted resource reference, never identity or permission. Periodic/manual reads and local expiry clear stale active display. Editing source invalidates pending UI, not durable financial state. Creating a newer review does **not** invalidate an older pending review in accepted M3C semantics; existing expiry/epoch/replay rules remain authoritative. We add no latest-review-wins policy.
+
+### Runtime and limits
+
+`console-activation-host.ts` is a separate loopback-only entrypoint. It requires explicit PAYFLOW_M5C_DEMO=true, privately configured DATABASE_URL, PAYFLOW_M5C_PRINCIPAL_ID, PAYFLOW_M5C_AGENT_ID and PAYFLOW_M5C_BOOTSTRAP_KEY. It does not auto-provision or migrate financial state. An operator must already provision the selected principal/passport/policy through trusted existing mechanisms. After building the console, the development entrypoint is `node --import tsx src/console-activation-host.ts`. No credential values should appear in commands, logs, screenshots or PR evidence.
+
+The recorded M5B interpretation demo limitation remains explicit: the M5C runtime uses only a fully specified recorded sample; it constructs no live Groq/PayPal provider. Generic providers can be injected for deterministic tests, but no provider receives identity/session/database capabilities. Original M5B host remains incapable of activation. Home/Activity/Authority illustrations stay labelled fixtures; only the separate exact confirmation and fresh saved-state view represent durable activation.
+
+Session state and challenge cache are process-local and lost on restart. Restart fails closed for unfinished confirmations; an already-created mandate remains durable and may be freshly read after a new authenticated demo session. This is a single-process local demo, not a distributed production session system. Hosted console: NOT DEPLOYED; hosted authenticated acceptance remains required in M5E. No new migration is needed. M5D controls and M6 execution are NOT STARTED.
+
+### Validation boundary
+
+M5C tests cover the actual local HTTP/session path into the existing durable activation transaction, one mandate under concurrency/replay, owner/agent/epoch/passport/principal/challenge/hash/fingerprint failures, cookie/CSRF/origin/expiry/logout failures, and read-only refresh with zero payment/reservation/grant/proposal rows. Existing M1–M4 tests are unchanged. Console tests cover the exact sheet, client races/expiry/reload and the requirement for a successful fresh read before ACTIVE. Session tests cover forged/cloned proofs, action/audience binding, HttpOnly/Secure attributes and private-token exclusion. Normal CI constructs no live provider.
+
+M5C stops for independent GUIDE review. PR #12 must stay DRAFT / OPEN / UNMERGED. Do not start M5D or M6.

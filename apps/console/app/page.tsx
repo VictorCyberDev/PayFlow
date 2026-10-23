@@ -39,7 +39,13 @@ export default function HomePage() {
               onClick={() => setActive(item)}
               aria-current={active === item ? "location" : undefined}
               href={
-                ["#home", "#ask", "#authority", "#activity", "#agents"][index]
+                [
+                  "#home",
+                  "#ask",
+                  "#confirmed-authority",
+                  "#activity",
+                  "#agents",
+                ][index]
               }
               key={item}
             >
@@ -52,7 +58,7 @@ export default function HomePage() {
           <span className="status-dot" aria-hidden="true" />
           <div>
             <strong>Interactive preview</strong>
-            <span>Example data. No real authority.</span>
+            <span>Authority and Activity examples use fixtures.</span>
           </div>
         </div>
       </aside>
@@ -61,14 +67,15 @@ export default function HomePage() {
         <header className="topbar">
           <div className="mobile-brand">PayFlow</div>
           <span className="preview-label">
-            Fixture preview · No live account
+            Non-production workspace · No production login
           </span>
         </header>
 
         <div className="content">
           <p className="preview-banner" role="note">
-            Preview only. All amounts, agents and outcomes below are examples.
-            Nothing on this page authorizes or pays.
+            Preview only. The Authority and Activity examples are fixtures. The
+            separate demo confirmation can create a real durable PayFlow
+            mandate; it never executes a payment.
           </p>
           <section className="hero" aria-labelledby="welcome-title">
             <p className="eyebrow">Your AI. Your authority.</p>

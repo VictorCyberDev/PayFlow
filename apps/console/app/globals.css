@@ -646,3 +646,60 @@ button:disabled {
     gap: 6px;
   }
 }
+
+.activation-sheet {
+  margin-top: 40px;
+  padding: 28px;
+  border: 1px solid #becbc2;
+  border-radius: 24px;
+  text-align: left;
+  background: #fafbf8;
+  line-height: 1.6;
+}
+.activation-sheet form {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+}
+.activation-sheet input {
+  padding: 12px;
+  border: 1px solid #7d8f83;
+  border-radius: 10px;
+  font: inherit;
+}
+.activation-sheet button {
+  padding: 12px 18px;
+  border: 1px solid #18382f;
+  border-radius: 12px;
+  margin: 12px 12px 12px 0;
+  background: #18382f;
+  color: white;
+}
+.activation-sheet .text-button {
+  background: transparent;
+  color: #18382f;
+}
+.activation-sheet dl > div {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  padding: 12px 0;
+  gap: 12px;
+  border-bottom: 1px solid #d2d8d2;
+}
+.activation-sheet dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.activation-sheet blockquote {
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 620px) {
+  .activation-sheet {
+    padding: 20px;
+  }
+  .activation-sheet dl > div {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}

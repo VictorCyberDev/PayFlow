@@ -16,6 +16,7 @@ test("browser graph contains no execution, persistence, credentials or unrestric
   for (const f of [
     ...files(fileURLToPath(new URL("app/", root))),
     ...files(fileURLToPath(new URL("fixtures/", root))),
+    ...files(fileURLToPath(new URL("lib/", root))),
   ]) {
     const source = readFileSync(f, "utf8");
     assert.doesNotMatch(
@@ -52,4 +53,18 @@ test("browser transport is limited to non-authoritative review endpoints", () =>
     page + client,
     /localStorage|sessionStorage|document\.cookie|confirmReviewedIntent|activateReviewedIntent|paypal\.com|api\.groq/,
   );
+});
+
+test("M5C client never contains a host assertion, bootstrap key or payment route", () => {
+  const client = readFileSync(
+    new URL("lib/activation-client.mjs", root),
+    "utf8",
+  );
+  const panel = readFileSync(new URL("app/activation-panel.tsx", root), "utf8");
+  assert.doesNotMatch(
+    client + panel,
+    /PAYFLOW_M5C_BOOTSTRAP_KEY|DATABASE_URL|localStorage|sessionStorage|document\.cookie|confirmReviewedIntent|activateReviewedIntent|api\.groq|paypal\.com|PaymentResumeService/,
+  );
+  assert.match(client, /\/api\/activation\/authority\?mandateId=/);
+  assert.match(panel, /Non-production fixed-identity demo/);
 });

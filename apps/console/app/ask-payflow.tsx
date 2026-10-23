@@ -1,4 +1,5 @@
 "use client";
+import ActivationPanel from "./activation-panel";
 import { useEffect, useRef, useState } from "react";
 import { createReviewController } from "../lib/review-client.mjs";
 
@@ -104,6 +105,10 @@ export default function AskPayFlow() {
         Try the recorded, fully specified example
       </button>
       <ReviewSurface state={state} />
+      <ActivationPanel
+        source={source}
+        canPrepare={state.status === "VALID_DRAFT"}
+      />
     </section>
   );
 }
