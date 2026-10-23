@@ -276,6 +276,12 @@ export function ManagementSurface({
             <p>
               {
                 state.authorities.find((a) => a.mandateId === state.selected)
+                  ?.purpose
+              }
+            </p>
+            <p>
+              {
+                state.authorities.find((a) => a.mandateId === state.selected)
                   ?.agent.displayName
               }{" "}
               will no longer be allowed to start new purchases under this

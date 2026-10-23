@@ -264,7 +264,16 @@ const url = process.env.TEST_DATABASE_URL;
     it("captured history remains truthful after revoke; reloads do not append evidence or call provider", async () => {
       s.provider.payer = false;
       await s.execute();
+      // Accepted fake rail advances dispatch timestamps monotonically. A later
+      // human revocation must use a later host clock, never a backdated instant.
+      s.time = new Date(
+        Math.max(
+          Date.parse(s.time),
+          ...(await repo.evidence()).map((e) => Date.parse(e.occurredAt)),
+        ) + 1,
+      ).toISOString();
       const before = await snapshot();
+      const providerRead = vi.spyOn(s.provider, "getOrder");
       const calls = [s.provider.createCalls, s.provider.captureCalls];
       const a = await activity.read(req, {});
       expect(a.items[0]).toMatchObject({
@@ -295,6 +304,11 @@ const url = process.env.TEST_DATABASE_URL;
       const prior = JSON.parse(before) as { evidence: unknown[] }[],
         current = JSON.parse(after) as { evidence: unknown[] }[];
       expect(current[0]!.evidence.slice(0, -1)).toEqual(prior[0]!.evidence);
+      const { evidence: oldEvidence, ...oldFinancial } = prior[0]!;
+      const { evidence: newEvidence, ...newFinancial } = current[0]!;
+      expect(newFinancial).toEqual(oldFinancial);
+      expect(newEvidence.length).toBe(oldEvidence.length + 1);
+      expect(providerRead).not.toHaveBeenCalled();
     });
     it("ALLOW and proposal pending states are projections, not evidence of payment", async () => {
       await s.seal();
