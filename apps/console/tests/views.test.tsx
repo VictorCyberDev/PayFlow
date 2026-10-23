@@ -301,3 +301,29 @@ test("unknown identifiers fail closed with a way back", () => {
     /We couldn&#x27;t find that Authority/,
   );
 });
+
+test("a delegated purchase says the Agent acted without asking; a human-approved one does not", () => {
+  const delegated = render(
+    mgmt({ activity: [paid] }),
+    <ActivityBody params={q("id=" + paid.operationId)} />,
+  );
+  assert.match(
+    delegated,
+    /Your Agent did this without asking you, within your Authority\./,
+  );
+  const human = render(
+    mgmt({ activity: [{ ...paid, delegated: false }] }),
+    <ActivityBody params={q("id=" + paid.operationId)} />,
+  );
+  assert.doesNotMatch(human, /without asking you/);
+});
+
+test("a refused quote (no payment ever started) is not described as 'Checking what happened'", () => {
+  const refusal = { ...blocked, verification: "INCOMPLETE" };
+  const html = render(
+    mgmt({ activity: [refusal] }),
+    <ActivityBody params={q("id=" + refusal.operationId)} />,
+  );
+  assert.match(html, /No payment was started\./);
+  assert.doesNotMatch(html, /Checking what happened/);
+});

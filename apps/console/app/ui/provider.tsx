@@ -13,6 +13,10 @@ import {
   type ActivationState,
 } from "../../lib/activation-client.mjs";
 import {
+  fetchDemoAgentStatus,
+  reconcileDemo,
+} from "../../lib/demo-agent-client.mjs";
+import {
   createManagementController,
   type ManagementState,
 } from "../../lib/management-client.mjs";
@@ -70,6 +74,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
   const [activation, setActivation] = useState(initialActivation);
   const [checked, setChecked] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [demoAgent, setDemoAgent] = useState(false);
   const m = useRef<Management | null>(null);
   const a = useRef<Activation | null>(null);
 
@@ -105,6 +110,28 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       ac.dispose();
     };
   }, []);
+
+  // The demo host can resolve uncertain payments. That is the system's job, never the customer's:
+  // give the provider a moment, then ask once per pass while any payment is still unresolved.
+  const signedIn = checked && activation.status !== "SIGNED_OUT";
+  useEffect(() => {
+    if (!signedIn) return;
+    let live = true;
+    void fetchDemoAgentStatus().then((s) => live && setDemoAgent(s !== null));
+    return () => {
+      live = false;
+    };
+  }, [signedIn]);
+  const unresolved = management.activity.some(
+    (x) => x.status === "UNKNOWN_FINANCIAL_OUTCOME" || x.status === "PENDING",
+  );
+  useEffect(() => {
+    if (!demoAgent || !unresolved) return;
+    const t = setTimeout(() => {
+      void reconcileDemo().then(() => m.current?.refresh());
+    }, 8000);
+    return () => clearTimeout(t);
+  }, [demoAgent, unresolved, management.activity]);
 
   // Stable action identities: effects in views depend on them and must not re-run per state change.
   const actions = useMemo(

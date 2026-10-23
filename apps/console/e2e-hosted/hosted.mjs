@@ -317,7 +317,7 @@ test("hosted adversarial: cookie, CSRF, origin, principal injection, term tamper
   ).json();
   assert.equal(view.state, "ACTIVE");
   assert.equal(view.singleMaximumMinor, 10000);
-  assert.match(JSON.stringify(view.merchantScopeSummary), /DemoMerchant/);
+  assert.match(JSON.stringify(view.merchantScopeSummary), /Demo Merchant/);
   // Unknown / not-owned mandate: indistinguishable and no mutation.
   const unknownRead = await get(
     "/api/activation/authority?mandateId=not-mine",

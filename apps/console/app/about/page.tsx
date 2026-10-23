@@ -46,6 +46,12 @@ export default function Page() {
             model.
           </li>
           <li>Creating an Authority never makes a purchase.</li>
+          <li>
+            &quot;Try your Agent&quot; is a simulation. It runs the real PayFlow
+            checks on a fixed demo catalog. A payment is attempted only when a
+            PayPal Sandbox account is connected; if not, only the blocked case
+            can run.
+          </li>
         </ul>
       </section>
     </>

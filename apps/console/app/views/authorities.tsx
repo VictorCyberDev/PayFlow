@@ -6,6 +6,7 @@ import { agentCan, authorityKind } from "../../lib/language";
 import { ActivityRow } from "../ui/activity";
 import { AuthorityFrame } from "../ui/frame";
 import { AuthorityProof } from "../ui/proof";
+import { DemoAgentPanel } from "../ui/demo-agent";
 import { useConsole } from "../ui/provider";
 import { Empty, NeedsSession, PageHead, errorCopy } from "./common";
 
@@ -109,6 +110,7 @@ export function AuthorityDetail({ id, proof }: { id: string; proof: boolean }) {
           {a.agent.displayName} can {agentCan(a)}.
         </p>
       </section>
+      {kind === "active" && <DemoAgentPanel mandateId={a.mandateId} />}
       {related.length > 0 && (
         <section className="block" aria-labelledby="rel">
           <h2 id="rel" className="label">

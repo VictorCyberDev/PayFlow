@@ -51,6 +51,7 @@ const base: ActivityView = {
   merchant: "Approved merchant",
   item: "Mechanical keyboard",
   moneyMoved: "YES",
+  delegated: true,
   verification: "VERIFIED",
   stages: [
     { stage: "MANDATE", status: "VERIFIED", reasonCode: "MANDATE_ACTIVE" },
