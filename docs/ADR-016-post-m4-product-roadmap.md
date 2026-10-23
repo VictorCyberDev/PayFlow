@@ -1,32 +1,80 @@
 # ADR-016: Post-M4 product roadmap and architecture lock
 
-Status: PROPOSED FOR LOCK — architectural planning only. No M5 implementation is authorized by this ADR until the roadmap is accepted and the next milestone is explicitly started.
+Status: **LOCKED / FROZEN POST-M5**
 
-Authoritative baseline: `main` at `dd5e9a460559528b27364fd2b35eaaada73c65d8` after merged PR #10. M4 is CLOSED / UNCHANGED. The post-M4 PayPal return UX repair is CLOSED / PASSED / MERGED.
+Freeze date: 2026-10-23
+
+Authoritative implementation baseline: `main` at `771a1128392390c2015e40a543db496f5bda8fc9` after merged PR #12.
+
+Current milestone state:
+
+- M1 — CLOSED / MERGED
+- M2 — CLOSED / MERGED
+- M3 — CLOSED / MERGED
+- M4 — CLOSED / MERGED
+- Post-M4 payer-return UX repair — CLOSED / MERGED
+- M5 — CLOSED / PASS / MERGED
+- **M6 — NOT STARTED**
+
+This amendment freezes the architecture and roadmap after M5. It is documentation-only. It does **not** authorize or begin M6, create an M6 branch, change financial semantics, change provider behavior, add a migration, or modify the M5 hosted acceptance environment.
 
 ## Product position
 
-PayFlow is the **verifiable authority layer for agentic commerce**.
+PayFlow is **verifiable financial authority for AI agents**: the authorization and evidence layer between probabilistic AI intent and deterministic money movement.
 
 North star:
 
 > AI may interpret, rank and propose. PayFlow determines whether financial authority exists, what exact authority exists, whether it is still valid at dispatch time, and how the resulting financial outcome can be independently verified.
 
-Product promise:
+Consumer promise:
 
 > Give AI agents permission to spend — not control of your money.
 
-The post-M4 roadmap incorporates three sources of strategy:
+Developer promise:
 
-1. the accepted PayFlow architecture and regression-tested trust boundaries;
-2. competitive research across current PayPal AI Hackathon submissions and the wider agentic-commerce landscape, including the rise of verifiable user instructions, agent identity, delegated authority, human-not-present execution and cross-system verification;
-3. a premium product experience inspired by the interaction principles of OpenAI, Claude, Apple and PayPal: conversational simplicity, focus, hierarchy, agency, calmness, transaction confidence and progressive disclosure.
+> Add deterministic financial authority, bounded execution and verifiable outcomes to an AI agent without giving the model direct control of payment credentials or financial truth.
 
-## Global non-regression boundary
+Enterprise promise:
 
-M1–M4 and the post-M4 payer-return repair are accepted foundations.
+> Let agents act without losing control, accountability or auditability.
 
-Future work MUST NOT redesign or replace:
+PayFlow is not a payment rail, wallet, bank, card issuer, credit provider, custody system, browser agent or generic checkout assistant. Payment providers remain execution rails. PayFlow owns the authority decision, bounded execution contract, reconciliation relationship and proof layer above them.
+
+## Strategic amendment incorporated by this freeze
+
+The final pre-lock research established that the agentic-commerce market is converging on five separate trust questions:
+
+1. who is the human/principal;
+2. which agent is acting;
+3. what exact authority the human delegated;
+4. whether this exact action is permitted now;
+5. what financial effect actually occurred and whether that outcome can be independently proven.
+
+The existing PayFlow architecture is already strongest at questions 3–5. The frozen roadmap therefore strengthens later milestones around externally verifiable agent identity, protocol-neutral interoperability, scoped agent access, merchant-side trust and portable outcome evidence without replacing the accepted kernel.
+
+### Protocol-neutral rule
+
+PayFlow MUST remain protocol-neutral. AP2, ACP, UCP, MCP, WebMCP and future agent-commerce protocols are adapters, transport or interoperability contexts — never new sources of financial authority.
+
+No later milestone may claim official compliance, certification or compatibility with AP2, ACP, UCP, Visa Trusted Agent, Mastercard Agent Pay, AuthZEN or another standard unless that exact claim has been independently demonstrated and the relevant requirements are satisfied.
+
+### Rail-neutral rule
+
+PayPal remains the accepted execution rail for the hackathon path. Future payment-rail adapters may be considered after the locked competition roadmap, but they must not replace PayFlow's authorization semantics or become required to complete M6–M10.
+
+### Commercial wedge
+
+The consumer keyboard flow remains the primary competition demonstration because it is universally understandable. The likely first commercial wedge is B2B recurring or low-risk operational spend: procurement agents, approved-vendor purchasing, recurring supplies, controlled SaaS/vendor spend and similar bounded workflows where organizations want less repeated approval without surrendering control.
+
+This commercial positioning does not alter milestone acceptance criteria.
+
+---
+
+# Global non-regression boundary
+
+M1–M5 and the post-M4 payer-return repair are accepted foundations.
+
+Future work MUST NOT redesign, replace or weaken:
 
 - the Trust Kernel or `authorize()` financial decision semantics;
 - `AgentPassport` as the durable agent identity/capability object;
@@ -37,54 +85,52 @@ Future work MUST NOT redesign or replace:
 - signed execution grants and one-time claim semantics;
 - Payment Attempt state transitions;
 - PayPal dispatch, UNKNOWN quarantine, reconciliation or provider-conformance semantics;
+- M4 discovery/selection trust boundaries;
 - M4 checkout quote/manifest binding;
 - payer-approval/resume revalidation;
 - the evidence ledger and historical evidence;
-- `OperationTraceService` verification semantics.
+- `OperationTraceService` verification semantics;
+- the accepted M5 Authority projections, owner isolation, authenticated controls and durable hosted session/pending-action semantics.
 
-Historical migrations `001` through `009` are immutable. New schema work, if justified, starts at `010` and must be forward-only.
+Historical migrations **001 through 010 are immutable**. Migration 010 is the accepted M5 durable-host/session/action migration. Any future schema work begins at **011**, is forward-only, and requires the active milestone to justify it.
 
-Browser/client state is never financial truth. UI state cannot authorize payment, widen authority, fabricate verification, downgrade durable completed state, or bypass server-side revalidation.
+Browser/client state is never financial truth. UI state cannot authorize payment, widen authority, fabricate verification, downgrade durable completed state, bypass immediate server-side revalidation, or convert an external protocol assertion into PayFlow authority.
 
-The new product surface MUST compose above or beside the accepted kernel. It must not move financial trust into the browser.
+External agents, models, merchant observations, MCP tools, discovery providers, protocol messages, credentials, identity assertions and payment-provider responses are inputs/evidence. None may silently become financial authority.
 
 ## Product architecture boundary
 
-The existing root package remains the trust-kernel/server foundation. A premium application surface should be isolated under an application boundary such as `apps/console/` with its own frontend dependency graph and build. Do not casually add large UI-framework dependencies to the root kernel package.
+The root package remains the trust-kernel/server foundation. Product surfaces remain isolated from the kernel dependency graph.
 
-Trusted server adapters may expose bounded application endpoints, but browser clients must never receive:
+Browser or external-agent clients must never receive:
 
 - database credentials;
-- signing keys or raw execution-grant tokens;
+- signing keys;
+- raw execution-grant tokens;
 - resume secrets;
-- authentication assertions;
+- bootstrap/operator credentials;
 - PayPal credentials or OAuth tokens;
 - raw provider blobs containing payer-sensitive data;
-- unrestricted internal persistence access.
+- unrestricted persistence access;
+- a credential whose scope bypasses normal PayFlow authorization.
 
-Read-only product views should prefer bounded server projections derived from authoritative durable state. `OperationTraceService` remains the verification source for operation history; the UI may render it but not reimplement verification logic.
+Read-only product views and external verification interfaces must use bounded projections derived from authoritative durable state. `OperationTraceService` remains the canonical verifier for operation history.
 
 ## Experience principles
 
 PayFlow should feel like a premium AI workspace crossed with a financial wallet, not a security console.
 
-The visual thesis is **calm authority**.
+Visual thesis: **calm authority**.
 
-- OpenAI influence: conversational, intent-first interaction; restrained surfaces; progressive tool reveal.
-- Claude influence: focus, quiet hierarchy, minimal cognitive noise.
-- Apple influence: agency, craft, legibility, Wallet-like authority objects, excellent spacing and motion.
-- PayPal influence: confidence at money moments, explicit amount/merchant context, clear cancellation/recovery, accessible payment controls.
+Primary language must lead with the human outcome, not internal state-machine vocabulary. Use progressive disclosure:
 
-The interface must use progressive disclosure:
+1. what the agent may or may not do;
+2. what happened and whether money moved;
+3. why PayFlow allowed/denied/quarantined it;
+4. verification detail;
+5. raw identifiers/fingerprints only on deliberate expansion.
 
-1. human-readable outcome;
-2. concise explanation of why it was allowed/denied;
-3. verification detail;
-4. raw technical identifiers only when deliberately expanded.
-
-Do not make hashes, state-machine labels or reason codes the primary user language.
-
-Top-level product surfaces are intentionally small:
+Top-level product surfaces remain intentionally small:
 
 - Home
 - Ask PayFlow
@@ -92,119 +138,51 @@ Top-level product surfaces are intentionally small:
 - Activity
 - Agents
 
-Technical concepts such as grants, reservations, manifests, provider observations and fingerprints live behind verification detail unless needed for a judge or operator.
+The complete differentiator remains:
 
-## Competitive product principle
-
-PayFlow will not try to win by becoming another generic AI checkout assistant, another payment firewall or another mandate engine.
-
-The differentiator is the complete authority chain:
-
-**human instruction → authenticated activation → bounded agent authority → deterministic commerce decision → one-time execution authority → provider execution → durable reconciliation → verifiable proof**.
-
-The roadmap should make that chain portable, user-legible and externally verifiable while preserving the existing trust kernel.
+**human instruction → authenticated activation → bounded agent authority → deterministic commerce decision → reservation → one-time execution authority → provider execution → durable reconciliation → verifiable proof**.
 
 ---
 
 # M5 — Authority Experience
 
-## Goal
+Status: **CLOSED / PASS / MERGED**.
 
-Make the accepted Agent Passport + Mandate architecture understandable, beautiful and safely operable by a real user without changing the underlying authorization model.
+M5 made the accepted AgentPassport + Mandate architecture understandable and safely operable as a premium product without creating a second permission model. It introduced the user-facing Authority experience, natural-language review, exact authenticated activation, durable Authority reads, authenticated revoke controls, bounded Activity projections and a hosted non-production acceptance environment.
 
-M5 introduces the premium human product layer around existing trust primitives. It does NOT create a parallel "Authority Passport" backend model.
-
-The user-facing concept is **Authority**: a composed representation of the existing Agent Passport, active Mandate and relevant current authority facts.
-
-## Required product flow
-
-A human can:
-
-1. describe an intended delegation in natural language;
-2. see AI interpretation clearly labelled as NOT YET AUTHORIZED;
-3. review the deterministic bounded terms produced by the existing intent pipeline;
-4. authenticate and confirm the exact terms through the existing confirmation boundary;
-5. see the resulting active Authority in a premium Wallet-like representation;
-6. inspect remaining budget, merchant/product/quantity/capability constraints and expiry;
-7. suspend/revoke only through an authenticated trusted server path consistent with existing semantics;
-8. inspect recent allowed/denied attempts in human language.
-
-## UX acceptance
-
-The primary path must be understandable without exposing implementation terminology.
-
-Example user language:
-
-- "Up to $100"
-- "1 new item"
-- "Approved merchants only"
-- "Expires Friday at 6:00 PM"
-- "Your agent can complete this without asking again" or "You will be asked before payment"
-
-Technical detail remains available through "View verification details".
-
-## M5 hard gates
-
-PASS requires all of the following:
-
-- no replacement or semantic widening of `AgentPassport` or `Mandate`;
-- AI output remains untrusted until exact authenticated confirmation;
-- no client-generated authority is accepted as truth;
-- owner/agent binding is enforced server-side;
-- stale, replayed or expired reviews fail closed;
-- Authority rendering is derived from durable authoritative state;
-- revoke/suspend/expiry semantics are represented correctly;
-- existing M1–M4 tests remain green;
-- new browser/product tests cover owner isolation, stale UI, replay and untrusted-field tampering;
-- a polished hosted flow exists from natural-language intent through active Authority.
-
-## Explicitly out of scope
-
-- changing payment-state semantics;
-- new payment rail;
-- live Channel3;
-- new cross-protocol standards;
-- full Break PayFlow arena;
-- direct human-not-present financial expansion beyond already accepted semantics.
-
-M5 must pass before M6 starts.
+M5 is frozen. Later work composes above accepted M5 behavior.
 
 ---
 
 # M6 — Delegated / Human-Not-Present Commerce
 
+Status: **NOT STARTED**.
+
 ## Goal
 
-Prove that a previously authenticated, bounded human instruction can safely authorize later agent execution without a new human confirmation when — and only when — the existing mandate explicitly permits that exact transaction.
+Prove that a previously authenticated, bounded human instruction can safely authorize later agent execution without a new human confirmation when — and only when — the existing Mandate explicitly permits that exact transaction.
 
-This is not "autonomy by default." It is explicit delegated authority.
+This is explicit delegated authority, not autonomy by default.
 
 ## Design rule
 
-HNP execution MUST derive from existing Mandate thresholds/capabilities plus normal reservation, execution-grant, immediate revalidation and provider-conformance checks. Do not create a second HNP policy engine.
+HNP execution MUST derive from existing Mandate thresholds/capabilities plus normal reservation, signed execution grant, immediate durable revalidation, provider conformance and reconciliation. Do not create a second HNP policy engine.
 
 ## Required scenarios
 
-- legitimate pre-authorized purchase succeeds without an extra approval step;
-- price drift beyond the mandate is denied before new provider capture;
+- legitimate pre-authorized purchase succeeds without another approval step;
+- price drift beyond authority is denied before new provider capture;
 - wrong merchant/product/condition/quantity is denied;
-- revoked/suspended/expired authority causes zero new financial dispatch;
-- concurrent attempts cannot overconsume a budget or quantity limit;
-- existing provider effect can still be truthfully reconciled after authority becomes unavailable;
+- revoked/suspended/expired authority produces zero new financial dispatch;
+- concurrent attempts cannot overconsume budget or quantity;
+- existing provider effects remain truthfully reconcilable after authority becomes unavailable;
 - execution remains one-time and replay-safe.
-
-## Product experience
-
-The user must understand the difference between:
-
-- "Your agent may do this without asking again"
-- "Your approval is required before payment"
-
-The UI must show current authority, remaining budget, next expiry and recent autonomous use without implying that the browser itself controls enforcement.
 
 ## Hard gate
 
-M6 passes only with deterministic unit/integration/concurrency coverage and one end-to-end Sandbox proof of delegated execution under a valid bounded mandate, plus adversarial proofs of zero unauthorized provider effects.
+PASS requires deterministic unit/integration/concurrency coverage, adversarial zero-effect proofs, and one end-to-end PayPal Sandbox proof of delegated execution under valid bounded authority.
+
+No M6 implementation is authorized by this ADR amendment alone.
 
 ---
 
@@ -212,25 +190,23 @@ M6 passes only with deterministic unit/integration/concurrency coverage and one 
 
 ## Goal
 
-Connect PayFlow's existing trust boundary to live agent-commerce inputs and tools while keeping those external systems untrusted.
+Connect live agents and commerce inputs to the accepted PayFlow trust boundary while keeping every external system untrusted.
 
-## Primary work
+## Locked direction
 
-- replace demo-only discovery for the winning path with a real Channel3 integration where available;
-- retain deterministic eligibility and controlled trusted-term resolution;
-- expose PayPal agent/tool operations only behind PayFlow authority checks;
-- separate read-only operations from money-moving capabilities;
-- demonstrate that an external/model agent can request a commerce action but cannot widen the mandate or directly obtain payment authority.
+- replace demo-only discovery on the winning path with live commerce input such as Channel3 where available;
+- expose PayFlow to external/model agents through a bounded gateway;
+- compose with PayPal Agent Toolkit/MCP or equivalent PayPal developer capabilities where appropriate rather than duplicating their payment-rail role;
+- separate read-only discovery/verification operations from money-moving requests;
+- require scoped agent authorization rather than one omnipotent API key;
+- treat modern MCP/OAuth/OIDC resource authorization concepts as transport/access controls, not financial authority;
+- demonstrate that an external agent can request an action but cannot widen a Mandate, forge Authority, obtain unrestricted payment authority or bypass the Trust Kernel.
 
-## Architecture rule
-
-Channel3, MCP/tool calls, model output and merchant observations are evidence/input, not authority.
-
-The existing M4 distinction between discovery observations and executable trusted checkout terms remains intact.
+Illustrative access scopes may include read-only Authority, purchase-request and verification permissions, but scopes do not replace Mandate authorization.
 
 ## Hard gate
 
-PASS requires live discovery or other live commerce input on the demonstration path, strict normalization/bounds, deterministic eligibility, exact mapping/trusted-term verification, zero silent merchant substitution, and successful use of the existing PayPal execution path without bypassing the Trust Kernel.
+PASS requires live input on the demonstration path, strict normalization/bounds, deterministic eligibility, trusted-term resolution, zero silent merchant substitution, scoped external-agent access and successful use of the accepted PayPal execution path without bypassing the kernel.
 
 ---
 
@@ -238,26 +214,36 @@ PASS requires live discovery or other live commerce input on the demonstration p
 
 ## Goal
 
-Make PayFlow authority independently consumable and verifiable across agent/merchant/tool boundaries without claiming certification or compatibility that has not been demonstrated.
+Make PayFlow identity and authority independently consumable and verifiable across agent, merchant, tool and protocol boundaries without giving the verifier a money-moving capability.
 
-## Product concept
+## Locked direction
 
-A third party should be able to ask:
+### Merchant-verifiable agent identity
 
-- Which human/principal delegated this authority?
-- Which agent is acting?
-- What is the scope, budget, expiry and capability?
-- Is the authority active/revoked/expired?
-- Does this requested action fit within it?
-- What operation ultimately occurred?
+Create a bounded signed external assertion derived from the existing `AgentPassport`; do not invent a replacement identity model. A merchant/tool/verifier should be able to validate which PayFlow agent is acting, its declared purpose/audience, the referenced Authority, expiry and replay-resistant request context.
 
-## Work direction
+The assertion itself never authorizes a PayFlow payment. Final financial authority remains server-side and is revalidated by the accepted kernel.
 
-Create bounded external authority/verifier contracts that reuse existing durable identity, mandate, signing and evidence material. Where appropriate, provide adapters informed by emerging concepts such as verifiable intent and agent delegation, but label them accurately and avoid false standards-compliance claims.
+### External Authority verification
+
+A third party should be able to ask, through a read-only interface:
+
+- which principal delegated authority;
+- which agent is acting;
+- scope, budget, expiry and capability;
+- whether Authority is active/revoked/expired;
+- whether a proposed action fits within it;
+- what operation ultimately occurred.
+
+### Protocol adapters
+
+Provide bounded adapter/mapping work informed by AP2, ACP and UCP where useful. PayFlow remains the canonical authority model. Protocol-specific envelopes must not become a second permission engine.
+
+MCP/WebMCP remain interaction protocols, not proof that payment authority exists.
 
 ## Hard gate
 
-PASS requires an independently callable verifier/interface that cannot move money, cannot widen authority, does not disclose sensitive execution material, and can prove both a valid request and an invalid/tampered/revoked request from durable PayFlow state.
+PASS requires independently callable read-only verification that cannot move money or widen authority, discloses no sensitive execution material, resists replay/tamper, and proves both valid and invalid/revoked/expired cases from durable PayFlow state.
 
 ---
 
@@ -265,25 +251,21 @@ PASS requires an independently callable verifier/interface that cannot move mone
 
 ## Goal
 
-Turn PayFlow's strongest technical proof into the strongest visual proof in the competition.
-
-M9 is not merely a dashboard milestone. It is where PayFlow demonstrates — live — that a model or external system can be wrong, manipulated or malicious while financial authority remains conserved.
+Turn PayFlow's technical truth into the strongest visual and independently inspectable proof in the competition.
 
 ## Premium trust experience
 
-Build a polished Authority/Activity experience around existing `OperationTraceService` and Authority Meter data.
-
-Default view:
+The default experience must show:
 
 - what happened;
 - amount;
 - merchant/item;
-- whether it was allowed/denied/unknown;
+- whether money moved;
 - which Authority applied;
 - remaining authority;
 - concise human explanation.
 
-Expanded verification view:
+Expanded verification may show:
 
 - human instruction/activation;
 - agent identity;
@@ -292,39 +274,52 @@ Expanded verification view:
 - grant/reservation state;
 - provider order/capture state;
 - Trust Trace stage status;
-- technical references/fingerprints on deliberate expansion.
+- technical references/fingerprints.
+
+## Portable evidence / recourse receipt
+
+M9 must expose a bounded, human-readable, read-only evidence package derived from existing evidence and verification services. It should communicate instruction, authority, agent, evaluated commerce terms, PayFlow decision, provider execution, capture count, final outcome and Trust Trace verdict.
+
+This artifact is evidence, not a legal-liability determination and not a new source of authorization.
 
 ## Break PayFlow Arena
 
-Use the existing adversarial scenario contracts as the foundation. Do not invent a parallel security engine.
+Use existing adversarial contracts and accepted services. Do not create a parallel security engine.
 
-The arena should visually demonstrate attacks such as:
+Selected live/hosted scenarios should include:
 
 - prompt-injected price widening;
 - $84 → $184 price drift;
 - wrong merchant;
 - used/refurbished substitution;
 - quantity widening;
+- agent impersonation or invalid external assertion;
+- scope escalation;
 - revoked mandate during checkout;
 - expired authority;
 - replay;
 - duplicate browser return;
 - lost provider response;
-- concurrent execution.
+- concurrent execution;
+- tampered verification material.
 
-For each scenario, show the most important outcome first:
+Each scenario leads with the financial outcome:
 
 **Money moved: $0** or **Exactly one capture completed**.
 
-Then show why.
+### Break PayFlow 100
+
+The competition proof should target a fixed benchmark of 100 adversarial agent-commerce scenarios, built from deterministic test/evidence contracts rather than manually curated screenshots.
+
+The benchmark may be claimed only if the full fixed suite is reproducible and its results are recorded. Desired headline: **100 adversarial scenarios; 0 unauthorized captures; valid delegated payments still complete.** Do not claim this before the benchmark exists and passes.
 
 ## AG Grid / Studio strategy
 
-Use AG Grid/Studio only where it materially improves the command-center/verification/attack experience. Avoid decorative sponsor integration. Sponsor use must be deep enough to be defensible on its own judging criteria.
+AG Grid/Studio may be used for a Trust Studio/attack command center only if it materially improves investigation and is deep enough to justify sponsor claims. The consumer Authority Wallet remains a custom premium product surface.
 
 ## Hard gate
 
-PASS requires a premium hosted experience, mobile/desktop usability, accessibility, deterministic rendering from authoritative projections, no UI-side verification logic that can override server truth, and live demonstration of selected adversarial cases with provider-call counts/effects matching the existing scenario evidence.
+PASS requires a premium hosted experience, mobile/desktop usability, accessibility, deterministic authoritative projections, portable evidence, and live demonstration of selected adversarial cases whose provider effects match durable evidence.
 
 ---
 
@@ -332,11 +327,11 @@ PASS requires a premium hosted experience, mobile/desktop usability, accessibili
 
 ## Goal
 
-Convert the complete PayFlow system into an undeniable competition entry optimized for the PayPal AI Hackathon judging criteria without weakening the engineering truth.
+Convert the complete PayFlow system into an undeniable competition entry without weakening engineering truth.
 
-## Required acceptance matrix
+## Final acceptance matrix
 
-Demonstrate, using the final hosted build where possible:
+Demonstrate where applicable:
 
 - natural-language intent;
 - exact human review/activation;
@@ -345,79 +340,108 @@ Demonstrate, using the final hosted build where possible:
 - legitimate selection;
 - trusted quote/manifest;
 - ALLOW and DENY paths;
-- delegated/HNP path where applicable;
+- delegated/HNP execution;
 - PayPal Sandbox execution;
-- payer-return durability where applicable;
+- payer-return durability;
 - exact-one capture/idempotency;
 - reconciliation after ambiguous provider state;
 - revoked/expired zero-new-dispatch behavior;
-- Trust Trace VERIFIED for a conforming completed operation;
-- tampered/invalid verification failure;
-- selected Break PayFlow attacks;
-- external authority verification;
-- complete regression and CI green.
+- Trust Trace VERIFIED for conforming completed operation;
+- invalid/tampered verification failure;
+- externally verifiable agent/Authority assertion;
+- selected Break PayFlow attacks and, if completed, Break PayFlow 100;
+- complete regression/CI green.
 
-## Submission strategy
+## Judge Repository Gate
 
-Optimize explicitly for the five Devpost criteria:
+Before submission freeze, the public repository MUST:
 
-### Technological Implementation
+- contain an approved OSI open-source `LICENSE` visible at the repository root;
+- have a current README that presents the actual final product rather than obsolete milestone state;
+- include reproducible setup/run instructions;
+- explain exactly how PayPal and AI are used;
+- distinguish current functionality from future roadmap work;
+- document sponsor integrations actually used, without claiming planned integrations as implemented;
+- provide a working hosted demo or complete local run path;
+- expose no credentials, bootstrap codes, private tokens or payer secrets.
 
-Show the real PayPal path, deterministic authorization, signed grants, durable concurrency, reconciliation, live integrations and verifiable evidence.
+## Devpost Gate
 
-### Design
+Before submission freeze:
 
-The hosted app must feel like a complete premium product, not a developer console.
+- project name, tagline and description are complete;
+- public repository URL is final;
+- working demo URL is final;
+- testing instructions/credentials are safe and sufficient;
+- required PayPal/AI tool explanations are complete;
+- sponsor selections reflect only integrations actually implemented;
+- public YouTube demo is under three minutes and demonstrates the working product on its intended device;
+- all eligibility and submission fields are complete;
+- the narrative clearly identifies meaningful work completed during the hackathon period.
 
-### Potential Impact
+## Judging strategy
 
-Frame the problem as the trust gap preventing people and enterprises from safely allowing AI agents to spend on their behalf.
+Optimize explicitly for:
 
-### Innovation / Idea
+1. Technological Implementation — real PayPal path, deterministic authorization, signed grants, durable concurrency, reconciliation, live integration and evidence;
+2. Design — complete premium product rather than developer console;
+3. Potential Impact — the trust gap preventing consumers and enterprises from safely delegating financial actions to AI;
+4. Innovation / Idea — verifiable delegated authority and outcome proof, not generic AI shopping;
+5. Presentation — one coherent story within the first three minutes.
 
-Lead with verifiable delegated authority — not generic AI shopping.
-
-### Presentation
-
-The first three minutes must tell one coherent story:
+Preferred narrative:
 
 1. human delegates bounded authority;
-2. AI proposes an action;
-3. PayFlow stops a manipulated/unauthorized attempt;
-4. the valid transaction completes through PayPal;
-5. the resulting authority chain is independently verified.
+2. AI/external agent proposes an action;
+3. PayFlow blocks a manipulated or unauthorized attempt with **Money moved: $0**;
+4. a valid delegated transaction completes through PayPal exactly once;
+5. the authority chain and provider outcome are independently verified.
 
-## Prize strategy
-
-Primary target: overall first place.
-
-Secondary sponsor target should favor integrations that strengthen the product rather than distort it. AG Grid/Studio is useful for the trust/attack experience; Channel3 is useful for live commerce discovery. Sponsor requirements must never justify bypassing core trust boundaries.
-
-## Hard gate
-
-No submission freeze until the final hosted environment passes the acceptance matrix, the demonstration is repeatable, all mandatory Devpost fields/assets are complete, and the three-minute narrative can be executed without relying on hidden manual repair steps.
+Primary prize target remains overall first place. Sponsor integrations must strengthen the core product rather than distort it.
 
 ---
 
-# Milestone progression rules
+# Explicit non-goals through M10
 
-1. Only one milestone is active at a time unless a later milestone has an explicitly authorized read-only research spike.
-2. Each milestone begins from the accepted main SHA of the previous milestone.
-3. Each implementation milestone uses a dedicated branch/PR.
-4. Every Work prompt must restate the global non-regression boundary.
-5. Existing accepted tests plus milestone-specific tests must pass before merge authorization.
-6. No milestone can declare success from UI appearance alone; durable state and authoritative provider evidence control financial truth.
-7. No new external integration may silently become authority.
-8. A failed live attempt is preserved as evidence; do not create replacement financial attempts without explicit authorization where required.
-9. M10 may polish presentation but may not rewrite financial semantics to make a demo easier.
+Do not add, solely for breadth:
 
-# Locked roadmap summary
+- PayFlow-issued cards;
+- wallets or custody;
+- lending/credit;
+- banking infrastructure;
+- ten payment rails;
+- a PayFlow browser agent;
+- a proprietary LLM;
+- refunds/subscriptions/disputes merely to match a competitor;
+- a new policy engine parallel to Mandate/Trust Kernel;
+- protocol-specific authority semantics that replace PayFlow Authority.
 
-- M5 — Authority Experience
-- M6 — Delegated / Human-Not-Present Commerce
+Refund/dispute evidence may be represented read-only where it strengthens recourse understanding, but new money-moving refund/dispute behavior requires separate explicit authorization and is not implied by this roadmap.
+
+---
+
+# Milestone progression and freeze rules
+
+1. M6 is **NOT STARTED** at the time of this freeze.
+2. No M6 branch, migration, implementation, external integration or live financial attempt is authorized by this documentation change.
+3. Only one milestone is active at a time unless a later milestone has an explicitly authorized read-only research spike.
+4. Each implementation milestone begins from the accepted main SHA of the previous milestone.
+5. Each implementation milestone uses a dedicated branch/PR.
+6. Every implementation prompt must restate the global non-regression boundary.
+7. Existing accepted tests plus milestone-specific tests must pass before merge authorization.
+8. UI appearance never overrides durable financial truth.
+9. No external integration or protocol may silently become authority.
+10. Failed live attempts remain evidence and are not overwritten for demo convenience.
+11. M10 may polish presentation but may not rewrite financial semantics to make the demo easier.
+12. **ADR-016 is now frozen.** Further architectural amendment requires explicit owner authorization and a documented reason that cannot be satisfied within this locked sequence. Competitive novelty alone is not sufficient reason to pivot.
+
+# Locked roadmap
+
+- M5 — Authority Experience — **CLOSED / PASS / MERGED**
+- M6 — Delegated / Human-Not-Present Commerce — **NOT STARTED**
 - M7 — Live Agent Commerce Gateway
 - M8 — Interoperable Verifiable Authority
 - M9 — Trust Experience + Break PayFlow Arena
 - M10 — Judge-Proof Acceptance and Submission
 
-This sequence supersedes earlier loose post-M4 roadmap descriptions while preserving all accepted M1–M4 semantics and evidence.
+This frozen sequence supersedes earlier loose post-M4 descriptions while preserving all accepted M1–M5 semantics and evidence.
