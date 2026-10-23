@@ -6,3 +6,9 @@ coverage/
 !.env.example
 *.log
 .DS_Store
+
+apps/console/.next/
+apps/console/out/
+*.tsbuildinfo
+hosting/m5/public
+hosting/m5/node_modules

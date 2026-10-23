@@ -1,0 +1,10 @@
+{
+  "name": "@payflow/m5-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated NON-PRODUCTION M5 console deployment (thin Vercel adapter). Dependencies are installed from the repository root, where the shared src/ modules live. Not the payer-return project.",
+  "engines": {
+    "node": ">=20"
+  }
+}

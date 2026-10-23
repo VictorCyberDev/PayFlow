@@ -362,18 +362,23 @@ Demonstrate, using the final hosted build where possible:
 Optimize explicitly for the five Devpost criteria:
 
 ### Technological Implementation
+
 Show the real PayPal path, deterministic authorization, signed grants, durable concurrency, reconciliation, live integrations and verifiable evidence.
 
 ### Design
+
 The hosted app must feel like a complete premium product, not a developer console.
 
 ### Potential Impact
+
 Frame the problem as the trust gap preventing people and enterprises from safely allowing AI agents to spend on their behalf.
 
 ### Innovation / Idea
+
 Lead with verifiable delegated authority — not generic AI shopping.
 
 ### Presentation
+
 The first three minutes must tell one coherent story:
 
 1. human delegates bounded authority;
