@@ -55,6 +55,7 @@ The current one-page anchor-navigation model is not the target experience for M6
 Primary customer destinations are locked as:
 
 ### Home
+
 Purpose: orientation and attention.
 
 Primary question: **Is everything okay?**
@@ -62,6 +63,7 @@ Primary question: **Is everything okay?**
 Home must be state-aware rather than a permanent marketing hero. It should summarize active authority, attention-required states and recent meaningful outcomes without reproducing every product surface.
 
 ### New Authority / Ask PayFlow
+
 Purpose: delegation.
 
 Primary question: **What may my agent do?**
@@ -73,6 +75,7 @@ The flow must guide the user through one principal decision at a time:
 Authentication/demo-access mechanics must not visually become part of the authority concept.
 
 ### Authorities
+
 Purpose: control.
 
 Primary question: **What can my agents currently do with my money?**
@@ -80,6 +83,7 @@ Primary question: **What can my agents currently do with my money?**
 Each Authority must foreground purpose, agent, remaining/maximum amount, scope, expiry, whether the agent may act without asking again, and the primary control such as revoke.
 
 ### Activity
+
 Purpose: understanding financial effects.
 
 Primary question: **What happened to my money?**
@@ -87,6 +91,7 @@ Primary question: **What happened to my money?**
 Activity is a financial journal, not a log viewer. The financial outcome must dominate the row/detail experience.
 
 ### Agents
+
 Agent identity remains a core object but does not have to receive equal top-level prominence for the consumer experience before multi-agent/external-agent use justifies it. Agents must be reachable contextually from related Authorities and Activity. M7+ may promote Agents where the use case requires it.
 
 ## 4. Three-layer disclosure model
@@ -219,15 +224,19 @@ Locked conceptual territory: **Bounded Flow**.
 Locked experience grammar:
 
 ### Frame
+
 Represents the exact boundary of Authority — what may happen.
 
 ### Flow
+
 Represents the attempted agent action — what wants to happen.
 
 ### Gate
+
 Represents deterministic authorization at the boundary. Valid actions may proceed; invalid actions stop before financial dispatch.
 
 ### Trace
+
 Represents what actually happened and the durable evidence that proves it.
 
 This grammar should eventually inform product components, motion, marketing graphics, receipts, presentation material and the M9 Trust/Break PayFlow experience.
@@ -278,15 +287,19 @@ Home should adapt to user state.
 Examples:
 
 ### New user
+
 Primary task: create first Authority.
 
 ### Healthy returning user
+
 Primary message: everything is within your rules, followed by active Authority and recent outcome summary.
 
 ### Attention-required state
+
 Primary message: unresolved/ambiguous financial outcome, expired/revoked state requiring acknowledgement, or another genuinely actionable condition.
 
 ### Delegated-commerce state after M6
+
 Primary message: which Authority can act without asking again, remaining bounds and recent delegated activity.
 
 The permanent marketing-style hero must not prevent Home from functioning as a real operational surface.
