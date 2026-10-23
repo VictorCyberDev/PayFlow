@@ -24,15 +24,15 @@ PayFlow is the authority and evidence layer for those questions. PayPal is the c
 
 Accepted milestones on `main`:
 
-| Milestone | Result |
-| --- | --- |
-| M1 — Trust Kernel | CLOSED / MERGED |
-| M2 — Durable authorization, signed execution grants, PayPal recovery | CLOSED / MERGED |
-| M3 — AI intent + authenticated mandate activation | CLOSED / MERGED |
-| M4 — Trusted commerce + PayPal Sandbox acceptance | CLOSED / MERGED |
-| Post-M4 — deterministic payer-return UX | CLOSED / MERGED |
-| M5 — Authority Experience | CLOSED / PASS / MERGED |
-| M6 — Delegated / Human-Not-Present Commerce | **NOT STARTED** |
+| Milestone                                                            | Result                 |
+| -------------------------------------------------------------------- | ---------------------- |
+| M1 — Trust Kernel                                                    | CLOSED / MERGED        |
+| M2 — Durable authorization, signed execution grants, PayPal recovery | CLOSED / MERGED        |
+| M3 — AI intent + authenticated mandate activation                    | CLOSED / MERGED        |
+| M4 — Trusted commerce + PayPal Sandbox acceptance                    | CLOSED / MERGED        |
+| Post-M4 — deterministic payer-return UX                              | CLOSED / MERGED        |
+| M5 — Authority Experience                                            | CLOSED / PASS / MERGED |
+| M6 — Delegated / Human-Not-Present Commerce                          | **NOT STARTED**        |
 
 The post-M5 roadmap is frozen in [`docs/ADR-016-post-m4-product-roadmap.md`](docs/ADR-016-post-m4-product-roadmap.md).
 
