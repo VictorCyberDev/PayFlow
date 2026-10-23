@@ -22,7 +22,7 @@
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "https://payflow-m6-acceptance.vercel.app"
+          "value": "https://payflow-m5-acceptance.vercel.app"
         }
       ]
     },
