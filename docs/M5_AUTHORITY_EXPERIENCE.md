@@ -376,6 +376,8 @@ M5A–M5D are CLOSED / PASS at their accepted heads; M5D head `38655faa7a23151d8
 
 ### Hosted deployment — BLOCKED — ARCHITECTURAL BOUNDARY
 
+> **Superseded by M5E-HOST (section below).** This section is preserved as the historical record of the original blocker; the blocker was closed by durable host state and a real hosted acceptance.
+
 A real hosted deployment was attempted as an investigation and **was not performed**. Nothing was created, deployed or configured on any host.
 
 - **Blocker 1 (accepted boundary):** the M5C host keeps sessions (`ConsoleSessions`) and the exact-review challenge cache (`ConsoleActivation`) in process memory. This is the accepted, documented semantic ("process-local; restart fails closed"). Vercel Functions give no single-instance guarantee, so login, review and confirmation could land on different instances and the confirmation would fail closed at random. Making sessions/challenges durable would redesign session semantics and the HumanConfirmationBoundary hand-off, which M5E may not do.
@@ -448,3 +450,62 @@ Reviewed in headless Chromium against the locally served console (not a hosted U
 ### M5E stop gate
 
 M5E implementation is complete except hosted acceptance. M6 is NOT STARTED. PR #12 stays DRAFT / OPEN / UNMERGED pending GUIDE review.
+
+## M5E-HOST — durable hosted acceptance
+
+Accepted candidate before this work: `cacdf569a872b4013c48544dcdfa0a0350bf15a7` (CI run `39954606027`, all three jobs green). M5E-HOST closes only the hosted-acceptance gate. It does not change authentication semantics, the HumanConfirmationBoundary, IntentActivationService, Mandate, the Trust Kernel, payments, PayPal, reconciliation or OperationTraceService. M6 is NOT STARTED.
+
+### What changed (and only that)
+
+The blocker was process-local host state. Two things are now durable, behind two small ports, so any host instance (including a serverless invocation) can serve any request:
+
+- **Sessions** — `DurableConsoleSessions` (`src/console-session-durable.ts`). Same M5C guarantees: opaque 256-bit token, **only its SHA-256 is stored** (never the raw token), fixed server-configured principal, HttpOnly + SameSite=Strict cookie (`__Host-` + Secure on HTTPS), explicit 15-minute expiry, CSRF synchronizer value (**derived** with an HMAC from a key derived from the operator secret, not stored), exact origin/host audience, bounded login-guessing window and per-session mutation budget (**atomic SQL shared by all instances**), logout revocation.
+- **Pending exact confirmations** — `PendingStore` (`src/console-pending.ts`). The accepted in-memory store stays the default (local host unchanged). The PostgreSQL store keeps the server-only confirmation material; the raw activation challenge is stored only as **AES-256-GCM ciphertext** bound to its review id. Consumption is **one conditional `UPDATE`**, so at most one caller on any instance obtains it; the accepted M3C service still enforces replay/epoch/expiry/ownership independently.
+- `ConsoleSessionPort` lets the accepted in-memory sessions and the durable sessions be used interchangeably (callers `await`). Activation, controls, activity and authority logic is otherwise untouched.
+- **Migration `010`** (additive, host-state only): `console_demo_sessions`, `console_demo_login_window`, `console_pending_actions`. No foreign key to, and no write to, any financial table. Migrations 001–009 and all historical rows are unchanged.
+- `createHostedConsole` (`src/console-hosted.ts`) and `hosting/m5/` form the thin Vercel adapter (HTTP -> durable session/security -> existing services). The recorded demo sample is a pure function of the hour bucket so every instance agrees on it.
+- `hosting/operator/provision-m5.ts` is the **operator-only** provisioning script (never deployed, no HTTP surface). It applies migrations 001–010, then one principal, one passport and one activation policy, and **refuses any database that contains financial history**.
+
+### Topology (separate from the payer-return project)
+
+- Vercel project `payflow-m5-acceptance` (`prj_qJObWd2e02rgib4iXBRJsA7pbhim`), a different project from the payer-return project (`payflow`), root directory `hosting/m5`, built from `VictorCyberDev/PayFlow` at the accepted commit. Preview deployments are disabled; production deployments are created explicitly for an exact commit.
+- Hosted URL: **https://payflow-m5-acceptance.vercel.app** (NON-PRODUCTION demo).
+- Isolated PostgreSQL: a new, empty Neon project `payflow-m5-acceptance` (`dark-term-10581960`), database `m5_acceptance`. It is not the historical PayFlow database and holds no M4 evidence. Its schema fingerprint (columns, constraints, indexes, function bodies, triggers, enum types) is identical to a local database built from migrations 001–010.
+- Deployment protection is turned off for this acceptance project only; access is gated by the operator code, shared rate limits, CSRF and exact-origin checks. The UI states it is a non-production demo.
+- Environment (names only; production target; the two secrets are write-only sensitive variables): `DATABASE_URL`, `PAYFLOW_M5_BOOTSTRAP_KEY` (at least 32 random bytes), `PAYFLOW_M5_DEMO=true`, `PAYFLOW_M5_PRINCIPAL_ID`, `PAYFLOW_M5_AGENT_ID`, `PAYFLOW_M5_ORIGIN` (exact HTTPS origin).
+- Security headers on every response: CSP (`default-src 'self'`; inline script/style allowed only because the Next static export requires it; `frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, HSTS. API responses are `no-store` and grant no CORS; static assets carry a same-origin (not wildcard) CORS value.
+
+### Findings from the live acceptance, and fixes
+
+Hosted acceptance found five real problems that local tests could not (each reproduced against the real origin and fixed with the narrowest change):
+
+1. The function build resolved `postgres`, `zod` and Node types from the repository root, but only the sub-projects were installed, so only the static console deployed. Install the root dependencies.
+2. A catch-all filename (`[...path].ts`) did not match nested API paths for a non-framework project. Use `api/host.ts` plus a rewrite (the same pattern as the payer-return function).
+3. A **named** rewrite parameter made Vercel append `?path=...` to every API request; the fail-closed host (exactly one `mandateId` allowed) correctly refused the Authority reads. Use an unnamed capture group.
+4. Vercel serves static assets with `Access-Control-Allow-Origin: *`; overridden with the exact same origin for non-API paths.
+5. The hosted secret-review regex matched a Next.js framework constant (`/ROOT/node_modules/...`); narrowed to real stack-trace patterns and extended with literal forbidden-secret checks supplied at run time.
+
+### Evidence
+
+- Local and CI (deterministic): the REQUIRED restart pattern (login, destroy host, session valid, pending review, destroy host, one confirmation, destroy host, replay refused); two independent instances sharing one database including concurrent confirmation across both; a store-level atomic-claim race (16 claimants over 4 connection pools, exactly one wins); durable session and exact-action regressions; provisioning guard and function-adapter tests. Mutation controls: swapping the durable pending store for the in-memory one fails 6 of those tests; removing the atomic-consume guard fails the store-level race test.
+- Hosted, real HTTPS origin: `apps/console/e2e-hosted/hosted.mjs` **6 / 6** (headers and cookie attributes; full 20-step journey including stale-tab correction; adversarial checks; secret review of the client bundle and every response including literal database host/password; mobile 375 px; host-audience check), run twice on identical code.
+- Hosted restart durability (real deployment replacement): a session and pending review created on one deployment were still valid on a brand-new deployment; the pre-restart review was confirmed once, replay was refused (409), the fresh read showed ACTIVE then REVOKED.
+- Hosted concurrency: 8 simultaneous confirmations of one review produced exactly one activation (`200` once, `409` seven times).
+- Database after all hosted runs: 9 mandates, all revoked, exactly one `MANDATE_REVOKED` event each; 39 evidence events with **0 broken hash-chain links and 0 sequence gaps**; **0** payment attempts, reservations, execution grants, transaction proposals, provider observations and receipts. Stored session hashes are all 64 characters; every pending challenge is ciphertext.
+- Logs: the build event stream was read in full (no database URL/host/password, operator code or environment values); runtime logs are empty (the host writes nothing on request paths, and only a fixed token on misconfiguration).
+- Visual: hosted desktop (confirmation, active, revoked) and mobile reviewed; no horizontal overflow, 44 px targets, meaningful empty states.
+
+### Known limitations
+
+- NON-PRODUCTION fixed-owner demo auth; recorded model behavior only; no production authentication claim.
+- Another owner's mandate: proven by real-flow local suites (same code path) and, on the hosted origin, by an unknown/not-owned id being indistinguishable and unmutated; a hosted positive control with a second provisioned owner was not performed.
+- After a revocation made in another tab, a tab's top confirmation card self-corrects on its own poll (at most 15 s) or its Refresh action; the saved-authority list corrects on focus and manual refresh.
+- Vercel request-level logs were not retrievable through the available tooling, so access logs were not inspected.
+- The acceptance database password and operator code necessarily passed through tool calls in the session that performed the deployment. Treat both as compromised after acceptance: delete the `payflow-m5-acceptance` Vercel project and Neon project, or rotate both.
+- Pre-existing dev-only advisories (vitest/vite/esbuild at the root; `eslint-config-next` tooling in the console) are not shipped; production dependency audits report 0 vulnerabilities for both the root and the console.
+- The accepted M2 test `paypal.integration.test.ts` "closure expiration before handoff while the passport lock is held" remains timing-sensitive locally; unchanged.
+- Deployment is manual by design (previews disabled); the hosted function reflects the commit recorded in its deployment metadata (`81467da…`; later commits change only documentation).
+
+### Stop gate
+
+M5E-HOST is complete when exact-head CI is green. M5 is ready for final GUIDE closure review; M6 is NOT STARTED; PR #12 stays DRAFT / OPEN / UNMERGED.
