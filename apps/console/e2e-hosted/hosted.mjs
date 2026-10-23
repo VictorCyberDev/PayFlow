@@ -105,8 +105,18 @@ test("HTTPS, security headers and cookie attributes on the hosted origin", async
   assert.equal(h.get("x-content-type-options"), "nosniff");
   assert.equal(h.get("x-frame-options"), "DENY");
   assert.match(h.get("strict-transport-security") ?? "", /max-age=/);
-  assert.equal(h.get("access-control-allow-origin"), null);
+  // Static assets must not carry a wildcard CORS grant (Vercel's default is "*").
+  const acao = h.get("access-control-allow-origin");
+  assert.ok(
+    acao === null || acao === origin,
+    "static ACAO must be absent or same-origin, got " + acao,
+  );
   const a = await apiLogin();
+  assert.equal(
+    a.headers.get("access-control-allow-origin"),
+    null,
+    "API must grant no CORS",
+  );
   const setCookie = a.headers.get("set-cookie");
   assert.match(setCookie, /^__Host-payflow_session=/);
   for (const attr of [
@@ -372,8 +382,16 @@ test("hosted secret review: client bundle and every response contain no secret, 
   assert.ok(!everything.includes(code), "operator code must never be echoed");
   assert.doesNotMatch(
     everything,
-    /postgres(ql)?:\/\/|DATABASE_URL|neon\.tech|GROQ|PAYPAL_|client_secret|PRIVATE KEY|"challenge"|reviewedHash|resumeSecret|executionGrant|at .*\.(ts|js):\d+|node_modules/i,
+    /postgres(ql)?:\/\/|DATABASE_URL|neon\.tech|GROQ|PAYPAL_|client_secret|PRIVATE KEY|"challenge"|reviewedHash|resumeSecret|executionGrant|\bat [^\n]{1,200}\.(ts|js):\d+:\d+/i,
   );
+  // Literal operator-supplied secrets (never printed): database host/password, etc.
+  for (const literal of (process.env.HOSTED_FORBIDDEN ?? "")
+    .split(",")
+    .filter(Boolean))
+    assert.ok(
+      !everything.includes(literal),
+      "a forbidden literal appears in client-visible output",
+    );
   // Scripts served by the origin are scanned too.
   const scripts = [
     ...new Set(

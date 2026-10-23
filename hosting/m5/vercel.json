@@ -6,7 +6,7 @@
   "outputDirectory": "public",
   "rewrites": [
     {
-      "source": "/api/:path*",
+      "source": "/api/(.*)",
       "destination": "/api/host"
     }
   ],
@@ -16,6 +16,15 @@
     }
   },
   "headers": [
+    {
+      "source": "/((?!api/).*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "https://payflow-m5-acceptance.vercel.app"
+        }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [
