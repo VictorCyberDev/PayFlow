@@ -79,8 +79,13 @@ async function toConfirm(page) {
   await page.getByRole("button", { name: "Continue to confirm" }).click();
   await page.getByRole("button", { name: "Confirm Authority" }).waitFor();
 }
+// Vercel's trailingSlash redirects /api/x to /api/x/ (308) and a browser follows it, so request the
+// final form directly; the deployed adapter restores the exact path for the host.
 const api = (path, init = {}) =>
-  fetch(origin + path, { redirect: "manual", ...init });
+  fetch(origin + path.replace(/^(\/api\/[^?#]*?)\/*(?=[?#]|$)/, "$1/"), {
+    redirect: "manual",
+    ...init,
+  });
 async function apiLogin() {
   const r = await api("/api/activation/session", {
     method: "POST",
@@ -218,6 +223,44 @@ test("complete hosted journey: untrusted review, exact confirmation, Active, rel
     .locator(".state-tag", { hasText: /Revoked/i })
     .first()
     .waitFor();
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test("hosted M6 demo Agent: honest about the missing payment rail; the $184 case is blocked and $0 moved", async () => {
+  const { context, page, problems } = await open();
+  await login(page);
+  await understand(page);
+  await toConfirm(page);
+  await page.getByRole("button", { name: "Confirm Authority" }).click();
+  await page
+    .getByRole("heading", { level: 1, name: "Authority created" })
+    .waitFor();
+  await page.getByRole("link", { name: "View Authority" }).click();
+  await page.getByRole("button", { name: "Revoke Authority" }).waitFor();
+  await page.getByRole("heading", { name: /Demo · Try your Agent/ }).waitFor();
+  // Payments are not connected on this deployment: the purchase is not offered, and it says so.
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Agent finds an $84 keyboard" })
+      .isDisabled(),
+    true,
+  );
+  await page.getByText(/Payments aren.t connected in this demo/).waitFor();
+  await shot(page, "h-m6-01-authority-agent");
+  await page
+    .getByRole("button", { name: "Agent finds a $184 keyboard" })
+    .click();
+  await page
+    .getByText(/Blocked before any payment started\. \$0 moved\./)
+    .waitFor();
+  await page.getByRole("link", { name: "See what happened" }).click();
+  await page.getByRole("heading", { level: 1, name: "$0 moved" }).waitFor();
+  const text = await page.locator("main").innerText();
+  assert.match(text, /exceeded the maximum amount/);
+  assert.match(text, /No payment was started\./);
+  assert.doesNotMatch(text, /Checking what happened|paid once/);
+  await shot(page, "h-m6-02-blocked");
   assert.deepEqual(problems, []);
   await context.close();
 });

@@ -56,14 +56,22 @@ Verified state at handoff:
 - 30 public tables
 - one seeded principal
 - one seeded Agent passport
-- no Mandates
+- Authorities created and revoked by the hosted browser acceptance (5 Mandates, all revoked; 1 proven zero-effect quote refusal) — authority records only
 - no transaction proposals
 - no authorization reservations
 - no execution grants
 - no payment attempts
 - no provider observations / financial history
 
-This database is isolated from historical M4/M5 payment evidence and is clean for the final live M6 acceptance.
+This database is isolated from historical M4/M5 payment evidence and is clean for the final live M6 acceptance. The live operator script refuses only on payment history (attempts, reservations, grants, proposals, provider observations), all of which are zero here.
+
+## Hosted browser acceptance (`npm run test:hosted` in `apps/console`)
+
+Run against `https://payflow-m6-acceptance.vercel.app`: **7 / 7 passed** — HTTPS and cookie properties, the full create → confirm → Active → reload → revoke journey, the M6 demo Agent, hosted adversarial cases (cookie, CSRF, origin, principal injection, term tampering, replay), secret review of the client bundle and every response, 375 px mobile, and the host-header check.
+
+The M6 demo Agent test proves the hosted deployment is honest about its missing payment rail: the `$84` purchase is disabled with "Payments aren't connected in this demo", and the `$184` price-drift case is blocked with `$0 moved`. Database check afterwards: 1 durable quote refusal; **0** proposals, reservations, grants, payment attempts and provider observations.
+
+Two defects found and fixed by this run: the `trailingSlash` setting required by the static pages also redirected `/api/*` to a slash-terminated path the host does not match (adapter now normalizes it, covered by `tests/hosting-m5.integration.test.ts`), and the harness's raw HTTP helper did not follow that redirect.
 
 ## What is already proven without live PayPal credentials
 
