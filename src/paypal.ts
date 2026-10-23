@@ -291,6 +291,7 @@ export class PayPalOAuthClient {
 }
 
 export class PayPalPaymentProvider implements PaymentProvider {
+  private readonly delegatedVaultId: string | undefined;
   private readonly payerReturn:
     Readonly<{ returnUrl: string; cancelUrl: string }> | undefined;
   constructor(
@@ -298,7 +299,17 @@ export class PayPalPaymentProvider implements PaymentProvider {
     private readonly fetcher: FetchLike = fetch,
     environment = "sandbox",
     payerReturn?: { returnUrl: string; cancelUrl: string },
+    /** M6: an instrument the payer approved in advance (vaulted PayPal wallet). Orders created
+     * with it need no payer action at execution time. It never grants PayFlow authority: every
+     * order is still created only after authorization, reservation, grant and revalidation. */
+    delegatedInstrument?: { vaultId: string },
   ) {
+    if (
+      delegatedInstrument &&
+      !/^[A-Za-z0-9_-]{1,64}$/.test(delegatedInstrument.vaultId)
+    )
+      throw new Error("PAYPAL_DELEGATED_INSTRUMENT_INVALID");
+    this.delegatedVaultId = delegatedInstrument?.vaultId;
     this.payerReturn = payerReturn
       ? Object.freeze({ ...payerReturn })
       : undefined;
@@ -335,19 +346,21 @@ export class PayPalPaymentProvider implements PaymentProvider {
       i.requestId,
       {
         intent: "CAPTURE",
-        ...(this.payerReturn
-          ? {
-              payment_source: {
-                paypal: {
-                  experience_context: {
-                    return_url: this.payerReturn.returnUrl,
-                    cancel_url: this.payerReturn.cancelUrl,
-                    user_action: "PAY_NOW",
+        ...(this.delegatedVaultId
+          ? { payment_source: { paypal: { vault_id: this.delegatedVaultId } } }
+          : this.payerReturn
+            ? {
+                payment_source: {
+                  paypal: {
+                    experience_context: {
+                      return_url: this.payerReturn.returnUrl,
+                      cancel_url: this.payerReturn.cancelUrl,
+                      user_action: "PAY_NOW",
+                    },
                   },
                 },
-              },
-            }
-          : {}),
+              }
+            : {}),
         purchase_units: [
           {
             reference_id: i.merchantReference,
@@ -1547,5 +1560,27 @@ export function paypalProviderFromEnv(
     fetcher,
     env.PAYPAL_ENVIRONMENT,
     { returnUrl, cancelUrl },
+  );
+}
+
+/** M6 delegated (human-not-present) provider: Sandbox only, pre-approved instrument required. */
+export function paypalDelegatedProviderFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  fetcher: FetchLike = fetch,
+): PayPalPaymentProvider {
+  if (env.PAYPAL_ENVIRONMENT !== "sandbox")
+    throw new Error("PAYPAL_2D_SANDBOX_ONLY");
+  const vaultId = env.PAYPAL_DELEGATED_VAULT_ID;
+  if (!vaultId) throw new Error("PAYPAL_DELEGATED_INSTRUMENT_REQUIRED");
+  return new PayPalPaymentProvider(
+    new PayPalOAuthClient(
+      env.PAYPAL_CLIENT_ID ?? "",
+      env.PAYPAL_CLIENT_SECRET ?? "",
+      fetcher,
+    ),
+    fetcher,
+    env.PAYPAL_ENVIRONMENT,
+    undefined,
+    { vaultId },
   );
 }
