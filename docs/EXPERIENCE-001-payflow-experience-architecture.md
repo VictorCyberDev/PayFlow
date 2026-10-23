@@ -10,21 +10,23 @@ Authoritative implementation baseline at lock: `main` at `0aa289bdf2e037a43d644a
 
 Milestone state at lock:
 
-- M1–M5 — CLOSED / MERGED
-- **Experience Architecture X1–X9 — REQUIRED BEFORE M6**
+- M1-M5 — CLOSED / MERGED
+- **Experience Architecture X1-X9 — REQUIRED BEFORE M6**
 - **M6 — NOT STARTED**
 
-This document does not modify financial semantics, provider behavior, durable state, historical evidence, or the M1–M5 trust architecture. It locks the customer-experience architecture that all product-facing work from M6 onward must inherit.
+This document does not modify financial semantics, provider behavior, durable state, historical evidence, or the M1-M5 trust architecture. It locks the customer-experience architecture that all product-facing work from M6 onward must inherit.
 
 ## 1. Why this lock exists
 
-The M1–M5 backend is materially stronger than the customer-facing experience. The current product is technically truthful and accessible, but it exposes too much of the internal implementation model directly to users.
+The M1-M5 backend is materially stronger than the customer-facing experience. The current product is technically truthful and accessible, but it exposes too much of the internal implementation model directly to users.
 
-The present experience accumulates intent review, activation, authority state, management, activity, verification, technical references, agent identity, demo environment language and control actions into a long single-page surface. This creates three risks:
+The present experience accumulates intent review, activation, authority state, management, activity, verification, technical references, agent identity, demo-environment language, and control actions into a long single-page surface.
 
-1. customers must understand PayFlow's internal architecture to use it comfortably;
-2. technical proof competes visually with the financial outcome the customer actually cares about;
-3. later milestones would add delegated execution, live commerce, interoperable identity and attack/proof experiences onto an already overloaded information architecture.
+That creates three risks:
+
+1. Customers must understand PayFlow's internal architecture to use it comfortably.
+2. Technical proof competes visually with the financial outcome the customer actually cares about.
+3. Later milestones would add delegated execution, live commerce, interoperable identity, and attack/proof experiences onto an already overloaded information architecture.
 
 The experience must therefore be rebuilt around the customer's mental model before M6 begins.
 
@@ -48,11 +50,24 @@ Primary customer questions:
 
 The product must answer these questions before exposing implementation vocabulary.
 
-## 3. Locked information architecture
+## 3. Locked customer mental model
 
-The current one-page anchor-navigation model is not the target experience for M6–M10.
+The customer should understand PayFlow through four concepts:
 
-Primary customer destinations are locked as:
+- **Authority** — what an agent is allowed to do.
+- **Agent** — who is acting under that Authority.
+- **Activity** — what the agent attempted or completed.
+- **Proof** — why PayFlow allowed, blocked, held, or verified the outcome.
+
+The customer should not need to understand Mandates, execution grants, reservation state machines, provider-conformance internals, operation traces, or database state to operate PayFlow safely.
+
+Those concepts remain authoritative in the backend and may appear in the Proof layer.
+
+## 4. Locked information architecture
+
+The current one-page anchor-navigation model is not the target experience for M6-M10.
+
+Primary customer destinations are locked as follows.
 
 ### Home
 
@@ -60,7 +75,16 @@ Purpose: orientation and attention.
 
 Primary question: **Is everything okay?**
 
-Home must be state-aware rather than a permanent marketing hero. It should summarize active authority, attention-required states and recent meaningful outcomes without reproducing every product surface.
+Home must be state-aware rather than a permanent marketing hero. It should summarize active Authority, attention-required states, and recent meaningful outcomes without reproducing every product surface.
+
+Possible state-aware headlines include:
+
+- **Everything is within your rules.**
+- **1 payment needs attention.**
+- **Shopping Agent can act without asking you again.**
+- **No active Authorities yet.**
+
+Home must not become a second Activity page or a dashboard of every internal metric.
 
 ### New Authority / Ask PayFlow
 
@@ -70,9 +94,11 @@ Primary question: **What may my agent do?**
 
 The flow must guide the user through one principal decision at a time:
 
-`instruction → interpretation → boundaries → confirmation → Authority created`
+`instruction -> interpretation -> boundaries -> confirmation -> Authority created`
 
-Authentication/demo-access mechanics must not visually become part of the authority concept.
+The interface may use natural language, but model output remains untrusted until normal PayFlow activation semantics complete.
+
+Authentication and demo-access mechanics must not visually become part of the Authority concept.
 
 ### Authorities
 
@@ -80,7 +106,19 @@ Purpose: control.
 
 Primary question: **What can my agents currently do with my money?**
 
-Each Authority must foreground purpose, agent, remaining/maximum amount, scope, expiry, whether the agent may act without asking again, and the primary control such as revoke.
+Each Authority must foreground:
+
+- purpose;
+- agent;
+- maximum or remaining amount in customer-friendly language;
+- quantity or item scope where applicable;
+- merchant boundary;
+- condition boundary where applicable;
+- expiry;
+- whether the agent may complete an eligible action without asking again;
+- the primary control, such as revoke.
+
+Accounting internals such as reservation state, execution-grant state, and raw identifiers belong in Proof unless they materially affect the immediate customer decision.
 
 ### Activity
 
@@ -88,13 +126,25 @@ Purpose: understanding financial effects.
 
 Primary question: **What happened to my money?**
 
-Activity is a financial journal, not a log viewer. The financial outcome must dominate the row/detail experience.
+Activity is a financial journal, not a log viewer.
+
+The financial outcome must dominate the row and detail experience.
+
+Preferred primary outcomes include:
+
+- **$0 moved**
+- **$84 paid once**
+- **Checking what happened — do not retry yet**
 
 ### Agents
 
-Agent identity remains a core object but does not have to receive equal top-level prominence for the consumer experience before multi-agent/external-agent use justifies it. Agents must be reachable contextually from related Authorities and Activity. M7+ may promote Agents where the use case requires it.
+Agent identity remains a core object but does not have to receive equal top-level prominence for the consumer experience before multi-agent or external-agent use justifies it.
 
-## 4. Three-layer disclosure model
+Agents must be reachable contextually from related Authorities and Activity.
+
+M7 and later may promote Agents where the use case requires it.
+
+## 5. Locked three-layer disclosure model
 
 Every customer-facing record must follow exactly three conceptual information layers.
 
@@ -116,366 +166,516 @@ Enough information to understand or control the result.
 
 Examples:
 
-- price exceeded your $100 limit;
-- refurbished condition is not allowed;
-- Shopping Agent may buy one new keyboard from approved merchants until Friday;
-- authority was revoked before dispatch.
+- Price exceeded your $100 limit.
+- Refurbished condition is not allowed.
+- Shopping Agent may buy one new keyboard from approved merchants until Friday.
+- Authority was revoked before dispatch.
 
 ### Layer 3 — Proof
 
-Technical and evidentiary detail for judges, developers, enterprise reviewers, disputes and advanced users.
+Technical and evidentiary detail for judges, developers, enterprise users, investigation, or disputed situations.
 
-May include:
+Proof may expose:
 
-- Authority/Mandate identifier;
-- Agent identifier;
+- Authority or Mandate identifier;
+- agent identifier;
+- evaluated terms;
+- decision reason codes;
 - reservation state;
 - execution-grant state;
 - provider order/capture references;
-- reconciliation state;
+- reconciliation status;
 - Trust Trace stages;
-- fingerprints/hashes;
-- precise machine timestamps;
-- reason codes.
+- timestamps;
+- evidence fingerprints;
+- cryptographic or protocol references where relevant.
 
-Proof must not compete with Layer 1 in the default consumer view.
+Primary customer surfaces must not nest Proof inside multiple levels of generic disclosure controls.
 
-Nested disclosure should not become an arbitrary tree. The target product pattern is Customer → Explanation → Proof, with Proof commonly implemented as a dedicated detail view, drawer or mode rather than deeply nested disclosure elements.
+Proof should become a deliberate destination, panel, drawer, or dedicated detail mode.
 
-## 5. Outcome hierarchy
+## 6. Locked financial hierarchy
 
-Financial outcome is the most important visual fact in Activity and execution-result surfaces.
+For any financial action, information priority is:
 
-Required primary outcome language:
+1. Financial outcome.
+2. Authority that applied.
+3. Human explanation.
+4. Customer control.
+5. Proof.
 
-- **$0 moved** for blocked/no-effect attempts where durable evidence supports that claim;
-- **$X paid once** for exactly-one completed capture where durable evidence supports that claim;
-- **Outcome not confirmed** / equivalent human wording for ambiguous provider state, paired with a clear instruction not to retry where appropriate.
+For example, a denied attempt should lead with:
 
-The user should not have to inspect provider, trace or operation detail to learn whether money moved.
+> **$0 moved**
 
-## 6. Customer-language boundary
+Then explain:
 
-Primary UX must use customer concepts while preserving exact engineering truth behind the projection.
+> Blocked by your Keyboard Authority. Price was $184; your maximum is $100.
 
-Preferred customer vocabulary:
+Only after that should the user need to open Proof.
 
-- `Mandate` → **Authority**
-- `AgentPassport` → **Agent**
-- cumulative limit → **Total budget**
-- autonomous threshold → **Can spend without asking up to…**
-- committed → **Spent/used** only where semantically exact
-- reserved → **Pending** where semantically exact
-- fresh dispatch blocked → **Can't start new purchases**
-- provider reconciliation → **Checking what happened**
-- provider-conformant completed outcome → **Payment verified** where supported
+A completed operation should lead with:
 
-Normal customer views should not foreground:
+> **$84 paid once**
+
+Then explain which Authority permitted it and what remains.
+
+An ambiguous provider state should lead with explicit safety guidance:
+
+> **We have not confirmed whether money moved. Do not retry yet.**
+
+Technical state names must not replace this customer language.
+
+## 7. Locked customer-language boundary
+
+Primary customer language must describe financial meaning, not internal implementation.
+
+Preferred translations include:
+
+- `Mandate` -> **Authority**
+- `AgentPassport` -> **Agent**
+- autonomous threshold -> **Can spend without asking up to...**
+- cumulative limit -> **Total budget**
+- committed amount -> **Used** or **Spent**, only where financially accurate
+- reserved amount -> **Pending**, only where financially accurate
+- fresh dispatch blocked -> **Can't start new purchases**
+- provider conformance -> **Payment verified**
+- reconciliation -> **Checking what happened**
+- unknown financial outcome -> **We haven't confirmed whether money moved. Do not retry yet.**
+
+The following normally belong only in Proof:
 
 - execution grant;
+- operation ID;
 - fingerprint;
 - reason code;
-- operation identifier;
-- provider-state machine vocabulary;
-- internal authentication/bootstrap terminology.
+- raw provider state;
+- state-machine terminology.
 
-Those remain available in Proof when valuable.
+Plain language must never misrepresent durable financial truth.
 
-## 7. Environment and demo disclosure
+## 8. Locked Authority hierarchy
 
-Truthful non-production labeling remains mandatory, but repeated caveats must not become the visual identity.
+The front of an Authority should answer:
 
-Target pattern:
+1. What is this Authority for?
+2. Which agent can use it?
+3. How much may the agent spend?
+4. How much remains, where applicable?
+5. What may it buy or do?
+6. Where may it act?
+7. Until when?
+8. Can it act without asking again?
+9. How do I stop it?
 
-- one persistent **SANDBOX** / demo-environment indicator;
-- one clear **About this demo environment** explanation;
-- contextual warnings only when they materially affect the user's current decision.
+Secondary accounting and verification detail belongs in Explanation or Proof.
 
-Example money and real durable financial state must never be visually confusable.
+The customer-facing Authority object must not visually imply that PayFlow is a card issuer, wallet, bank account, or custody product.
 
-## 8. Temporal and numeric presentation
+## 9. Locked Activity hierarchy
 
-Primary customer surfaces should favor human-readable time and financial language.
+Activity must behave like a financial journal rather than an operational log.
+
+A row should prioritize:
+
+- amount or `$0` outcome;
+- concise action label;
+- item or merchant where helpful;
+- agent;
+- human time;
+- short explanation if blocked or unresolved.
+
+Exact UTC timestamps belong in Proof unless required for the immediate customer decision.
+
+`Why?` may open Explanation.
+
+`View proof` may open the technical/evidentiary layer.
+
+Do not require three or more nested disclosure levels.
+
+## 10. Locked Home behavior
+
+Home is an attention system, not an everything system.
+
+It should surface only what materially helps the user orient or act.
+
+A mature Home may contain:
+
+- overall status;
+- one or more important active Authorities;
+- attention-required outcomes;
+- a short recent-activity summary;
+- one strong action such as **New Authority**.
+
+Home must not duplicate the full Authorities or Activity experience.
+
+## 11. Locked demo and sandbox disclosure
+
+Truthful demo boundaries remain mandatory, but disclosure must be architected rather than repeated across every high-visibility surface.
+
+A persistent environment indicator such as **SANDBOX** or **DEMO** may identify the environment.
+
+A dedicated **About this demo** surface may explain:
+
+- fixed identity;
+- recorded model fixtures;
+- non-production authentication;
+- which flows create durable Authority;
+- which flows do or do not execute payment;
+- known limitations.
+
+Primary customer screens should not repeat the same caveat in multiple banners, footnotes, and paragraphs unless the specific action requires an immediate safety warning.
+
+No disclosure may be removed if doing so would make the demo materially misleading.
+
+## 12. Locked interaction-responsibility rules
+
+Customer-facing UI must not make the user responsible for maintaining PayFlow's internal state.
+
+Avoid primary controls such as:
+
+- Refresh saved state.
+- Re-read durable state.
+- Retry provider observation.
+- Refresh Authority projection.
+
+The system should update authoritative projections automatically where possible.
+
+When freshness is uncertain, the customer sees the human consequence, for example:
+
+> We couldn't refresh this Authority. Showing the last confirmed state from 2 minutes ago.
+
+Diagnostic/manual refresh tools may exist in Proof or developer mode.
+
+## 13. Locked time and number presentation
+
+Primary UI should use human-readable local presentation where safe and unambiguous.
 
 Examples:
 
-- **Expires Friday at 6:00 PM** rather than a full UTC machine string;
-- **$16 remaining** rather than exposing all accounting fields at once.
+- **Expires Friday at 6:00 PM**
+- **Updated just now**
+- **2 days remaining**
 
-Exact timestamps, reserved amounts, committed amounts and other implementation-meaningful detail remain available when required in Explanation or Proof.
+Exact UTC timestamps remain available in Proof.
 
-## 9. Interaction responsibility
+Currency and amount formatting must preserve financial accuracy and provider currency semantics.
 
-Customers should not be asked to operate system-maintenance concepts.
+## 14. Locked mobile principle
 
-Examples:
+Responsive desktop is not sufficient.
 
-- durable state should refresh automatically;
-- primary UI should not require a generic **Refresh saved state** action to remain trustworthy;
-- stale/unavailable projections should explain when information was last updated and what the user should do;
-- demo authentication should happen before or outside the conceptual Authority-creation flow where possible without weakening the accepted security boundary.
+M6-M10 customer surfaces must be deliberately designed for mobile as a first-class use case.
 
-## 10. Brand grammar — locked concept, unlocked styling
+The current horizontal-scroll anchor navigation is not the final mobile information architecture.
 
-The visual identity must derive from PayFlow's actual product meaning rather than generic fintech or generic AI aesthetics.
+Mobile navigation should prioritize the same customer jobs as desktop:
 
-Locked conceptual territory: **Bounded Flow**.
+- Home;
+- New Authority;
+- Authorities;
+- Activity.
 
-Locked experience grammar:
+Agent access may be contextual or secondary until the use case justifies top-level prominence.
+
+Accessibility foundations already accepted in M5 remain non-regression requirements, including focus visibility, reduced-motion support, readable contrast, and suitable touch targets.
+
+## 15. Locked brand concept
+
+The visual identity must emerge from PayFlow's actual product behavior rather than generic fintech or AI decoration.
+
+Working brand concept:
+
+**Bounded Flow**
+
+The locked visual grammar is:
 
 ### Frame
 
-Represents the exact boundary of Authority — what may happen.
+Represents what may happen.
+
+The Frame is the visual expression of Authority and bounded permission.
 
 ### Flow
 
-Represents the attempted agent action — what wants to happen.
+Represents what is attempting to happen.
+
+The Flow may originate from an agent, user instruction, or commerce action.
 
 ### Gate
 
-Represents deterministic authorization at the boundary. Valid actions may proceed; invalid actions stop before financial dispatch.
+Represents PayFlow's deterministic decision boundary.
+
+A valid action may pass.
+
+An invalid action must visibly stop before financial execution.
 
 ### Trace
 
-Represents what actually happened and the durable evidence that proves it.
+Represents what actually happened and how PayFlow can prove it.
 
-This grammar should eventually inform product components, motion, marketing graphics, receipts, presentation material and the M9 Trust/Break PayFlow experience.
+The Trace must never visually imply success before durable evidence supports that conclusion.
 
-The previous working term **Authority Pass** is not locked. The preferred direction is an **Authority Frame** or equivalent non-card/non-wallet object so PayFlow is not mistaken for a bank, stored-value wallet, card issuer or payment rail.
+This grammar may be expressed in layout, motion, diagrams, Authority objects, marketing, Trust Trace, and later Break PayFlow experiences.
 
-## 11. Brand constraints
+It must not change financial semantics.
 
-PayFlow should not default into common category clichés solely for familiarity.
+## 16. Locked motion principle
 
-Avoid as primary identity devices:
+Motion should describe PayFlow behavior rather than generic AI magic.
 
-- generic purple/blue AI gradients;
-- glowing AI orbs;
+Preferred behavioral motion concepts include:
+
+- **Constrain** — fluid natural-language intent resolves into explicit boundaries.
+- **Seal** — authenticated Authority settles into a stable Frame.
+- **Dispatch** — an eligible action moves toward the Gate.
+- **Deny** — the action stops before the payment rail.
+- **Verify** — durable provider/evidence confirmation resolves into a stable Trace.
+
+Reduced-motion users must receive equivalent information without relying on animation.
+
+Motion must never imply money moved before durable financial truth supports that claim.
+
+## 17. Locked anti-patterns
+
+PayFlow must avoid category-default branding that weakens distinctiveness or teaches the wrong mental model.
+
+Do not default to:
+
+- purple-to-cyan AI gradients;
+- glowing intelligence orbs;
 - neural-network decoration;
 - robot mascots;
-- shield/checkmark security logos;
-- cybersecurity-terminal aesthetics;
-- indiscriminate glassmorphism;
-- generic dark Linear-style UI;
-- payment-card imagery that implies PayFlow stores funds;
-- green chosen merely because it signals money;
-- excessive rounded-card composition.
+- shield/checkmark security branding as the primary identity;
+- dark SOC-dashboard aesthetics;
+- card or wallet metaphors that imply custody or issuing;
+- generic glassmorphism as the brand;
+- excessive rounded-card stacks;
+- a dark Linear-style clone;
+- green merely because the product relates to money;
+- color as the only state indicator.
 
-The customer layer should feel human, calm, precise and financially trustworthy. The Proof layer may be denser and more technical without turning the whole product into a security operations console.
+The product should feel like controlled financial agency, not cybersecurity software and not generic AI software.
 
-## 12. Visual identity items deliberately NOT frozen yet
+## 18. Locked distinctiveness requirement
 
-The following are research candidates, not final locked assets:
+The final visual system must pass a name-hidden recognition test.
 
-- exact primary/secondary color palette;
-- exact brand typeface;
-- final symbol/wordmark;
-- exact icon set;
-- exact radius scale;
-- exact photography/illustration treatment;
-- final motion timings/easing;
-- final generative Authority-pattern system.
+The design should contain a small number of repeatable, ownable memory structures across product and marketing.
 
-They are intentionally deferred until the same experience architecture is tested across multiple genuinely distinct visual territories.
+Candidate memory structures may include:
 
-No later team may treat an exploratory palette or font suggestion as final merely because it appeared in research.
-
-## 13. Product-state architecture
-
-Home should adapt to user state.
-
-Examples:
-
-### New user
-
-Primary task: create first Authority.
-
-### Healthy returning user
-
-Primary message: everything is within your rules, followed by active Authority and recent outcome summary.
-
-### Attention-required state
-
-Primary message: unresolved/ambiguous financial outcome, expired/revoked state requiring acknowledgement, or another genuinely actionable condition.
-
-### Delegated-commerce state after M6
-
-Primary message: which Authority can act without asking again, remaining bounds and recent delegated activity.
-
-The permanent marketing-style hero must not prevent Home from functioning as a real operational surface.
-
-## 14. Experience Architecture gates — X1 through X9
-
-These gates are mandatory before M6 begins.
-
-### X1 — Customer mental model
-
-Define and approve the consumer, judge and enterprise mental models. Identify the minimum information each needs and what must remain behind Explanation/Proof.
-
-PASS when each major surface is expressed in customer jobs rather than backend modules.
-
-### X2 — Information architecture
-
-Define the real destination model for Home, New Authority, Authorities, Activity and contextual Agents.
-
-PASS when the one-page accumulation pattern is replaced in the target design with navigable destinations and state-aware Home behavior.
-
-### X3 — Disclosure model
-
-Apply Outcome → Explanation → Proof consistently to Authority, Activity, blocked attempts, successful payments, unknown outcomes and agent identity.
-
-PASS when no core consumer flow requires navigating arbitrary nested technical disclosure to understand money movement or control authority.
-
-### X4 — Language system
-
-Create the canonical customer vocabulary and technical-proof vocabulary.
-
-PASS when a normal customer can understand the primary product without knowing Mandate, AgentPassport, execution grant, provider-conformance or reconciliation terminology.
-
-### X5 — Core-flow wireframes
-
-Produce responsive wireframes for:
-
-- Home — new, healthy and attention-required states;
-- New Authority / Ask PayFlow;
-- Authority list;
-- Authority detail/control;
-- Activity list;
-- Activity detail;
-- Agent contextual detail;
-- Proof layer.
-
-PASS when each screen has one dominant user question/action and the financial outcome/control hierarchy is obvious.
-
-### X6 — Future-state wireframes
-
-Design the same information architecture against at least:
-
-- one M6 valid delegated execution with no additional human confirmation;
-- one M6 blocked delegated attempt with **$0 moved**;
-- one ambiguous provider/reconciliation outcome;
-- one M8 externally verifiable agent/Authority proof;
-- one M9 Break PayFlow attack result.
-
-PASS when M6–M9 can fit the experience architecture without reintroducing the one-page technical dump.
-
-### X7 — Visual territory exploration
-
-Apply at least three genuinely distinct brand territories to the same approved wireframes.
-
-Each territory must define:
-
-- Frame/Flow/Gate/Trace expression;
-- color roles;
-- typography roles;
-- geometry;
-- iconography;
-- motion principles;
-- illustration/photography direction;
-- customer vs Proof-mode expression.
-
-PASS when options are materially different and not merely palette swaps.
-
-### X8 — Recognition + comprehension validation
-
-Evaluate both:
-
-1. **Recognition** — with the PayFlow wordmark hidden, does the system still feel recognizably PayFlow?
-2. **Comprehension** — can a first-time viewer identify what the agent may do, how much it may spend, whether it must ask again, and whether money moved?
-
-Do not select a design solely because it is the most visually dramatic.
-
-PASS requires a territory that is both distinctive and immediately understandable.
-
-### X9 — Experience & Brand lock
-
-Create the final implementation specification after X1–X8 pass.
-
-The final lock must cover:
-
-- information architecture;
-- navigation;
-- responsive behavior;
-- page/state templates;
-- customer language;
-- disclosure model;
-- brand idea;
-- logo/mark usage;
-- color tokens;
+- Frame geometry;
+- Gate geometry;
+- Flow/Trace behavior;
+- a distinctive Authority object;
 - typography;
-- layout/grid;
-- geometry/radii;
-- components;
-- Authority Frame;
-- Activity outcome system;
-- Proof mode;
-- icons;
-- motion including reduced-motion behavior;
-- accessibility/contrast;
-- illustration/photography;
-- data visualization;
-- sandbox/demo labeling;
-- marketing/product consistency.
+- color relationships;
+- motion signatures;
+- proof/outcome language.
 
-Only after X9 passes may the implementation phase begin.
+The exact logo, color palette, typeface, illustration system, and icon set are **not locked by EXPERIENCE-001**.
 
-## 15. Milestone linkage
+They must be tested during X7 and X8 rather than selected because they merely look premium.
+
+## 19. Visual choices intentionally left open
+
+The following remain unresolved until the visual-territory gate:
+
+- exact primary and secondary colors;
+- exact typefaces;
+- final logo or wordmark;
+- final Authority object silhouette;
+- icon family;
+- illustration system;
+- photography direction;
+- detailed motion timings;
+- dark-mode treatment;
+- final grid and spacing tokens.
+
+This is intentional.
+
+The experience architecture is locked first so visual design solves the correct product structure.
+
+## 20. Locked relationship to M6-M10
 
 ### M6 — Delegated / Human-Not-Present Commerce
 
-M6 remains **NOT STARTED** until X1–X9 pass.
+M6 must demonstrate delegated execution through the locked customer hierarchy.
 
-M6 implementation must use the locked experience architecture for all customer-facing work. The hero proof should make autonomous-but-bounded execution understandable without exposing backend mechanics by default.
+The customer should understand:
 
-Required customer-facing outcomes include:
+- what Authority exists;
+- whether the agent may act without asking again;
+- what action occurred;
+- whether money moved;
+- why PayFlow allowed or blocked the action.
 
-- valid delegated purchase → **$X paid once**;
-- price/merchant/condition/quantity violation → **$0 moved**;
-- revoked/expired Authority → **$0 moved** for new dispatch;
-- ambiguous provider result → explicit non-retry/reconciliation guidance.
+M6 must not add a second policy engine or expose implementation vocabulary merely because delegated execution is technically complex.
 
 ### M7 — Live Agent Commerce Gateway
 
-External-agent complexity must not leak into normal consumer navigation. Agent/tool scopes belong primarily in contextual Agent detail and Proof/developer surfaces unless the customer must make a decision about them.
+M7 must keep external-agent and protocol complexity behind the customer model.
+
+The customer sees Agent, Authority, Activity, and Proof.
+
+MCP, OAuth/OIDC scopes, Channel3 normalization, PayPal toolkit details, and protocol mechanics belong in integration/developer or Proof experiences unless they materially affect the user's decision.
 
 ### M8 — Interoperable Verifiable Authority
 
-Merchant/verifier assertions must remain understandable as proof of identity/authority context, not as a second consumer permission model.
+M8 may add merchant/verifier experiences, but read-only verification must remain clearly distinct from customer money-moving control.
 
-### M9 — Trust Experience + Break PayFlow Arena
+External assertions and protocol adapters must not visually or semantically become new Authority sources.
 
-M9 expands the locked Proof language rather than inventing a new visual system. Break PayFlow should amplify Frame/Flow/Gate/Trace and the same outcome language used in normal Activity.
+### M9 — Trust Experience + Break PayFlow
+
+M9 should amplify the same `Frame -> Flow -> Gate -> Trace` grammar rather than inventing a separate security aesthetic.
+
+Break PayFlow must lead with the financial outcome:
+
+- **Money moved: $0**
+- **Exactly one capture completed**
+
+Technical attack and evidence detail may then expand into Proof.
 
 ### M10 — Judge-Proof Acceptance
 
-The final video, Devpost graphics, repository visuals and hosted product must present one coherent identity and one coherent mental model. Judges should see technical depth through deliberate Proof views, not because the consumer UI is overloaded with internals.
+M10 presentation should show the same consumer experience first and reveal technical depth through Proof.
 
-## 16. Non-regression and truth rules
+The judge should not need to navigate a developer console to understand PayFlow's value.
 
-Experience simplification must never simplify away financial truth.
+## 21. Mandatory pre-M6 gates
 
-The UI MUST NOT:
+M6 implementation must not begin until X1-X9 are completed and explicitly locked.
 
-- infer success from browser state;
-- claim `$0 moved` without authoritative evidence;
-- claim `paid once` without authoritative exact-one proof;
-- hide UNKNOWN/ambiguous financial outcomes behind a success-looking state;
-- make visual animation authoritative;
-- widen an Authority through UI convenience;
-- convert external identity/protocol assertions into payment authority;
-- obscure revoke/expiry consequences;
-- fabricate user activity for demo polish.
+### X1 — Customer mental model
 
-The customer layer is a projection of durable truth, not a replacement for it.
+Define the consumer, judge, and enterprise mental models.
 
-## 17. Freeze rule
+Prove which information belongs in Customer, Explanation, and Proof layers.
 
-This document is the authoritative pre-M6 customer-experience architecture.
+### X2 — Information architecture
 
-Further changes require explicit owner authorization and a documented reason. Visual exploration is allowed inside X7; architectural drift outside the X1–X9 sequence is not.
+Define real destinations, route structure, navigation hierarchy, state-aware Home behavior, and contextual Agent access.
 
-Current execution sequence:
+The single-page anchor architecture is not accepted as the final target.
 
-**M5 CLOSED → X1 → X2 → X3 → X4 → X5 → X6 → X7 → X8 → X9 LOCK → M6 → M7 → M8 → M9 → M10**
+### X3 — Disclosure model
 
-Until X9 is accepted, **M6 remains NOT STARTED**.
+Specify how Outcome, Explanation, and Proof work for Authority, Activity, ambiguous provider outcomes, denied actions, and verified operations.
+
+### X4 — Language system
+
+Lock customer terminology, status language, error language, time formatting, financial-outcome phrases, and demo disclosure.
+
+Backend terminology remains available in Proof.
+
+### X5 — Core-flow wireframes
+
+Produce and review wireframes for:
+
+- Home;
+- New Authority / Ask PayFlow;
+- interpretation and boundary review;
+- Authority confirmation;
+- Authorities list/detail;
+- Activity list/detail;
+- Agent context;
+- Proof view;
+- revoke flow;
+- ambiguous-outcome flow;
+- mobile variants.
+
+### X6 — Future-state wireframes
+
+Prove that the architecture can accommodate at least:
+
+- M6 delegated valid purchase;
+- M6 blocked price drift;
+- M7 external-agent context;
+- M8 verification context;
+- M9 Break PayFlow attack/proof flow.
+
+This gate prevents solving only the current M5 screen structure.
+
+### X7 — Visual territory exploration
+
+Apply at least three genuinely distinct visual systems to the same accepted wireframes.
+
+Each territory should define:
+
+- color logic;
+- type logic;
+- Frame/Gate treatment;
+- Authority object;
+- motion concept;
+- icon/illustration direction;
+- product and marketing examples.
+
+Do not select a territory because it is merely the prettiest.
+
+### X8 — Recognition and comprehension tests
+
+Test both:
+
+1. **Recognition** — with the PayFlow name hidden, does the system still look distinct from neighboring fintech and AI brands?
+2. **Comprehension** — within roughly five seconds, can a first-time viewer identify what the agent may do, how much it may spend, and whether money moved?
+
+Also verify accessibility, mobile behavior, and reduced-motion equivalents.
+
+### X9 — Experience and brand freeze
+
+Create the final PayFlow Experience + Brand specification.
+
+X9 should lock:
+
+- information architecture;
+- customer language;
+- disclosure rules;
+- chosen visual territory;
+- color tokens;
+- typography;
+- logo/mark rules;
+- Frame/Gate/Flow/Trace rules;
+- Authority object;
+- motion;
+- iconography;
+- illustration/photography rules;
+- layout/grid;
+- accessibility requirements;
+- mobile rules;
+- marketing-product consistency;
+- Proof mode;
+- implementation tokens/components.
+
+Only after X9 passes may M6 implementation begin.
+
+## 22. Experience non-regression rules
+
+From X9 onward, every customer-facing milestone must preserve the following unless an explicitly authorized experience amendment proves the change is necessary:
+
+1. Customer mental model before backend topology.
+2. Outcome before technical proof.
+3. Financial truth before visual celebration.
+4. Real destinations rather than one-page feature accumulation.
+5. Three disclosure layers: Outcome, Explanation, Proof.
+6. Home as an attention system, not an everything system.
+7. Authority as a bounded permission object, not a wallet/card metaphor.
+8. Activity as a financial journal, not a raw log viewer.
+9. Customer language before state-machine language.
+10. Demo transparency without disclaimer overload.
+11. Mobile as a first-class experience.
+12. Accessible contrast, focus, touch targets, and reduced-motion equivalents.
+13. No customer-facing control may silently widen, create, or reinterpret financial Authority.
+14. No visual state may contradict durable financial truth.
+15. Proof may reveal complexity; primary customer surfaces should not require it.
+
+## 23. Locked execution order
+
+The authoritative execution sequence is:
+
+`M1-M5 CLOSED -> X1 -> X2 -> X3 -> X4 -> X5 -> X6 -> X7 -> X8 -> X9 LOCK -> M6 -> M7 -> M8 -> M9 -> M10`
+
+M6 remains **NOT STARTED** until X9 is complete and explicitly accepted.
+
+EXPERIENCE-001 is a companion product/experience lock to ADR-016. It does not reopen the frozen financial architecture, change any accepted M1-M5 financial semantics, or authorize implementation by itself.
