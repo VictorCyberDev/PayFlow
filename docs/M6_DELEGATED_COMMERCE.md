@@ -27,48 +27,48 @@ No migration was added (`011` is not needed): the existing schema already carrie
 
 ## What M6 added
 
-| File | Purpose |
-| --- | --- |
-| `src/delegated-commerce.ts` | `DelegatedCommerceService` — composes the existing services; issues a grant **only** after kernel `ALLOW`; never asks a human, never retries a provider call; returns a bounded outcome (`COMPLETED`, `DENIED`, `NEEDS_HUMAN`, `REFUSED`, `UNRESOLVED`) with `providerEffect`. |
-| `src/paypal.ts` (additive) | Optional pre-approved instrument (`payment_source.paypal.vault_id`) so an order is born approved and needs no payer action at execution time. Sandbox-only (`paypalDelegatedProviderFromEnv`). |
-| `src/activity-projection.ts`, `src/activity-postgres.ts` (additive) | `delegated` flag (true only for a completed purchase with no human resume evidence) and proven zero-effect **quote refusals** (e.g. $184 trusted vs $100 maximum) in Activity, keyed by selection id. |
-| `src/delegated-demo.ts`, `src/console-demo-agent.ts` | Non-production demonstration Shopping Agent and its owner-bound HTTP surface (`/api/demo-agent/*`). The browser names only a scenario and an Authority; the server decides everything else. |
-| `src/console-hosted.ts` | Optional hosted wiring (`PAYFLOW_M6_DEMO_AGENT=true`); fails closed without a persistent Ed25519 signing key. |
-| `hosting/operator/m6-sandbox-acceptance.ts` | Operator-only live Sandbox acceptance (fresh $84 delegated capture). |
-| `apps/console` | Authority detail "Demo · Try your Agent", `Done without asking you` copy, `$0 moved` for refusals, system-driven reconciliation. Uses BRAND-001 unchanged. |
+| File                                                                | Purpose                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/delegated-commerce.ts`                                         | `DelegatedCommerceService` — composes the existing services; issues a grant **only** after kernel `ALLOW`; never asks a human, never retries a provider call; returns a bounded outcome (`COMPLETED`, `DENIED`, `NEEDS_HUMAN`, `REFUSED`, `UNRESOLVED`) with `providerEffect`. |
+| `src/paypal.ts` (additive)                                          | Optional pre-approved instrument (`payment_source.paypal.vault_id`) so an order is born approved and needs no payer action at execution time. Sandbox-only (`paypalDelegatedProviderFromEnv`).                                                                                 |
+| `src/activity-projection.ts`, `src/activity-postgres.ts` (additive) | `delegated` flag (true only for a completed purchase with no human resume evidence) and proven zero-effect **quote refusals** (e.g. $184 trusted vs $100 maximum) in Activity, keyed by selection id.                                                                          |
+| `src/delegated-demo.ts`, `src/console-demo-agent.ts`                | Non-production demonstration Shopping Agent and its owner-bound HTTP surface (`/api/demo-agent/*`). The browser names only a scenario and an Authority; the server decides everything else.                                                                                    |
+| `src/console-hosted.ts`                                             | Optional hosted wiring (`PAYFLOW_M6_DEMO_AGENT=true`); fails closed without a persistent Ed25519 signing key.                                                                                                                                                                  |
+| `hosting/operator/m6-sandbox-acceptance.ts`                         | Operator-only live Sandbox acceptance (fresh $84 delegated capture).                                                                                                                                                                                                           |
+| `apps/console`                                                      | Authority detail "Demo · Try your Agent", `Done without asking you` copy, `$0 moved` for refusals, system-driven reconciliation. Uses BRAND-001 unchanged.                                                                                                                     |
 
 Small supporting changes: `merchantDisplay()` so Authorities say "PayFlow Demo Merchant — Sandbox"; the recorded demo intent now names the controlled demo merchant `payflow.demo.merchant` so a UI-created Authority works with the demo catalog.
 
 ## Scenarios and customer outcomes
 
-| Scenario | Result | Customer sees | Provider money-moving calls |
-| --- | --- | --- | --- |
-| $84 new keyboard, approved merchant, active Authority | `COMPLETED` | **$84 paid once** · "Your Agent did this without asking you, within your Authority." | 1 order, 1 capture |
-| $184 trusted price vs $100 maximum (price drift) | `REFUSED` (before any proposal) | **$0 moved** · "The price exceeded the maximum amount permitted by this authority." | 0 |
-| Above the autonomous threshold | `NEEDS_HUMAN` | needs approval | 0 |
-| Used / refurbished, wrong merchant, wrong product, quantity 2, wrong currency, capability outside Authority, stale fingerprint | kernel `DENY` | **$0 moved** + reason | 0 |
-| Revoked / expired Authority, suspended Agent | `REFUSED` / `DENIED` | **$0 moved** | 0 |
-| Revoked / expired / suspended **after** the grant, before dispatch | `REFUSED` by revalidation | **$0 moved** | 0 |
-| Lost capture response | `UNRESOLVED` | **Checking what happened — don't retry yet** | 1 (never retried) |
-| Later reconciliation | `COMPLETED` | **$84 paid once** | still 1 |
+| Scenario                                                                                                                       | Result                          | Customer sees                                                                        | Provider money-moving calls |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------ | --------------------------- |
+| $84 new keyboard, approved merchant, active Authority                                                                          | `COMPLETED`                     | **$84 paid once** · "Your Agent did this without asking you, within your Authority." | 1 order, 1 capture          |
+| $184 trusted price vs $100 maximum (price drift)                                                                               | `REFUSED` (before any proposal) | **$0 moved** · "The price exceeded the maximum amount permitted by this authority."  | 0                           |
+| Above the autonomous threshold                                                                                                 | `NEEDS_HUMAN`                   | needs approval                                                                       | 0                           |
+| Used / refurbished, wrong merchant, wrong product, quantity 2, wrong currency, capability outside Authority, stale fingerprint | kernel `DENY`                   | **$0 moved** + reason                                                                | 0                           |
+| Revoked / expired Authority, suspended Agent                                                                                   | `REFUSED` / `DENIED`            | **$0 moved**                                                                         | 0                           |
+| Revoked / expired / suspended **after** the grant, before dispatch                                                             | `REFUSED` by revalidation       | **$0 moved**                                                                         | 0                           |
+| Lost capture response                                                                                                          | `UNRESOLVED`                    | **Checking what happened — don't retry yet**                                         | 1 (never retried)           |
+| Later reconciliation                                                                                                           | `COMPLETED`                     | **$84 paid once**                                                                    | still 1                     |
 
 > Revocation prevents new effects. It does not falsify history: a provider effect that already happened is reconciled truthfully.
 
 ## Test matrix
 
-| Concern | Where |
-| --- | --- |
-| Valid delegated purchase; durable reservation `COMMITTED`; grant `CONSUMED`; attempt `CAPTURED`; Trace `VERIFIED`; remaining $16 | `tests/m6-delegated.integration.test.ts` |
-| Denied paths each assert zero reservation/grant/attempt and zero create/capture calls | same |
-| Race: revoke / suspend / expire between grant and dispatch (mutation-checked: without the hook the tests fail; removing `assertMandateActive` makes the revoke test fail) | same |
-| Replay: grant replay, expired/tampered/re-scoped grants, second identical request, terminal retry, duplicate reconcile | same |
-| Concurrency: 4 competing attempts on a one-keyboard/$100 Authority → exactly one capture; budget-limited two-purchase race | same |
-| Provider ambiguity: lost capture / lost create → quarantine → reconcile → one capture; not-pre-approved instrument never completes and never prompts a human | same |
-| Activity: delegated flag, human-resumed purchase is **not** delegated, $0-moved refusals, ordering, owner isolation | `tests/m6-activity.integration.test.ts` |
-| Demo agent HTTP surface: owner binding, strict bodies, no secrets in responses, reconcile, no rail connected | `tests/m6-demo-agent.integration.test.ts` |
-| Hosted composition: route absent without opt-in, fail-closed key handling, cross-instance Trace verification | `tests/hosting-m6.integration.test.ts` |
-| Provider request shape and Sandbox-only guards | `tests/paypal-delegated.test.ts` |
-| Browser: hero journey, revoked Authority, ambiguous outcome → system reconciliation, mobile 375 px | `apps/console/e2e/journey.e2e.mjs` (M6 tests) |
+| Concern                                                                                                                                                                   | Where                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Valid delegated purchase; durable reservation `COMMITTED`; grant `CONSUMED`; attempt `CAPTURED`; Trace `VERIFIED`; remaining $16                                          | `tests/m6-delegated.integration.test.ts`      |
+| Denied paths each assert zero reservation/grant/attempt and zero create/capture calls                                                                                     | same                                          |
+| Race: revoke / suspend / expire between grant and dispatch (mutation-checked: without the hook the tests fail; removing `assertMandateActive` makes the revoke test fail) | same                                          |
+| Replay: grant replay, expired/tampered/re-scoped grants, second identical request, terminal retry, duplicate reconcile                                                    | same                                          |
+| Concurrency: 4 competing attempts on a one-keyboard/$100 Authority → exactly one capture; budget-limited two-purchase race                                                | same                                          |
+| Provider ambiguity: lost capture / lost create → quarantine → reconcile → one capture; not-pre-approved instrument never completes and never prompts a human              | same                                          |
+| Activity: delegated flag, human-resumed purchase is **not** delegated, $0-moved refusals, ordering, owner isolation                                                       | `tests/m6-activity.integration.test.ts`       |
+| Demo agent HTTP surface: owner binding, strict bodies, no secrets in responses, reconcile, no rail connected                                                              | `tests/m6-demo-agent.integration.test.ts`     |
+| Hosted composition: route absent without opt-in, fail-closed key handling, cross-instance Trace verification                                                              | `tests/hosting-m6.integration.test.ts`        |
+| Provider request shape and Sandbox-only guards                                                                                                                            | `tests/paypal-delegated.test.ts`              |
+| Browser: hero journey, revoked Authority, ambiguous outcome → system reconciliation, mobile 375 px                                                                        | `apps/console/e2e/journey.e2e.mjs` (M6 tests) |
 
 ## Live PayPal Sandbox acceptance
 
