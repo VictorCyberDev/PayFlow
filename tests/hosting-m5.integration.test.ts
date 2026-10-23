@@ -140,7 +140,7 @@ const provision = (databaseUrl: string) =>
       });
       const load = async () => {
         vi.resetModules();
-        return (await import("../hosting/m5/api/[...path].js")).default;
+        return (await import("../hosting/m5/api/host.js")).default;
       };
       const listen = async (
         handler: (req: never, res: never) => Promise<void>,

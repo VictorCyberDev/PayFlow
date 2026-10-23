@@ -4,8 +4,14 @@
   "installCommand": "npm ci --prefix ../.. && npm ci --prefix ../../apps/console",
   "buildCommand": "npm run build --prefix ../../apps/console && rm -rf public && cp -R ../../apps/console/out public",
   "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/host"
+    }
+  ],
   "functions": {
-    "api/[...path].ts": {
+    "api/host.ts": {
       "maxDuration": 15
     }
   },
