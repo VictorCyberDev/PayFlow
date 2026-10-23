@@ -13,6 +13,7 @@ import { readdir, readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PostgresTrustRepository } from "../src/persistence.js";
+import { PostgresAuthorityViewReader } from "../src/authority-postgres.js";
 import { ConsoleSessions } from "../src/console-session.js";
 import {
   ConsoleActivation,
@@ -441,5 +442,39 @@ run(
       expect((await confirm(first)).status).toBe(200);
       expect(await count()).toBe(1);
     });
+    it("fresh SQL projection cannot read another principal's mandate", async () => {
+      const p = await prepare();
+      const result = (await (await confirm(p)).json()) as { mandateId: string };
+      const reader = new PostgresAuthorityViewReader(repo, clock);
+      expect(await reader.readOwned("other", result.mandateId)).toBeNull();
+      expect(await reader.readOwned("p", "unknown-mandate")).toBeNull();
+      const owned = (await reader.readOwned("p", result.mandateId)) as {
+        state: string;
+      };
+      expect(owned.state).toBe("ACTIVE");
+    });
+    it.each(["principal", "passport", "expiry"])(
+      "fresh SQL projection reflects current %s state",
+      async (kind) => {
+        const p = await prepare();
+        const result = (await (await confirm(p)).json()) as {
+          mandateId: string;
+        };
+        if (kind === "principal")
+          await repo.sql`update principals set status='DISABLED' where id='p'`;
+        if (kind === "passport")
+          await repo.sql`update agent_passports set status='SUSPENDED' where id='a'`;
+        if (kind === "expiry") time = new Date("2026-11-02T00:00:00.000Z");
+        const view = (await new PostgresAuthorityViewReader(
+          repo,
+          clock,
+        ).readOwned("p", result.mandateId)) as {
+          state: string;
+          freshDispatchBlocked: boolean;
+        };
+        expect(view.state).toBe(kind === "expiry" ? "EXPIRED" : "UNAVAILABLE");
+        expect(view.freshDispatchBlocked).toBe(true);
+      },
+    );
   },
 );
