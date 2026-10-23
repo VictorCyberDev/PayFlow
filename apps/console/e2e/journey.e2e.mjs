@@ -153,6 +153,8 @@ test("signed out: welcome, one environment badge, protected destinations ask for
     /fixture|non-production|recorded/i,
   );
   await nav(page, "Authorities");
+  await page.waitForURL("**/authorities/");
+  await page.locator(".how").waitFor({ state: "detached" }); // the welcome copy is gone
   await page.getByRole("heading", { name: "Demo access" }).waitFor();
   assert.equal(
     await page.getByText(/\$\d/).count(),
@@ -160,6 +162,7 @@ test("signed out: welcome, one environment badge, protected destinations ask for
     "no money shown while signed out",
   );
   await nav(page, "Activity");
+  await page.waitForURL("**/activity/");
   await page.getByRole("heading", { name: "Demo access" }).waitFor();
   await page.getByRole("link", { name: "About this demo" }).first().click();
   await page
