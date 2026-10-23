@@ -24,13 +24,17 @@ export default function ActivationPanel({
       const u = new URL(window.location.href);
       u.searchParams.set("authority", id);
       window.history.replaceState(null, "", u);
+      window.dispatchEvent(new Event("payflow-authority-changed"));
     });
     controller.current = c;
     void c.restore(new URL(window.location.href).searchParams.get("authority"));
     let ticks = 0;
     const timer = setInterval(() => {
       c.expire();
-      if (++ticks % 15 === 0 && c.getState().status === "ACTIVE") {
+      if (
+        ++ticks % 15 === 0 &&
+        ["ACTIVE", "AUTHORITY"].includes(c.getState().status)
+      ) {
         void c.restore(c.getState().authority?.mandateId);
       }
     }, 1000);
@@ -108,7 +112,7 @@ export default function ActivationPanel({
           Confirm authority
         </button>
       )}
-      {state.status === "ACTIVE" && state.authority && (
+      {["ACTIVE", "AUTHORITY"].includes(state.status) && state.authority && (
         <button
           type="button"
           onClick={() =>
@@ -173,14 +177,22 @@ export function ActivationSurface({ state }: { state: ActivationState }) {
           </p>
           <p>
             This creates spending authority for your agent. It does not make a
-            purchase. Revocation controls are not connected in this preview.
+            purchase. You can revoke saved authority in the authority section.
           </p>
           <p>Confirm before {new Date(p.expiresAt).toUTCString()}.</p>
         </>
       )}
-      {a && state.status === "ACTIVE" && (
+      {a && ["ACTIVE", "AUTHORITY"].includes(state.status) && (
         <article className="authority-card">
-          <h3>Authority active</h3>
+          <h3>
+            {a.state === "ACTIVE"
+              ? "Authority active"
+              : a.state === "REVOKED"
+                ? "Authority revoked"
+                : a.state === "EXPIRED"
+                  ? "Authority expired"
+                  : "Authority temporarily unavailable"}
+          </h3>
           <p>{a.agent.displayName}</p>
           <h3>{a.purpose}</h3>
           <p>Up to {money(a.singleMaximumMinor, a.currency)}</p>

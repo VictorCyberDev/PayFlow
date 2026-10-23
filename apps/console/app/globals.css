@@ -703,3 +703,65 @@ button:disabled {
     gap: 6px;
   }
 }
+
+/* M5D: wallet controls and a narrow-screen transaction journal. */
+.managed-card {
+  margin-block: 1.25rem;
+}
+.wallet-remaining {
+  font-size: 1.5rem;
+  font-weight: 650;
+}
+.revoke-button {
+  margin-top: 1rem;
+  background: #fff;
+  color: #7a2929;
+  border: 1px solid #bc8a8a;
+}
+.revoke-sheet {
+  border-color: #bc8a8a;
+  max-width: 36rem;
+  margin-block: 1.5rem;
+}
+.revoke-sheet button {
+  margin: 0.5rem 0.5rem 0.5rem 0;
+}
+.durable-activity {
+  align-items: start;
+}
+.durable-activity .activity-copy {
+  min-width: 0;
+  width: 100%;
+}
+.durable-activity details {
+  overflow-wrap: anywhere;
+}
+.durable-activity time {
+  font-size: 0.8rem;
+  color: #52605c;
+}
+.management-surface dl {
+  display: grid;
+  gap: 0.7rem;
+}
+.management-surface dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+}
+.management-surface dd {
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .management-surface .section-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+  .managed-card .authority-card-topline {
+    flex-direction: column;
+    gap: 1rem;
+  }
+}

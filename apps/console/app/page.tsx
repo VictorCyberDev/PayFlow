@@ -1,23 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import ManagementPanel from "./management-panel";
 import AskPayFlow from "./ask-payflow";
 import { demoAuthority } from "../fixtures/authority";
 
 const nav = ["Home", "Ask PayFlow", "Authority", "Activity", "Agents"];
-
-const recent = [
-  {
-    title: "Paid $84.00",
-    detail: "$84.00 · Demo Merchant",
-    outcome: "Payment verified",
-  },
-  {
-    title: "Purchase blocked",
-    detail: "$184.00 · Above your $100 limit",
-    outcome: "Your money didn't move",
-  },
-];
 
 export default function HomePage() {
   const [active, setActive] = useState("Home");
@@ -42,7 +30,7 @@ export default function HomePage() {
                 [
                   "#home",
                   "#ask",
-                  "#confirmed-authority",
+                  "#managed-authorities",
                   "#activity",
                   "#agents",
                 ][index]
@@ -58,7 +46,7 @@ export default function HomePage() {
           <span className="status-dot" aria-hidden="true" />
           <div>
             <strong>Interactive preview</strong>
-            <span>Authority and Activity examples use fixtures.</span>
+            <span>Saved authority and activity require a demo session.</span>
           </div>
         </div>
       </aside>
@@ -73,9 +61,9 @@ export default function HomePage() {
 
         <div className="content">
           <p className="preview-banner" role="note">
-            Preview only. The Authority and Activity examples are fixtures. The
-            separate demo confirmation can create a real durable PayFlow
-            mandate; it never executes a payment.
+            Non-production workspace. The labelled example authority is a
+            fixture. The separate demo confirmation can create a real durable
+            PayFlow mandate; it never executes a payment.
           </p>
           <section className="hero" aria-labelledby="welcome-title">
             <p className="eyebrow">Your AI. Your authority.</p>
@@ -183,65 +171,7 @@ export default function HomePage() {
             </details>
           </section>
 
-          <section
-            id="activity"
-            className="section-block"
-            aria-labelledby="activity-title"
-          >
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Recent activity</p>
-                <h2 id="activity-title">
-                  What your agent tried and what happened
-                </h2>
-              </div>
-              <span className="text-button">Example outcomes</span>
-            </div>
-
-            <div className="activity-list">
-              {recent.map((item, index) => (
-                <article className="activity-row" key={item.title}>
-                  <div
-                    className={
-                      index === 0
-                        ? "activity-icon verified"
-                        : "activity-icon blocked"
-                    }
-                    aria-hidden="true"
-                  >
-                    {index === 0 ? "✓" : "—"}
-                  </div>
-                  <div className="activity-copy">
-                    <strong>{item.title}</strong>
-                    <span>{item.detail}</span>
-                  </div>
-                  <div className="activity-outcome">
-                    <strong>{item.outcome}</strong>
-                    <details>
-                      <summary>Why?</summary>
-                      <p>
-                        {index === 0
-                          ? "Example: trusted price fits the $100 limit."
-                          : "Example: trusted price of $184 exceeded your $100 limit. Your money didn’t move."}
-                      </p>
-                      <details>
-                        <summary>View verification details</summary>
-                        <p>
-                          {index === 0
-                            ? "Illustrative payment only, not a verified live transaction."
-                            : "Illustrative blocked request. PayPal calls: 0 in this example."}
-                        </p>
-                        <details>
-                          <summary>Technical references</summary>
-                          <p>Fixture only · no operation trace.</p>
-                        </details>
-                      </details>
-                    </details>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
+          <ManagementPanel />
 
           <section id="agents" className="section-block">
             <h2>Agents</h2>
@@ -249,8 +179,8 @@ export default function HomePage() {
             <p>No live agent is connected to this preview.</p>
           </section>
           <p className="fixture-note">
-            M5A preview uses deterministic fixtures only. No authority or
-            payment action is performed from this screen.
+            Example cards are illustrative. Saved authorities and activity use
+            durable server state. No payment is executed from this screen.
           </p>
         </div>
       </section>

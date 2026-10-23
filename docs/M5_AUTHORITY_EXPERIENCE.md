@@ -331,3 +331,41 @@ Session state and challenge cache are process-local and lost on restart. Restart
 M5C tests cover the actual local HTTP/session path into the existing durable activation transaction, one mandate under concurrency/replay, owner/agent/epoch/passport/principal/challenge/hash/fingerprint failures, cookie/CSRF/origin/expiry/logout failures, and read-only refresh with zero payment/reservation/grant/proposal rows. Existing M1–M4 tests are unchanged. Console tests cover the exact sheet, client races/expiry/reload and the requirement for a successful fresh read before ACTIVE. Session tests cover forged/cloned proofs, action/audience binding, HttpOnly/Secure attributes and private-token exclusion. Normal CI constructs no live provider.
 
 M5C stops for independent GUIDE review. PR #12 must stay DRAFT / OPEN / UNMERGED. Do not start M5D or M6.
+
+## M5D — authority controls and durable Activity
+
+M5A/B/C are CLOSED / PASS for progression. The preceding phase-stop notes are preserved historical evidence; this section is the authorized M5D continuation. Accepted M5C head: `831d21e1f928faae4b8db6247d80c69329d7fbd8`. M5D reuses its fixed-owner non-production sessions, private bootstrap, opaque cookie, CSRF/origin/audience/expiry protections and exact activation path unchanged.
+
+### Control and read boundaries
+
+`ConsoleControls` exposes a bounded latest-20 owner-scoped Authority list through the accepted `AuthorityViewService` and `PostgresAuthorityViewReader`. Each item comes from a fresh durable read and accepted accounting. A malformed/unavailable item fails the list closed. The list is not a new authorization policy. Active display still means fresh-dispatch permission is not established (null); every future execution must use the existing kernel/revalidation path.
+
+The only new control is explicit `REVOKE_AUTHORITY`. The host verifies the existing session, exact same origin, CSRF, strict action/mandate selector and durable principal ownership/integrity before calling the existing `PostgresTrustRepository.revokeMandate`. That accepted transaction alone updates revoked_at and appends the existing MANDATE_REVOKED event. Repeated/concurrent requests read the durable winner and do not append another event. No existing receipt, evidence entry, reservation, grant, provider observation or payment is rewritten. No refund or cancellation is claimed. No mandate suspension semantics exist; no pause mutation is introduced. An already-suspended agent passport can be displayed as Paused using accepted durable facts.
+
+The API returns a bounded acknowledgement, not a revoked projection. The controller enters REVOKING then VERIFYING, performs separate fresh GETs and displays Revoked only when the saved Authority says REVOKED. Failure retains the prior snapshot with a safe warning; manual/periodic reads correct it. Reload restores no browser-owned state. Current-state reads, not cache/query-string claims, control display. The confirmation sheet explicitly says completed payments are not reversed.
+
+### Activity and verification
+
+`ConsoleActivity` reads the latest 20 proposal-backed operations, or one exact operation selector, using server-side mandate/principal ownership before invoking the existing `OperationTraceService`. It checks trace principal/mandate/agent/proposal references against the selected owner-bound record before disclosure. The accepted service remains the sole operation verifier. Durable validated DecisionReceipts supply the decision and bounded reason-code explanations; browser history supplies nothing.
+
+`ActivityItemSchema` is a strict bounded presentation projection, not a second verifier. It retains the exact trace status and bounded stages. Verified CAPTURED can show money moved YES; accepted verified no-effect finalization or explicit denied-before-execution evidence can show NO. Ambiguous/in-flight outcomes remain UNKNOWN. INVALID, INCOMPLETE and LEGACY are not upgraded to completed/verified payment. Untrusted provider bodies, payer details, raw signatures, authentication assertions, session cookies, challenges, resume secrets and credentials are absent. Technical order/capture/attempt references are available only in progressive disclosure. No request path constructs or calls a provider.
+
+New same-origin routes in the opt-in demo host:
+
+- GET `/api/activation/authorities` — no browser parameters;
+- GET `/api/activation/activity` — optional sole `operationId` selector;
+- POST `/api/activation/revoke` — exact action and mandate ID, authenticated/CSRF protected.
+
+Reads set no-store, append no evidence and perform no financial mutation. The host has no payment rail. Tests use existing deterministic financial fixtures solely to establish legitimate historical states in an isolated PostgreSQL test database; they do not add an execution API or make live provider calls.
+
+### Product and limits
+
+The console supplements the labelled example Authority with durable management cards and replaces fixture Activity with the durable journal. It shows limits/accounting/quantity/scope/capabilities/thresholds/timestamps, readable status, current dispatch block facts, an explicit revoke sheet and progressive operation details. Lists refresh manually, on focus and every 15 seconds; bounded request timeouts and stale-request epochs prevent late results from replacing newer state. Local expiry hides stale active display pending a fresh server read. Related Authority links use durable IDs as selectors and reauthenticate on read.
+
+This remains a fixed-owner, single-process, loopback-only NON-PRODUCTION DEMO, not production authentication. No new infrastructure or migrations; migrations 001–009 and accepted financial/domain/activation/verification code are unchanged. Historical verification needs retained public signing keys: tests inject the trusted public-key ring; the local CLI supplies an empty ring and therefore honestly returns INCOMPLETE when the accepted verifier needs an unavailable key. It never fabricates verification. The bounded list covers proposal-backed operations; pre-proposal selection/quote refusals and deep paginated Studio/history are not added. Lists are latest 20, not a claim to show every Authority/operation. Activity records outside the Authority list remain accessible through the exact owner-bound Authority read.
+
+### Validation and stop gate
+
+New tests cover actual HTTP revoke/read routes, owner and selector isolation, CSRF/origin/session/expiry failures, concurrent idempotency, fresh stale-state correction, accepted authorization rejection after revoke, unchanged completed payment truth, no read evidence/mutation/provider effects, accurate ALLOW/DENY/ESCALATE/unknown/no-effect/completion projections, exact trace verdict preservation, sensitive-field exclusion, controller races/failures/reload/expiry and rendered confirmation/disclosure states. Existing M1–M4 tests remain required. Normal CI live PayPal/Groq/external-auth calls are zero.
+
+Hosted console: NOT DEPLOYED. M5E owns hosted end-to-end acceptance and is NOT STARTED. M6 is NOT STARTED. M5D implementation candidate must stop for independent GUIDE review. Keep PR #12 DRAFT / OPEN / UNMERGED; do not mark ready or merge.

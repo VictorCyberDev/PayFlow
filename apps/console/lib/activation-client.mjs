@@ -50,7 +50,7 @@ export function createActivationController(
     csrf = s.csrfToken;
     sessionExpires = Date.parse(s.expiresAt);
   };
-  const read = async (id) => {
+  const read = async (id, activeOnly = true) => {
     const a = await transport(
       "/api/activation/authority?mandateId=" + encodeURIComponent(id),
     );
@@ -58,13 +58,15 @@ export function createActivationController(
       !a ||
       a.version !== "payflow.authority-view.v1" ||
       a.mandateId !== id ||
-      a.state !== "ACTIVE" ||
+      (activeOnly
+        ? a.state !== "ACTIVE"
+        : !["ACTIVE", "REVOKED", "EXPIRED", "UNAVAILABLE"].includes(a.state)) ||
       !a.agent ||
-      a.agent.status !== "ACTIVE" ||
+      (a.state === "ACTIVE" && a.agent.status !== "ACTIVE") ||
       !Number.isSafeInteger(a.singleMaximumMinor) ||
       !Number.isSafeInteger(a.remainingMinor) ||
       !Number.isFinite(Date.parse(a.expiresAt)) ||
-      Date.parse(a.expiresAt) <= clock()
+      (a.state === "ACTIVE" && Date.parse(a.expiresAt) <= clock())
     )
       throw new Error("invalid");
     return a;
@@ -89,9 +91,17 @@ export function createActivationController(
       const n = ++epoch;
       try {
         await session();
-        const a = id ? await read(id) : null;
+        const a = id ? await read(id, false) : null;
         if (n === epoch)
-          emit({ status: a ? "ACTIVE" : "IDLE", pending: null, authority: a });
+          emit({
+            status: a
+              ? a.state === "ACTIVE"
+                ? "ACTIVE"
+                : "AUTHORITY"
+              : "IDLE",
+            pending: null,
+            authority: a,
+          });
       } catch {
         if (n === epoch) {
           csrf = null;

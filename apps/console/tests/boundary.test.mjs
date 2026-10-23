@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 const root = new URL("../", import.meta.url);
 const page =
   readFileSync(new URL("app/page.tsx", root), "utf8") +
-  readFileSync(new URL("app/ask-payflow.tsx", root), "utf8");
+  readFileSync(new URL("app/ask-payflow.tsx", root), "utf8") +
+  readFileSync(new URL("app/management-panel.tsx", root), "utf8");
 function files(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory() ? files(join(dir, e.name)) : [join(dir, e.name)],
@@ -29,7 +30,7 @@ test("fixtures are explicitly separate from authoritative types", () => {
   const fixture = readFileSync(new URL("fixtures/authority.ts", root), "utf8");
   assert.match(fixture, /NON_AUTHORITATIVE_FIXTURE/);
   assert.doesNotMatch(fixture, /import|AuthorityProjection\s*[=<>:]/);
-  assert.match(page, /Preview only/);
+  assert.match(page, /Non-production workspace/);
   assert.match(page, /Not yet authorized/);
   assert.match(page, /Non-production review demo/);
   assert.match(page, /recorded model fixtures/);

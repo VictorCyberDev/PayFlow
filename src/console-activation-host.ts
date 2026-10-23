@@ -7,6 +7,9 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { ConsoleSessions, type ConsoleRequest } from "./console-session.js";
+import { ConsoleControls } from "./console-controls.js";
+import { ConsoleActivity } from "./activity-postgres.js";
+import { StaticPublicKeyRing } from "./execution-grant.js";
 import { ConsoleActivation } from "./console-activation.js";
 import { createReviewDemoHost } from "./intent-review-demo-host.js";
 import { IntentReviewService } from "./intent-review.js";
@@ -28,6 +31,8 @@ export function activationHttpHandler(
     sample: string;
     review: IntentReviewService;
     outputDirectory: string;
+    controls?: ConsoleControls;
+    activity?: ConsoleActivity;
   },
 ) {
   const staticHost = createReviewDemoHost(options.outputDirectory);
@@ -64,6 +69,28 @@ export function activationHttpHandler(
       if (req.method === "GET") {
         if (url.pathname === "/api/activation/session")
           return json(res, 200, app.sessions.view(app.sessions.read(meta)));
+        if (
+          url.pathname === "/api/activation/authorities" &&
+          options.controls
+        ) {
+          if (url.search) return json(res, 400, { status: "UNAVAILABLE" });
+          return json(res, 200, await options.controls.list(meta, {}));
+        }
+        if (url.pathname === "/api/activation/activity" && options.activity) {
+          const keys = [...url.searchParams.keys()];
+          if (keys.length > 1 || keys.some((k) => k !== "operationId"))
+            return json(res, 400, { status: "UNAVAILABLE" });
+          return json(
+            res,
+            200,
+            await options.activity.read(
+              meta,
+              keys.length
+                ? { operationId: url.searchParams.get("operationId") }
+                : {},
+            ),
+          );
+        }
         if (url.pathname === "/api/activation/authority") {
           const keys = [...url.searchParams.keys()];
           if (keys.length !== 1 || keys[0] !== "mandateId")
@@ -115,6 +142,8 @@ export function activationHttpHandler(
           app.sessions.logout(meta),
         );
       }
+      if (url.pathname === "/api/activation/revoke" && options.controls)
+        return json(res, 200, await options.controls.revoke(meta, body));
       if (url.pathname === "/api/activation/reviews")
         return json(res, 200, await app.prepare(meta, body));
       if (url.pathname === "/api/activation/confirm") {
@@ -181,6 +210,12 @@ if (
   });
   const handler = activationHttpHandler(app, {
     sample,
+    controls: new ConsoleControls(repo, sessions),
+    activity: new ConsoleActivity(
+      repo,
+      sessions,
+      new StaticPublicKeyRing(new Map()),
+    ),
     review: new IntentReviewService(provider, demoReviewBounds),
     outputDirectory: resolve("apps/console/out"),
   });
