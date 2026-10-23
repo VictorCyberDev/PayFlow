@@ -16,7 +16,7 @@
     "test:paypal:sandbox": "vitest run tests/paypal.sandbox.test.ts",
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "prettier --write docs/ADR-016-post-m4-product-roadmap.md && git diff -- docs/ADR-016-post-m4-product-roadmap.md; exit 1",
     "test:groq:smoke": "vitest run tests/groq.smoke.test.ts",
     "test:paypal:commerce:sandbox": "vitest run tests/paypal-commerce.sandbox.test.ts"
   },
