@@ -207,6 +207,11 @@ const provision = (databaseUrl: string) =>
         });
         expect(list.status).toBe(200);
         expect(((await list.json()) as { items: unknown[] }).items).toEqual([]);
+        // Vercel's trailingSlash redirect delivers /api/* with a slash; the adapter restores the path.
+        const slashed = await fetch(origin + "/api/activation/authorities/", {
+          headers: { cookie },
+        });
+        expect(slashed.status).toBe(200);
         const sample = (await (
           await fetch(origin + "/api/intent-review/sample", {
             headers: { cookie },

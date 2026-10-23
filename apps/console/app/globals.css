@@ -754,12 +754,12 @@ textarea {
   height: 0;
   border-top: 3px solid var(--signal);
 }
-.trace__step--stopped::before,
-.trace__step--unconfirmed::before,
-.trace__step--waiting::before {
+.trace__step.trace__step--stopped::before,
+.trace__step.trace__step--unconfirmed::before,
+.trace__step.trace__step--waiting::before {
   border-top: 3px dashed var(--ink);
 }
-.trace__step--none::before {
+.trace__step.trace__step--none::before {
   display: none;
 }
 .trace__step--none .trace__node {

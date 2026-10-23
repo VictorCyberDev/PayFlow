@@ -1,0 +1,59 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "trailingSlash": true,
+  "installCommand": "npm ci --prefix ../.. && npm ci --prefix ../../apps/console",
+  "buildCommand": "npm run build --prefix ../../apps/console && rm -rf public && cp -R ../../apps/console/out public",
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/host"
+    }
+  ],
+  "functions": {
+    "api/host.ts": {
+      "maxDuration": 15
+    }
+  },
+  "headers": [
+    {
+      "source": "/((?!api/).*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "https://payflow-m6-acceptance.vercel.app"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains"
+        }
+      ]
+    }
+  ]
+}

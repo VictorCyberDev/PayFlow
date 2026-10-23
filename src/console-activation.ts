@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { merchantDisplay } from "./commerce.js";
 import { z } from "zod";
 import {
   HumanConfirmationBoundary,
@@ -153,7 +154,7 @@ export class ConsoleActivation {
             label: "Merchants",
             value:
               draft.merchants.mode === "ONLY"
-                ? `Only ${draft.merchants.ids.join(", ")}`
+                ? `Only ${draft.merchants.ids.map(merchantDisplay).join(", ")}`
                 : "Any merchant, subject to existing policy",
           },
           {

@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "vitest run tests/persistence.integration.test.ts tests/durable-authorization.integration.test.ts tests/execution-grant.integration.test.ts tests/execution-grant-state.integration.test.ts tests/paypal.integration.test.ts tests/intent-activation.integration.test.ts tests/trust-boundary.integration.test.ts tests/checkout.integration.test.ts tests/commerce-execution.integration.test.ts tests/payment-resume.integration.test.ts tests/commerce-discovery.integration.test.ts tests/m4-closure.integration.test.ts tests/console-activation.integration.test.ts tests/console-controls.integration.test.ts tests/m5e-adversarial.integration.test.ts tests/console-host-durable.integration.test.ts tests/hosting-m5.integration.test.ts",
+    "test:integration": "vitest run tests/persistence.integration.test.ts tests/durable-authorization.integration.test.ts tests/execution-grant.integration.test.ts tests/execution-grant-state.integration.test.ts tests/paypal.integration.test.ts tests/intent-activation.integration.test.ts tests/trust-boundary.integration.test.ts tests/checkout.integration.test.ts tests/commerce-execution.integration.test.ts tests/payment-resume.integration.test.ts tests/commerce-discovery.integration.test.ts tests/m4-closure.integration.test.ts tests/console-activation.integration.test.ts tests/console-controls.integration.test.ts tests/m5e-adversarial.integration.test.ts tests/console-host-durable.integration.test.ts tests/hosting-m5.integration.test.ts tests/m6-delegated.integration.test.ts tests/m6-activity.integration.test.ts tests/m6-demo-agent.integration.test.ts tests/hosting-m6.integration.test.ts",
+    "acceptance:m6:sandbox": "tsx hosting/operator/m6-sandbox-acceptance.ts",
     "test:paypal:sandbox": "vitest run tests/paypal.sandbox.test.ts",
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
@@ -22,7 +23,7 @@
   },
   "dependencies": {
     "postgres": "3.4.7",
-    "zod": "^3.23.8"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
