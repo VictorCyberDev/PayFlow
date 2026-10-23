@@ -5,3 +5,5 @@ node_modules
 apps/console/.next
 apps/console/out
 hosting/m5/public
+apps/console/app/fonts
+docs/brand/x7-territories/boards.html
