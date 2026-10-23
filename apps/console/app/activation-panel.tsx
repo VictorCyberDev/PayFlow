@@ -38,7 +38,13 @@ export default function ActivationPanel({
         void c.restore(c.getState().authority?.mandateId);
       }
     }, 1000);
+    const reread = () => {
+      const id = c.getState().authority?.mandateId;
+      if (id) void c.restore(id);
+    };
+    window.addEventListener("payflow-authority-revoked", reread);
     return () => {
+      window.removeEventListener("payflow-authority-revoked", reread);
       clearInterval(timer);
       c.dispose();
     };
@@ -198,7 +204,8 @@ export function ActivationSurface({ state }: { state: ActivationState }) {
           <p>Up to {money(a.singleMaximumMinor, a.currency)}</p>
           <p>{money(a.remainingMinor, a.currency)} remaining</p>
           <p>
-            {a.quantityRemaining} items remaining ·{" "}
+            {a.quantityRemaining} {a.quantityRemaining === 1 ? "item" : "items"}{" "}
+            remaining ·{" "}
             {a.allowedConditions.map((s) => s.toLowerCase()).join(", ")} only
           </p>
           <p>{a.merchantScopeSummary}</p>

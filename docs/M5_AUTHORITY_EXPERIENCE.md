@@ -369,3 +369,82 @@ This remains a fixed-owner, single-process, loopback-only NON-PRODUCTION DEMO, n
 New tests cover actual HTTP revoke/read routes, owner and selector isolation, CSRF/origin/session/expiry failures, concurrent idempotency, fresh stale-state correction, accepted authorization rejection after revoke, unchanged completed payment truth, no read evidence/mutation/provider effects, accurate ALLOW/DENY/ESCALATE/unknown/no-effect/completion projections, exact trace verdict preservation, sensitive-field exclusion, controller races/failures/reload/expiry and rendered confirmation/disclosure states. Existing M1–M4 tests remain required. Normal CI live PayPal/Groq/external-auth calls are zero.
 
 Hosted console: NOT DEPLOYED. M5E owns hosted end-to-end acceptance and is NOT STARTED. M6 is NOT STARTED. M5D implementation candidate must stop for independent GUIDE review. Keep PR #12 DRAFT / OPEN / UNMERGED; do not mark ready or merge.
+
+## M5E — adversarial and hosted acceptance (candidate)
+
+M5A–M5D are CLOSED / PASS at their accepted heads; M5D head `38655faa7a23151d8a40e25f6cc664dad586309f`. M5E changes no accepted financial, authentication, session, activation, verification, provider or migration code: `src/`, `db/` and `api/` are byte-identical to the accepted M5D head. All M5E changes are tests, a test-only host, console presentation fixes found by the visual/browser review, CI, and this document.
+
+### Hosted deployment — BLOCKED — ARCHITECTURAL BOUNDARY
+
+A real hosted deployment was attempted as an investigation and **was not performed**. Nothing was created, deployed or configured on any host.
+
+- **Blocker 1 (accepted boundary):** the M5C host keeps sessions (`ConsoleSessions`) and the exact-review challenge cache (`ConsoleActivation`) in process memory. This is the accepted, documented semantic ("process-local; restart fails closed"). Vercel Functions give no single-instance guarantee, so login, review and confirmation could land on different instances and the confirmation would fail closed at random. Making sessions/challenges durable would redesign session semantics and the HumanConfirmationBoundary hand-off, which M5E may not do.
+- **Blocker 2 (infrastructure):** no durable PostgreSQL exists for M5. The only database account visible to this session (Supabase) holds unrelated products' databases; none is an approved, isolated PayFlow M5 database. Creating one is new paid infrastructure plus secret handling, which needs an explicit owner decision.
+- **Blocker 3 (entrypoint):** `console-activation-host.ts` hard-codes `http://127.0.0.1:8080` and loopback listen. `ConsoleSessions` already supports an HTTPS audience (`__Host-` prefix, `Secure`), but the entrypoint exposes no way to configure it. A narrow configurable-origin change would be possible, but is moot without 1 and 2.
+- **Preserved:** the existing Vercel project `payflow` (payer-return deployment) was only listed, not modified. No environment variable, domain or deployment was touched.
+- **What would unblock it (GUIDE decision):** an owner-approved single-process, long-lived host (container/VM) behind TLS, plus an isolated PostgreSQL provisioned operator-side with migrations 001–009, one principal, one AgentPassport and one activation policy. Required environment (names only, values supplied privately): `PAYFLOW_M5C_DEMO=true`, `DATABASE_URL`, `PAYFLOW_M5C_PRINCIPAL_ID`, `PAYFLOW_M5C_AGENT_ID`, `PAYFLOW_M5C_BOOTSTRAP_KEY` (at least 32 random bytes), and a configurable HTTPS origin (the narrow entrypoint change above). Hosted HTTPS, Secure/`__Host-` cookie and exact-origin behavior are therefore proven only at unit level (`tests/console-session.test.ts`), not on a hosted URL.
+
+Hosted URL: NONE. Hosted acceptance: NOT PERFORMED (blocked as above).
+
+### Demo-auth limitation (unchanged)
+
+Identity remains the accepted NON-PRODUCTION fixed-owner demo: a privately configured operator code, a server-configured principal and agent, process-local opaque sessions. No production authentication is claimed. The UI states "Non-production workspace · No production login".
+
+### M5E architecture
+
+- `tests/m5e-adversarial.integration.test.ts` — the adversarial matrix over the real HTTP host and real PostgreSQL (39 tests).
+- `tests/e2e-host.ts` — TEST-ONLY host. It wires the same handler, sessions, recorded model and owner-bound controls as the opt-in host against an isolated database with an adjustable clock and a loopback control port (advance time, revoke "from another device", count financial rows). It is not product code and is never deployed.
+- `apps/console/e2e/journey.e2e.mjs` — 10 Chromium tests on the real static console (`npm run test:e2e` in `apps/console`; dev dependency `playwright-core` 1.56.1, console-only). No live Groq or PayPal. CI job `console-e2e` runs it with a PostgreSQL service.
+- Console fixes from the visual/browser review (presentation only): (1) after a revoke completes, the exact-confirmation card re-reads durable state instead of continuing to show "Authority active" until its own poll; (2) a meaningful Activity empty state when signed out or unavailable; (3) "1 item remaining" pluralization; (4) 44px minimum touch targets on narrow/coarse-pointer screens (previously 18–37px for navigation, buttons, disclosures).
+
+### Adversarial matrix and evidence
+
+"M5E" = `tests/m5e-adversarial.integration.test.ts`; "M5C" = `tests/console-activation.integration.test.ts`; "M5D" = `tests/console-controls.integration.test.ts`; "E2E" = `apps/console/e2e/journey.e2e.mjs`.
+
+| Case                                                               | Result      | Evidence                                                                                                                                                                                                 |
+| ------------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1–A5 amount, merchant, quantity, condition, capability tampering  | PASS        | M5E "A1-A5 confirm with injected …" (13 fields) confirms the untampered review still yields exactly the reviewed terms; "review request with client …"; M5C "rejects client … substitution"              |
+| A6 injected ACTIVE                                                 | PASS        | M5E "A6/A7 injected ACTIVE state and remaining budget are rejected" (query and header); M5C fresh read                                                                                                   |
+| A7 injected remaining budget                                       | PASS        | M5E "A7 remaining budget is the durable accounting value"                                                                                                                                                |
+| B1 tampered cookie                                                 | PASS        | M5E "B1 a single changed character…"; E2E "tampered session cookie…"; `console-session.test.ts`                                                                                                          |
+| B2 expired session                                                 | PASS        | M5E "B2"; M5C expiry; E2E "session expiry on the server…"                                                                                                                                                |
+| B3/B4 missing, empty, wrong CSRF                                   | PASS        | M5E "B3/B4" (3 variants × review, confirm, revoke, logout); E2E "CSRF failure…"                                                                                                                          |
+| B5 cross-origin                                                    | PASS        | M5E "B5 cross-origin mutation" (4 variants), "no CORS grant on any response"                                                                                                                             |
+| B6 arbitrary principal                                             | PASS        | M5E "B6" (body, query, header, login)                                                                                                                                                                    |
+| B7 another principal's mandate                                     | PASS        | M5E "B7": response identical to an unknown ID, durable state unchanged; M5D "wrong owner"                                                                                                                |
+| C1 expired review                                                  | PASS        | M5E "C1"; M5C "rejects disabled principal and expired review"                                                                                                                                            |
+| C2/C3 replay, concurrent confirmation                              | PASS        | M5E "C2/C3 many concurrent confirmations" (8 parallel → exactly one Mandate); M5C replay                                                                                                                 |
+| C4–C7 tampered display hash, fingerprint, reviewed hash, challenge | PASS        | M5C "tampered … handle", "core rejects corrupted durable …"                                                                                                                                              |
+| C8 changed principal/agent/policy epoch                            | PASS        | M5C "core rejects changed … epoch"                                                                                                                                                                       |
+| C9 suspended/revoked/expired passport                              | PASS        | M5C "core rejects … passport"                                                                                                                                                                            |
+| D1–D4 revoke, reload, stale tab, repeat                            | PASS        | M5E "D1-D6/E1-E5" (3 concurrent + 1 repeat → one MANDATE_REVOKED event); E2E "stale tab…", "double-click…"                                                                                               |
+| D5 wrong principal revoke                                          | PASS        | M5E "D5"; M5D "wrong owner…"                                                                                                                                                                             |
+| D6 revoke payment side effects                                     | PASS (zero) | M5E and E2E assert zero payment rows after revoke                                                                                                                                                        |
+| E1–E5 read-only reload/Activity/details/refresh                    | PASS        | M5E "D1-D6/E1-E5" (5× all read routes, evidence and mandates byte-identical); E2E 3× reload; M5D "reloads do not append evidence or call provider"                                                       |
+| F1–F7 Activity truth                                               | PASS        | M5D (DENY, ESCALATE, ALLOW, pending, CAPTURED, no-effect, UNKNOWN, INVALID, INCOMPLETE) and `tests/activity-projection.test.ts` (INVALID/INCOMPLETE/LEGACY never upgraded) — all pre-existing, unchanged |
+
+Host surface (M5E): no debug/environment/provision endpoint; no stack traces or secrets in errors; unauthenticated visitors mutate nothing; cookie attributes and no secret/raw challenge in login or review output; a review with no confirmation leaves no Mandate.
+
+### Secrets and log review (local)
+
+Static export scanned for `DATABASE_URL`, `postgres://`, Groq/PayPal names, private keys, bootstrap, resume/grant and challenge material: none. The E2E captures every same-origin response body and header during a full journey and asserts the bootstrap code, database URL and the same patterns are absent. Host source contains two `console.log` calls, both fixed startup banners without values; the catch-all handler logs nothing. CI output carries no secret (test credentials are ephemeral CI-service values).
+
+### Zero-payment closure
+
+After every browser journey and every adversarial journey the tests assert zero rows in `payment_attempts`, `authorization_reservations`, `execution_grants`, `transaction_proposals` and `paypal_provider_observations`. M5 spends nothing.
+
+### Visual, accessibility and quality review
+
+Reviewed in headless Chromium against the locally served console (not a hosted URL): desktop 1280px home, confirmation and revoked states; mobile 375px revoke sheet. Findings fixed (listed above). Remaining observations for GUIDE, not fixed because they belong to accepted M5A/M5B composition: Home stacks Ask, review, confirmation, a labelled fixture Authority card, saved authorities and Activity in one long scroll; the labelled example card persists beside real saved authority. Automated checks: no horizontal overflow at 375px on home, confirmation, authority and revoke sheet; every interactive element at least 44×44px on mobile; keyboard-only journey from skip link through activation and revocation (focus moves to the revoke sheet); visible focus indicator; every input labelled; live regions present; reduced motion removes animation/transition; WCAG AA contrast ratios on all visible text; `details`/`summary` operable by keyboard; no runtime or hydration console errors; double-click produces one Mandate and one revocation; a server-unavailable read keeps the prior state with a safe message and shows no stack trace.
+
+### Known limitations
+
+- Hosted acceptance not performed (blocked above); hosted visual/performance/secret review is therefore local only.
+- Fixed-owner, single-process, in-memory sessions; not production authentication.
+- Recorded model behavior only; live Groq interpretation not exercised.
+- Mobile and desktop review covered the states listed above rather than every screen state; no assistive-technology (screen reader) run, only programmatic accessibility checks.
+- The accepted M2 test `paypal.integration.test.ts` "closure expiration before handoff while the passport lock is held" is timing-sensitive: it failed in 5 of 8 isolated runs and in one of three full runs on this machine, and passes when its whole file runs. Its source and the code it exercises are unchanged since M2/M5D. It is not modified here.
+
+### M5E stop gate
+
+M5E implementation is complete except hosted acceptance. M6 is NOT STARTED. PR #12 stays DRAFT / OPEN / UNMERGED pending GUIDE review.

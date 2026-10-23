@@ -78,3 +78,36 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+  console-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: payflow
+          POSTGRES_PASSWORD: payflow_test
+          POSTGRES_DB: payflow_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U payflow -d payflow_e2e"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      E2E_DATABASE_URL: postgres://payflow:payflow_test@localhost:5432/payflow_e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/console/package-lock.json
+      - run: npm ci
+      - run: npm ci
+        working-directory: apps/console
+      - run: npm run build
+        working-directory: apps/console
+      - run: npx playwright-core install --with-deps chromium
+        working-directory: apps/console
+      - run: npm run test:e2e
+        working-directory: apps/console

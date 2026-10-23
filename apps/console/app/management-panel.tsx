@@ -61,7 +61,12 @@ export default function ManagementPanel() {
       onRefresh={() => void c.current?.refresh()}
       onRequest={(id) => c.current?.requestRevoke(id)}
       onCancel={() => c.current?.cancelRevoke()}
-      onRevoke={() => void c.current?.revoke()}
+      onRevoke={() =>
+        void c.current?.revoke().then(() => {
+          // Any other card on this page must re-read durable state, never keep showing ACTIVE.
+          window.dispatchEvent(new Event("payflow-authority-revoked"));
+        })
+      }
     />
   );
 }
@@ -235,7 +240,8 @@ export function ManagementSurface({
               {money(a.remainingMinor, a.currency)} remaining
             </p>
             <p>
-              {a.quantityRemaining ?? "Unspecified"} items remaining ·{" "}
+              {a.quantityRemaining ?? "Unspecified"}{" "}
+              {a.quantityRemaining === 1 ? "item" : "items"} remaining ·{" "}
               {a.merchantScopeSummary}
             </p>
             <p>Expires {date(a.expiresAt)}</p>
@@ -304,6 +310,13 @@ export function ManagementSurface({
       >
         <p className="eyebrow">Saved activity · latest 20 requests</p>
         <h2 id="activity-title">What happened, and why</h2>
+        {["SIGNED_OUT", "UNAVAILABLE"].includes(state.status) &&
+          !state.activity.length && (
+            <p>
+              Saved activity is not available yet. Open a demo session to see
+              what your agent has done.
+            </p>
+          )}
         {state.status === "READY" && !state.activity.length && (
           <p>
             No saved operations for this owner. Activating authority does not

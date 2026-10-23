@@ -765,3 +765,34 @@ button:disabled {
     gap: 1rem;
   }
 }
+
+/* M5E: touch targets. Applies on narrow or coarse-pointer screens only, so the
+   desktop composition is unchanged. 44px follows common accessibility guidance
+   for payment and authority actions. */
+@media (max-width: 620px), (pointer: coarse) {
+  button,
+  summary,
+  .nav-item,
+  .sidebar a[href],
+  .authority-actions a,
+  a.text-button {
+    min-height: 44px;
+  }
+  button,
+  .nav-item,
+  .sidebar a[href],
+  .authority-actions a,
+  a.text-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  summary {
+    display: flex;
+    align-items: center;
+  }
+  button,
+  .nav-item {
+    min-width: 44px;
+  }
+}
