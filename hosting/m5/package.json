@@ -3,12 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Isolated NON-PRODUCTION M5 console deployment (thin Vercel adapter). Not the payer-return project.",
+  "description": "Isolated NON-PRODUCTION M5 console deployment (thin Vercel adapter). Dependencies are installed from the repository root, where the shared src/ modules live. Not the payer-return project.",
   "engines": {
     "node": ">=20"
-  },
-  "dependencies": {
-    "postgres": "3.4.7",
-    "zod": "^3.23.8"
   }
 }
