@@ -171,6 +171,7 @@ const orderSchema = z.object({
             currency_code: z.string(),
             breakdown: z
               .record(
+                z.string(),
                 z.object({
                   value: z.string().max(32),
                   currency_code: z.string().max(3),
