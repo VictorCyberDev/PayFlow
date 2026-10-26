@@ -96,7 +96,9 @@ describe("M6 delegated PayPal instrument (Sandbox only)", () => {
     await expect(p.createOrder(order)).rejects.toThrow(
       "PAYPAL_DELEGATED_INSTRUMENT_REQUIRED",
     );
-    expect(calls.some((c) => c.url.endsWith("/v2/checkout/orders"))).toBe(false);
+    expect(
+      calls.some((c) => c.url.endsWith("/v2/checkout/orders")),
+    ).toBe(false);
   });
   it("without an instrument the accepted payer-return behavior is unchanged", async () => {
     const { calls, fetcher } = recorder();
