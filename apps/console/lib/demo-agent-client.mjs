@@ -54,7 +54,10 @@ export async function fetchDemoAgentStatus(transport = transportDefault) {
 export async function fetchPayPalVaultStatus(transport = transportDefault) {
   try {
     const s = await transport("/api/paypal-vault/status");
-    if (s?.version !== "payflow.paypal-vault-status.v1" || typeof s.connected !== "boolean")
+    if (
+      s?.version !== "payflow.paypal-vault-status.v1" ||
+      typeof s.connected !== "boolean"
+    )
       return null;
     return s.connected;
   } catch {
@@ -79,7 +82,9 @@ export async function startPayPalVaultConnection(transport = transportDefault) {
 
 /** Called after PayPal returns to the static console. The temporary setup token stays only in
  * sessionStorage and is deleted whether exchange succeeds or fails. */
-export async function completePayPalVaultConnection(transport = transportDefault) {
+export async function completePayPalVaultConnection(
+  transport = transportDefault,
+) {
   const setupTokenId = sessionStorage.getItem(SETUP_KEY);
   if (!setupTokenId) return false;
   try {
@@ -88,7 +93,9 @@ export async function completePayPalVaultConnection(transport = transportDefault
       { setupTokenId },
       transport,
     );
-    return r?.version === "payflow.paypal-vault-complete.v1" && r.connected === true;
+    return (
+      r?.version === "payflow.paypal-vault-complete.v1" && r.connected === true
+    );
   } finally {
     sessionStorage.removeItem(SETUP_KEY);
   }
