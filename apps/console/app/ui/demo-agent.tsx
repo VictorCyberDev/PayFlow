@@ -46,8 +46,11 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
   useEffect(() => {
     const u = new URL(window.location.href);
     if (u.searchParams.get("paypal") !== "approved") return;
-    setBusy(true);
-    void completePayPalVaultConnection()
+    void Promise.resolve()
+      .then(() => {
+        setBusy(true);
+        return completePayPalVaultConnection();
+      })
       .then((ok) => {
         setVaultConnected(ok);
         setOutcome(ok ? null : "ERROR");
