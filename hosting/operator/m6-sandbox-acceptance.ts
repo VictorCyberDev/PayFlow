@@ -1,26 +1,36 @@
 /**
  * OPERATOR-ONLY M6 live PayPal SANDBOX acceptance: one fresh $84 USD delegated purchase.
  *
- *   RUN_M6_SANDBOX_ACCEPTANCE=true DATABASE_URL=... PAYPAL_ENVIRONMENT=sandbox \
- *   PAYPAL_CLIENT_ID=... PAYPAL_CLIENT_SECRET=... PAYPAL_DELEGATED_VAULT_ID=... \
- *   PAYPAL_EXPECTED_MERCHANT_ID=<13-char Sandbox merchant id> PAYFLOW_M6_SIGNING_KEY="<PEM>" \
- *     npm run acceptance:m6:sandbox
+ * Prerequisite: the owner has already completed the one-time PayPal Sandbox wallet bootstrap on
+ * the isolated hosted M6 console. The browser never exposes the provider setup token or vault id.
+ * This runner reuses that encrypted, owner-bound instrument from PostgreSQL.
  *
- * It uses the isolated acceptance database (REFUSES one with payment history, so no historical
- * order or capture is ever reused), provisions one owner/agent/Authority, runs the real delegated
- * pipeline with no human step, then proves exactly one capture, a replay with zero further
- * captures, and a verified Trace. It prints identifiers and counts only, never a credential.
- * It is Sandbox-only by construction: any other PayPal environment is refused.
+ *   RUN_M6_SANDBOX_ACCEPTANCE=true DATABASE_URL=... PAYPAL_ENVIRONMENT=sandbox \
+ *   PAYPAL_CLIENT_ID=... PAYPAL_CLIENT_SECRET=... \
+ *   PAYPAL_EXPECTED_MERCHANT_ID=<13-char Sandbox merchant id> \
+ *   PAYFLOW_M5_PRINCIPAL_ID=... PAYFLOW_M5_AGENT_ID=... PAYFLOW_M5_BOOTSTRAP_KEY=... \
+ *   PAYFLOW_M6_SIGNING_KEY="<PEM>" npm run acceptance:m6:sandbox
+ *
+ * It REFUSES a database with prior financial history, uses the exact hosted owner/Agent identity,
+ * runs the real delegated pipeline with no human step, then proves exactly one capture, durable
+ * COMMITTED/CONSUMED terminal state, replay with zero further capture, and a VERIFIED Trace.
+ * It prints identifiers and bounded evidence only, never credentials or decrypted vault material.
  */
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { mandateFingerprint } from "../../src/canonical.js";
+import { deriveHostKeys } from "../../src/console-session-durable.js";
 import { DemoShoppingAgent } from "../../src/delegated-demo.js";
 import { OperationTraceService } from "../../src/operation-trace.js";
 import {
-  paypalDelegatedProviderFromEnv,
+  PayPalExecutionRail,
+  PayPalOAuthClient,
   type PaymentProvider,
 } from "../../src/paypal.js";
+import {
+  PayPalVaultStore,
+  StoredPayPalPaymentProvider,
+} from "../../src/paypal-vault-bootstrap.js";
 import { PostgresTrustRepository } from "../../src/persistence.js";
 
 const need = [
@@ -29,8 +39,10 @@ const need = [
   "PAYPAL_ENVIRONMENT",
   "PAYPAL_CLIENT_ID",
   "PAYPAL_CLIENT_SECRET",
-  "PAYPAL_DELEGATED_VAULT_ID",
   "PAYPAL_EXPECTED_MERCHANT_ID",
+  "PAYFLOW_M5_PRINCIPAL_ID",
+  "PAYFLOW_M5_AGENT_ID",
+  "PAYFLOW_M5_BOOTSTRAP_KEY",
   "PAYFLOW_M6_SIGNING_KEY",
 ];
 const missing = need.filter((k) => !process.env[k]);
@@ -53,7 +65,7 @@ if (
   process.exit(2);
 }
 
-/** Counts money-moving calls so the report cannot depend on the system under test's own claims. */
+/** Counts provider calls independently from PayFlow's own outcome projection. */
 function counting(inner: PaymentProvider) {
   const calls = { createOrder: 0, captureOrder: 0, getOrder: 0 };
   const provider: PaymentProvider = {
@@ -92,13 +104,36 @@ try {
       process.exit(3);
     }
   }
+
+  const principalId = process.env.PAYFLOW_M5_PRINCIPAL_ID!;
+  const agentId = process.env.PAYFLOW_M5_AGENT_ID!;
+  const keys = deriveHostKeys(process.env.PAYFLOW_M5_BOOTSTRAP_KEY!);
+  const vault = new PayPalVaultStore(repo.sql, keys.paymentInstrument);
+  if (!(await vault.has(principalId))) {
+    console.error(
+      "REFUSED: owner has no approved PayPal Sandbox instrument; complete one-time hosted wallet approval first",
+    );
+    process.exit(4);
+  }
+
+  const [principal] =
+    await repo.sql`select id from principals where id=${principalId}`;
+  const [passport] =
+    await repo.sql`select id,status from agent_passports where id=${agentId} and principal_id=${principalId}`;
+  if (!principal || !passport || passport.status !== "ACTIVE") {
+    console.error(
+      "REFUSED: hosted principal/Agent identity is missing or inactive in the isolated acceptance database",
+    );
+    process.exit(4);
+  }
+
   const now = () => new Date();
   const start = now();
   const id = "m6-" + start.getTime().toString(36);
   const mandate = {
     id: `${id}-mandate`,
-    principalId: `${id}-owner`,
-    authorizedAgentId: `${id}-agent`,
+    principalId,
+    authorizedAgentId: agentId,
     purpose: "One new mechanical keyboard",
     category: "KEYBOARD",
     currency: "USD",
@@ -116,26 +151,26 @@ try {
     createdAt: new Date(start.getTime() - 60_000).toISOString(),
     expiresAt: new Date(start.getTime() + 3_600_000).toISOString(),
   };
-  await repo.savePrincipal({
-    id: mandate.principalId,
-    displayName: "M6 acceptance owner",
-  });
-  await repo.saveAgent({
-    id: mandate.authorizedAgentId,
-    principalId: mandate.principalId,
-    displayName: "Shopping Agent",
-    issuedAt: mandate.createdAt,
-    expiresAt: mandate.expiresAt,
-    status: "ACTIVE",
-    capabilities: ["CAPTURE_PAYMENT"],
-  });
   await repo.saveMandate(mandate);
+
   const privateKey = createPrivateKey(process.env.PAYFLOW_M6_SIGNING_KEY!);
-  const real = paypalDelegatedProviderFromEnv();
+  if (privateKey.asymmetricKeyType !== "ed25519") {
+    console.error("REFUSED: PAYFLOW_M6_SIGNING_KEY must be Ed25519 PKCS#8");
+    process.exit(2);
+  }
+  const real = new StoredPayPalPaymentProvider(
+    new PayPalOAuthClient(
+      process.env.PAYPAL_CLIENT_ID!,
+      process.env.PAYPAL_CLIENT_SECRET!,
+    ),
+    vault,
+    principalId,
+  );
   const { provider, calls } = counting(real);
   const agent = new DemoShoppingAgent({
     repo,
     provider,
+    paymentReady: () => real.connected(),
     signing: {
       kid: "m6-acceptance",
       privateKey,
@@ -147,14 +182,14 @@ try {
 
   const out = await agent.run(mandate.id, "VALID_PURCHASE");
   const [attempt] =
-    await repo.sql`select id,status,provider_order_id,provider_capture_id,amount_minor,currency from payment_attempts`;
-  // Replay / duplicate attempts must add no capture.
+    await repo.sql`select id,status,provider_order_id,provider_capture_id,amount_minor,currency,grant_id,reservation_id from payment_attempts`;
+  const firstCaptureCalls = calls.captureOrder;
+
+  // A second delegated request under the exhausted one-item/$100 Authority must not capture again.
   const second = await agent.run(mandate.id, "VALID_PURCHASE");
   if (attempt?.id)
-    await new (await import("../../src/paypal.js")).PayPalExecutionRail(
-      repo,
-      provider,
-      () => now().toISOString(),
+    await new PayPalExecutionRail(repo, provider, () =>
+      now().toISOString(),
     ).reconcile(String(attempt.id), now().toISOString());
   const live = attempt?.provider_order_id
     ? await real.getOrder(String(attempt.provider_order_id))
@@ -165,8 +200,12 @@ try {
         now().toISOString(),
       )
     : undefined;
-  const [res] =
-    await repo.sql`select status,amount_minor from authorization_reservations`;
+  const [res] = attempt?.reservation_id
+    ? await repo.sql`select status,amount_minor from authorization_reservations where id=${String(attempt.reservation_id)}`
+    : [];
+  const [grant] = attempt?.grant_id
+    ? await repo.sql`select status from execution_grants where id=${String(attempt.grant_id)}`
+    : [];
   const report = {
     mandateFingerprint: mandateFingerprint(mandate).slice(0, 12),
     outcome: out.status,
@@ -184,21 +223,31 @@ try {
     providerOrderStatus: live?.status ?? null,
     providerCaptures: live?.captures.length ?? null,
     captureOrderCalls: calls.captureOrder,
+    captureCallsAfterFirstAttempt: calls.captureOrder - firstCaptureCalls,
     createOrderCalls: calls.createOrder,
     secondAttempt: second.status,
     reservation: res
       ? { status: String(res.status), amountMinor: Number(res.amount_minor) }
       : null,
+    grantStatus: grant ? String(grant.status) : null,
     traceStatus: trace?.status ?? null,
     traceOutcome: trace?.financialOutcome ?? null,
   };
   console.log(JSON.stringify(report, null, 2));
   const pass =
     report.outcome === "COMPLETED" &&
+    report.askedHuman === false &&
     report.amount === "84.00 USD" &&
+    report.paymentAttemptStatus === "CAPTURED" &&
+    report.providerOrderStatus === "COMPLETED" &&
     report.providerCaptures === 1 &&
-    report.captureOrderCalls <= 1 &&
+    report.createOrderCalls === 1 &&
+    report.captureOrderCalls === 1 &&
+    report.captureCallsAfterFirstAttempt === 0 &&
     report.secondAttempt !== "COMPLETED" &&
+    report.reservation?.status === "COMMITTED" &&
+    report.reservation.amountMinor === 8400 &&
+    report.grantStatus === "CONSUMED" &&
     report.traceStatus === "VERIFIED";
   console.log(
     pass ? "M6 SANDBOX ACCEPTANCE: PASS" : "M6 SANDBOX ACCEPTANCE: FAIL",
