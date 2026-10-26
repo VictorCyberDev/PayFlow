@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  completePayPalVaultConnection,
   fetchDemoAgentStatus,
+  fetchPayPalVaultStatus,
   runDemoScenario,
 } from "../lib/demo-agent-client.mjs";
 
@@ -50,6 +52,52 @@ test("status reports whether a Sandbox payment rail is connected", async () => {
     payment: "SANDBOX_CONNECTED",
   });
   assert.equal(await fetchDemoAgentStatus(ok("PRODUCTION")), null);
+});
+test("vault status is accepted only from the exact server contract", async () => {
+  assert.equal(
+    await fetchPayPalVaultStatus(async () => ({
+      version: "payflow.paypal-vault-status.v1",
+      connected: true,
+    })),
+    true,
+  );
+  assert.equal(
+    await fetchPayPalVaultStatus(async () => ({
+      version: "payflow.paypal-vault-status.v1",
+      connected: false,
+    })),
+    false,
+  );
+  assert.equal(
+    await fetchPayPalVaultStatus(async () => ({
+      version: "payflow.paypal-vault-status.v1",
+      connected: "yes",
+    })),
+    null,
+  );
+});
+test("PayPal completion echoes only callback state; no setup token or provider credential enters browser POST", async () => {
+  const seen = [];
+  const state = "A".repeat(43);
+  const ok = await completePayPalVaultConnection(
+    state,
+    async (path, options) => {
+      seen.push({ path, options });
+      if (path === "/api/activation/session") return session;
+      return { version: "payflow.paypal-vault-complete.v2", connected: true };
+    },
+  );
+  assert.equal(ok, true);
+  const post = seen.find((s) => s.path === "/api/paypal-vault/complete");
+  assert.equal(post.options.headers["X-PayFlow-CSRF"], "csrf-token");
+  assert.deepEqual(JSON.parse(post.options.body), { state });
+  assert.doesNotMatch(post.options.body, /setup|token|vault|secret/i);
+  assert.equal(
+    await completePayPalVaultConnection("bad", async () => {
+      throw new Error("must not call transport");
+    }),
+    false,
+  );
 });
 test("the browser sends only a scenario and an Authority selector, with the session CSRF value", async () => {
   const seen = [];
