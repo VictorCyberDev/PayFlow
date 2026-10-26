@@ -50,8 +50,10 @@ export class DemoShoppingAgent {
   constructor(
     private readonly deps: Readonly<{
       repo: PostgresTrustRepository;
-      /** null = no payment rail is connected: purchases cannot run, blocked scenarios still can. */
+      /** null = no payment rail is configured: purchases cannot run, blocked scenarios still can. */
       provider: PaymentProvider | null;
+      /** Optional durable readiness check (for example, an owner-vaulted Sandbox instrument). */
+      paymentReady?: () => Promise<boolean>;
       signing: DemoSigningKey;
       expectedPayPalMerchantId: string;
       clock: () => Date;
@@ -61,8 +63,13 @@ export class DemoShoppingAgent {
       new Map([[deps.signing.kid, deps.signing.publicKey]]),
     );
   }
+  /** Backwards-compatible configuration signal. Hosted status uses paymentAvailable(). */
   get paymentConnected(): boolean {
     return this.deps.provider !== null;
+  }
+  async paymentAvailable(): Promise<boolean> {
+    if (!this.deps.provider) return false;
+    return this.deps.paymentReady ? this.deps.paymentReady() : true;
   }
   private binding() {
     return {
@@ -155,7 +162,7 @@ export class DemoShoppingAgent {
   ): Promise<DelegatedOutcome> {
     const { repo, provider, signing, clock } = this.deps;
     DemoScenarioSchema.parse(scenario);
-    if (scenario === "VALID_PURCHASE" && !provider)
+    if (scenario === "VALID_PURCHASE" && !(await this.paymentAvailable()))
       return Object.freeze({
         status: "REFUSED",
         code: "PAYMENT_RAIL_NOT_CONNECTED",
