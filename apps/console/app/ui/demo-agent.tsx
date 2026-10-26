@@ -46,15 +46,17 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
   useEffect(() => {
     const u = new URL(window.location.href);
     if (u.searchParams.get("paypal") !== "approved") return;
+    const state = u.searchParams.get("state");
     void Promise.resolve()
       .then(() => {
         setBusy(true);
-        return completePayPalVaultConnection();
+        return state ? completePayPalVaultConnection(state) : false;
       })
       .then((ok) => {
         setVaultConnected(ok);
         setOutcome(ok ? null : "ERROR");
         u.searchParams.delete("paypal");
+        u.searchParams.delete("state");
         window.history.replaceState({}, "", u.pathname + u.search + u.hash);
       })
       .catch(() => setOutcome("ERROR"))
