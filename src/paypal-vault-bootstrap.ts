@@ -81,7 +81,7 @@ export class ConsolePayPalVaultBootstrap {
   }
   async start(req: ConsoleRequest, raw: unknown) {
     z.object({}).strict().parse(raw);
-    const context = await this.sessions.read(req);
+    const context = await this.sessions.mutation(req, true);
     await this.sessions.requirePrincipal(context);
     const access = await this.oauth.accessToken();
     const r = await this.fetcher(`${BASE}/v3/vault/setup-tokens`, {
@@ -120,7 +120,7 @@ export class ConsolePayPalVaultBootstrap {
   }
   async complete(req: ConsoleRequest, raw: unknown) {
     const body = z.object({ setupTokenId: z.string().min(1).max(255) }).strict().parse(raw);
-    const context = await this.sessions.read(req);
+    const context = await this.sessions.mutation(req, true);
     const principal = await this.sessions.requirePrincipal(context);
     const access = await this.oauth.accessToken();
     const r = await this.fetcher(`${BASE}/v3/vault/payment-tokens`, {
