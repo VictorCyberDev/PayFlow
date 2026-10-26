@@ -183,7 +183,11 @@ export function createHostedConsole(
       config.paypalEnv.PAYPAL_CLIENT_ID &&
       config.paypalEnv.PAYPAL_CLIENT_SECRET
     ) {
-      const store = new PayPalVaultStore(ownedSql, keys.paymentInstrument, clock);
+      const store = new PayPalVaultStore(
+        ownedSql,
+        keys.paymentInstrument,
+        clock,
+      );
       const stored = new StoredPayPalPaymentProvider(
         new PayPalOAuthClient(
           config.paypalEnv.PAYPAL_CLIENT_ID,
