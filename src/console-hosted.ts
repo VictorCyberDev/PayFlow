@@ -24,10 +24,11 @@ import {
 import { PostgresTrustRepository } from "./persistence.js";
 import { ConsoleDemoAgent } from "./console-demo-agent.js";
 import { DemoShoppingAgent } from "./delegated-demo.js";
+import { PayPalOAuthClient, type PaymentProvider } from "./paypal.js";
 import {
-  paypalDelegatedProviderFromEnv,
-  type PaymentProvider,
-} from "./paypal.js";
+  PayPalVaultStore,
+  StoredPayPalPaymentProvider,
+} from "./paypal-vault-bootstrap.js";
 
 /** Hosted NON-PRODUCTION demo configuration. Every value is operator-supplied privately; none
  * is ever logged, rendered or returned. */
@@ -41,7 +42,8 @@ const HostedConfigSchema = z.object({
 });
 /** M6 (optional): the demo Shopping Agent. Fails closed: when enabled, a persistent grant signing
  * key is mandatory so historical Activity can be verified by any later instance. Payment is
- * connected only if complete Sandbox credentials AND a pre-approved instrument are configured. */
+ * connected only when complete Sandbox credentials exist and this owner has an encrypted,
+ * server-stored PayPal instrument created by the one-time payer-present bootstrap. */
 const DemoAgentSchema = z.object({
   PAYFLOW_M6_DEMO_AGENT: z.literal("true"),
   PAYFLOW_M6_SIGNING_KEY: z.string().min(40).max(4096),
@@ -56,7 +58,7 @@ const DemoAgentSchema = z.object({
 });
 export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
   demoAgent?: z.infer<typeof DemoAgentSchema>;
-  /** Raw PayPal settings; consumed only by paypalDelegatedProviderFromEnv. Never logged. */
+  /** Raw PayPal settings; consumed only by the isolated M6 composition. Never logged. */
   paypalEnv?: Record<string, string | undefined>;
 };
 export function parseHostedConfig(
@@ -92,7 +94,6 @@ export function parseHostedConfig(
             PAYPAL_ENVIRONMENT: env.PAYPAL_ENVIRONMENT,
             PAYPAL_CLIENT_ID: env.PAYPAL_CLIENT_ID,
             PAYPAL_CLIENT_SECRET: env.PAYPAL_CLIENT_SECRET,
-            PAYPAL_DELEGATED_VAULT_ID: env.PAYPAL_DELEGATED_VAULT_ID,
           },
         }
       : {}),
@@ -175,12 +176,29 @@ export function createHostedConsole(
     if (privateKey.asymmetricKeyType !== "ed25519")
       throw new Error("PAYFLOW_M6_SIGNING_KEY_INVALID");
     let payment: PaymentProvider | null = null;
+    let paymentReady: (() => Promise<boolean>) | undefined;
     if (deps.paymentProvider !== undefined) payment = deps.paymentProvider;
-    else if (config.paypalEnv?.PAYPAL_DELEGATED_VAULT_ID)
-      payment = paypalDelegatedProviderFromEnv(config.paypalEnv);
+    else if (
+      config.paypalEnv?.PAYPAL_ENVIRONMENT === "sandbox" &&
+      config.paypalEnv.PAYPAL_CLIENT_ID &&
+      config.paypalEnv.PAYPAL_CLIENT_SECRET
+    ) {
+      const store = new PayPalVaultStore(ownedSql, keys.paymentInstrument, clock);
+      const stored = new StoredPayPalPaymentProvider(
+        new PayPalOAuthClient(
+          config.paypalEnv.PAYPAL_CLIENT_ID,
+          config.paypalEnv.PAYPAL_CLIENT_SECRET,
+        ),
+        store,
+        config.PAYFLOW_M5_PRINCIPAL_ID,
+      );
+      payment = stored;
+      paymentReady = () => stored.connected();
+    }
     demo = new DemoShoppingAgent({
       repo,
       provider: payment,
+      ...(paymentReady ? { paymentReady } : {}),
       signing: {
         kid: config.demoAgent.PAYFLOW_M6_SIGNING_KID,
         privateKey,
