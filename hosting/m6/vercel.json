@@ -11,6 +11,10 @@
       "destination": "/api/vault?action=:action"
     },
     {
+      "source": "/api/paypal-vault/:action/",
+      "destination": "/api/vault?action=:action"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/host"
     }
