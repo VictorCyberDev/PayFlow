@@ -1,9 +1,15 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import postgres from "postgres";
 import { z } from "zod";
-import { DurableConsoleSessions, deriveHostKeys } from "../../../src/console-session-durable.js";
+import {
+  DurableConsoleSessions,
+  deriveHostKeys,
+} from "../../../src/console-session-durable.js";
 import { PayPalOAuthClient } from "../../../src/paypal.js";
-import { ConsolePayPalVaultBootstrap, PayPalVaultStore } from "../../../src/paypal-vault-bootstrap.js";
+import {
+  ConsolePayPalVaultBootstrap,
+  PayPalVaultStore,
+} from "../../../src/paypal-vault-bootstrap.js";
 
 const Config = z.object({
   DATABASE_URL: z.string().min(1),
@@ -67,7 +73,10 @@ async function body(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+export default async function handler(
+  req: IncomingMessage,
+  res: ServerResponse,
+) {
   try {
     app ??= createApp();
     const url = new URL(req.url ?? "/", "http://localhost");
