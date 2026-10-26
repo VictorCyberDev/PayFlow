@@ -52,11 +52,14 @@ const provision = (databaseUrl: string) =>
       await admin.close();
     });
 
-    it("provisions an empty database once, idempotently: every forward-only migration (001-011), one principal, one passport, one policy", async () => {
+    it("provisions an empty database once, idempotently: every forward-only migration, one principal, one passport, one policy", async () => {
       const target = await freshDatabase();
       const first = await provision(target);
       expect(first.code).toBe(0);
-      expect(first.out).toMatch(/applied migrations: 11/);
+      const migrationCount = (await readdir("db/migrations")).filter((n) =>
+        n.endsWith(".sql"),
+      ).length;
+      expect(first.out).toContain(`applied migrations: ${migrationCount}`);
       expect(first.out).not.toContain(target);
       const second = await provision(target);
       expect(second.code).toBe(0);
@@ -87,7 +90,7 @@ const provision = (databaseUrl: string) =>
       const repo = PostgresTrustRepository.connect(target);
       try {
         for (const n of (await readdir("db/migrations"))
-          .filter((n) => n.endsWith(".sql") && !n.startsWith("010_"))
+          .filter((n) => n.endsWith(".sql") && n < "010_")
           .sort())
           await repo.migrate(await readFile("db/migrations/" + n, "utf8"));
         await repo.savePrincipal({ id: "existing", displayName: "Existing" });
