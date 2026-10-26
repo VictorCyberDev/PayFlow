@@ -15,7 +15,7 @@ const Config = z.object({
   PAYPAL_CLIENT_SECRET: z.string().min(1),
 });
 
-type App = { bootstrap: ConsolePayPalVaultBootstrap; close: () => Promise<void> };
+type App = { bootstrap: ConsolePayPalVaultBootstrap };
 let app: App | undefined;
 function createApp(): App {
   const c = Config.parse(process.env);
@@ -43,7 +43,6 @@ function createApp(): App {
       store,
       c.PAYFLOW_M5_ORIGIN,
     ),
-    close: () => sql.end(),
   };
 }
 
@@ -82,23 +81,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           ? req.headers["x-payflow-csrf"]
           : undefined,
     };
-    if (req.method === "GET" && action === "status") {
+    if (req.method === "GET" && action === "status")
       return json(res, 200, await app.bootstrap.status(meta));
-    }
     if (req.method !== "POST" || !["start", "complete"].includes(action ?? ""))
       return json(res, 405, { status: "UNAVAILABLE" });
     if (!req.headers["content-type"]?.startsWith("application/json"))
       return json(res, 415, { status: "UNAVAILABLE" });
-    const c = Config.parse(process.env);
-    const sessions = new DurableConsoleSessions(
-      postgres(c.DATABASE_URL, { max: 1, prepare: false }),
-      {
-        principalId: c.PAYFLOW_M5_PRINCIPAL_ID,
-        origin: c.PAYFLOW_M5_ORIGIN,
-        bootstrapKey: c.PAYFLOW_M5_BOOTSTRAP_KEY,
-      },
-    );
-    await sessions.mutation(meta, true);
     const parsed = await body(req);
     return json(
       res,
