@@ -153,15 +153,19 @@ export class PayPalVaultStore {
         and expires_at > ${now}
       returning setup_ciphertext, iv, auth_tag`;
     if (!row) throw new Error("PAYPAL_VAULT_SETUP_STATE_INVALID");
-    return z.string().min(1).max(255).parse(
-      unprotect(
-        row.setup_ciphertext as Uint8Array,
-        row.iv as Uint8Array,
-        row.auth_tag as Uint8Array,
-        this.key,
-        `payflow.m6.paypal.setup|${input.principalId}|${input.ownerSessionRef}|${digest(state)}`,
-      ),
-    );
+    return z
+      .string()
+      .min(1)
+      .max(255)
+      .parse(
+        unprotect(
+          row.setup_ciphertext as Uint8Array,
+          row.iv as Uint8Array,
+          row.auth_tag as Uint8Array,
+          this.key,
+          `payflow.m6.paypal.setup|${input.principalId}|${input.ownerSessionRef}|${digest(state)}`,
+        ),
+      );
   }
 }
 
