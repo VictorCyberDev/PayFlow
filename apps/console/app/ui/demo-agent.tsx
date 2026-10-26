@@ -101,8 +101,9 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
       {vaultConnected === false && (
         <div className="banner">
           <p>
-            Connect one Sandbox PayPal buyer once. This only saves the buyer&apos;s
-            Sandbox wallet for delegated testing; it does not make a purchase.
+            Connect one Sandbox PayPal buyer once. This only saves the
+            buyer&apos;s Sandbox wallet for delegated testing; it does not make
+            a purchase.
           </p>
           <button
             type="button"
