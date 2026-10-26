@@ -23,6 +23,7 @@ export function startPayPalVaultConnection(
   transport?: Transport,
 ): Promise<void>;
 export function completePayPalVaultConnection(
+  state: string,
   transport?: Transport,
 ): Promise<boolean>;
 export function runDemoScenario(
