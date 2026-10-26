@@ -27,7 +27,11 @@ export function deriveHostKeys(bootstrapKey: string) {
     Buffer.from(
       hkdfSync("sha256", bootstrapKey, "payflow.m5e-host.v1", info, 32),
     );
-  return { csrf: derive("csrf"), pending: derive("pending-challenge") };
+  return {
+    csrf: derive("csrf"),
+    pending: derive("pending-challenge"),
+    paymentInstrument: derive("m6-payment-instrument"),
+  };
 }
 
 type Handle = {
