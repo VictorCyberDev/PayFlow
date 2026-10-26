@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  PayPalOAuthClient,
-  PayPalPaymentProvider,
-  paypalDelegatedProviderFromEnv,
-} from "../src/paypal.js";
+import { PayPalOAuthClient, PayPalPaymentProvider } from "../src/paypal.js";
 import { StoredPayPalPaymentProvider } from "../src/paypal-vault-bootstrap.js";
 
 type Call = { url: string; body: unknown };
@@ -96,9 +92,9 @@ describe("M6 delegated PayPal instrument (Sandbox only)", () => {
     await expect(p.createOrder(order)).rejects.toThrow(
       "PAYPAL_DELEGATED_INSTRUMENT_REQUIRED",
     );
-    expect(
-      calls.some((c) => c.url.endsWith("/v2/checkout/orders")),
-    ).toBe(false);
+    expect(calls.some((c) => c.url.endsWith("/v2/checkout/orders"))).toBe(
+      false,
+    );
   });
   it("without an instrument the accepted payer-return behavior is unchanged", async () => {
     const { calls, fetcher } = recorder();
@@ -116,7 +112,7 @@ describe("M6 delegated PayPal instrument (Sandbox only)", () => {
       .body as { payment_source: { paypal: { experience_context: unknown } } };
     expect(sent.payment_source.paypal.experience_context).toBeDefined();
   });
-  it.each(["", " ", "a b", "x".repeat(65), "a/b", "a\nb", "a;b"])(
+  it.each(["", " ", "a b", "x".repeat(256), "a/b", "a\nb", "a;b"])(
     "rejects malformed instrument %j",
     (vaultId) => {
       const { fetcher } = recorder();
@@ -132,36 +128,40 @@ describe("M6 delegated PayPal instrument (Sandbox only)", () => {
       ).toThrow("PAYPAL_DELEGATED_INSTRUMENT_INVALID");
     },
   );
-  it("is Sandbox-only and requires an explicit instrument and credentials", () => {
-    const base = {
-      PAYPAL_ENVIRONMENT: "sandbox",
-      PAYPAL_CLIENT_ID: "id",
-      PAYPAL_CLIENT_SECRET: "s",
-      PAYPAL_DELEGATED_VAULT_ID: "VAULT-1",
-    };
-    expect(() =>
-      paypalDelegatedProviderFromEnv({ ...base, PAYPAL_ENVIRONMENT: "live" }),
+  it("accepts PayPal vault ids through 255 characters and rejects larger ids", () => {
+    const { fetcher } = recorder();
+    expect(
+      () =>
+        new PayPalPaymentProvider(
+          new PayPalOAuthClient("id", "secret", fetcher),
+          fetcher,
+          "sandbox",
+          undefined,
+          { vaultId: "A".repeat(255) },
+        ),
+    ).not.toThrow();
+    expect(
+      () =>
+        new PayPalPaymentProvider(
+          new PayPalOAuthClient("id", "secret", fetcher),
+          fetcher,
+          "sandbox",
+          undefined,
+          { vaultId: "A".repeat(256) },
+        ),
+    ).toThrow("PAYPAL_DELEGATED_INSTRUMENT_INVALID");
+  });
+  it("delegated instruments remain Sandbox-only", () => {
+    const { fetcher } = recorder();
+    expect(
+      () =>
+        new PayPalPaymentProvider(
+          new PayPalOAuthClient("id", "secret", fetcher),
+          fetcher,
+          "live",
+          undefined,
+          { vaultId: "VAULT-1" },
+        ),
     ).toThrow("PAYPAL_2D_SANDBOX_ONLY");
-    expect(() =>
-      paypalDelegatedProviderFromEnv({
-        ...base,
-        PAYPAL_ENVIRONMENT: undefined,
-      }),
-    ).toThrow("PAYPAL_2D_SANDBOX_ONLY");
-    expect(() =>
-      paypalDelegatedProviderFromEnv({
-        ...base,
-        PAYPAL_DELEGATED_VAULT_ID: undefined,
-      }),
-    ).toThrow("PAYPAL_DELEGATED_INSTRUMENT_REQUIRED");
-    expect(() =>
-      paypalDelegatedProviderFromEnv({
-        ...base,
-        PAYPAL_CLIENT_SECRET: undefined,
-      }),
-    ).toThrow("PAYPAL_CREDENTIALS_REQUIRED");
-    expect(paypalDelegatedProviderFromEnv(base)).toBeInstanceOf(
-      PayPalPaymentProvider,
-    );
   });
 });

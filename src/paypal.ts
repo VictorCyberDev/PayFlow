@@ -307,7 +307,7 @@ export class PayPalPaymentProvider implements PaymentProvider {
   ) {
     if (
       delegatedInstrument &&
-      !/^[A-Za-z0-9_-]{1,64}$/.test(delegatedInstrument.vaultId)
+      !/^[A-Za-z0-9_-]{1,255}$/.test(delegatedInstrument.vaultId)
     )
       throw new Error("PAYPAL_DELEGATED_INSTRUMENT_INVALID");
     this.delegatedVaultId = delegatedInstrument?.vaultId;
@@ -1561,27 +1561,5 @@ export function paypalProviderFromEnv(
     fetcher,
     env.PAYPAL_ENVIRONMENT,
     { returnUrl, cancelUrl },
-  );
-}
-
-/** M6 delegated (human-not-present) provider: Sandbox only, pre-approved instrument required. */
-export function paypalDelegatedProviderFromEnv(
-  env: NodeJS.ProcessEnv = process.env,
-  fetcher: FetchLike = fetch,
-): PayPalPaymentProvider {
-  if (env.PAYPAL_ENVIRONMENT !== "sandbox")
-    throw new Error("PAYPAL_2D_SANDBOX_ONLY");
-  const vaultId = env.PAYPAL_DELEGATED_VAULT_ID;
-  if (!vaultId) throw new Error("PAYPAL_DELEGATED_INSTRUMENT_REQUIRED");
-  return new PayPalPaymentProvider(
-    new PayPalOAuthClient(
-      env.PAYPAL_CLIENT_ID ?? "",
-      env.PAYPAL_CLIENT_SECRET ?? "",
-      fetcher,
-    ),
-    fetcher,
-    env.PAYPAL_ENVIRONMENT,
-    undefined,
-    { vaultId },
   );
 }
