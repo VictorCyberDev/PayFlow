@@ -241,10 +241,7 @@ export class ConsolePayPalVaultBootstrap {
     };
   }
   async complete(req: ConsoleRequest, raw: unknown) {
-    const body = z
-      .object({ state: callbackStateSchema })
-      .strict()
-      .parse(raw);
+    const body = z.object({ state: callbackStateSchema }).strict().parse(raw);
     const context = await this.sessions.mutation(req, true);
     const principal = await this.sessions.requirePrincipal(context);
     const ownerSessionRef = this.sessions.ownerRef(context);
