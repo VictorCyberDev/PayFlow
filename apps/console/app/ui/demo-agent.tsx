@@ -2,8 +2,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
+  completePayPalVaultConnection,
   fetchDemoAgentStatus,
+  fetchPayPalVaultStatus,
   runDemoScenario,
+  startPayPalVaultConnection,
   type DemoOutcome,
   type DemoScenario,
 } from "../../lib/demo-agent-client.mjs";
@@ -22,17 +25,53 @@ const result: Record<DemoOutcome["status"], string> = {
 export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
   const { retry } = useConsole();
   const [offer, setOffer] = useState<{ payment: string } | null>(null);
+  const [vaultConnected, setVaultConnected] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<DemoOutcome | "ERROR" | null>(null);
+
   useEffect(() => {
     let live = true;
-    void fetchDemoAgentStatus().then((s) => live && setOffer(s));
+    void Promise.all([fetchDemoAgentStatus(), fetchPayPalVaultStatus()]).then(
+      ([agent, vault]) => {
+        if (!live) return;
+        setOffer(agent);
+        setVaultConnected(vault);
+      },
+    );
     return () => {
       live = false;
     };
   }, []);
+
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    if (u.searchParams.get("paypal") !== "approved") return;
+    setBusy(true);
+    void completePayPalVaultConnection()
+      .then((ok) => {
+        setVaultConnected(ok);
+        setOutcome(ok ? null : "ERROR");
+        u.searchParams.delete("paypal");
+        window.history.replaceState({}, "", u.pathname + u.search + u.hash);
+      })
+      .catch(() => setOutcome("ERROR"))
+      .finally(() => setBusy(false));
+  }, []);
+
   if (!offer) return null;
-  const connected = offer.payment === "SANDBOX_CONNECTED";
+  const paymentRailConnected = offer.payment === "SANDBOX_CONNECTED";
+
+  async function connectWallet() {
+    setBusy(true);
+    setOutcome(null);
+    try {
+      await startPayPalVaultConnection();
+    } catch {
+      setBusy(false);
+      setOutcome("ERROR");
+    }
+  }
+
   async function run(scenario: DemoScenario) {
     setBusy(true);
     setOutcome(null);
@@ -45,6 +84,7 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
       retry();
     }
   }
+
   return (
     <section className="block demo-agent" aria-labelledby="try-agent">
       <h2 id="try-agent" className="label">
@@ -54,11 +94,36 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
         Simulate your Shopping Agent finding a keyboard. It acts without asking
         you, but only inside this Authority.
       </p>
+
+      {vaultConnected === false && (
+        <div className="banner">
+          <p>
+            Connect one Sandbox PayPal buyer once. This only saves the buyer&apos;s
+            Sandbox wallet for delegated testing; it does not make a purchase.
+          </p>
+          <button
+            type="button"
+            className="btn btn--quiet"
+            disabled={busy}
+            onClick={() => void connectWallet()}
+          >
+            Connect Sandbox PayPal
+          </button>
+        </div>
+      )}
+
+      {vaultConnected === true && !paymentRailConnected && (
+        <p className="note">
+          Sandbox wallet approved and stored securely. The payment rail is still
+          disabled until final M6 acceptance wiring is enabled.
+        </p>
+      )}
+
       <p className="actions">
         <button
           type="button"
           className="btn btn--quiet"
-          disabled={busy || !connected}
+          disabled={busy || !paymentRailConnected}
           onClick={() => void run("VALID_PURCHASE")}
         >
           Agent finds an $84 keyboard
@@ -72,14 +137,14 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
           Agent finds a $184 keyboard
         </button>
       </p>
-      {!connected && (
+      {!paymentRailConnected && vaultConnected !== true && (
         <p className="note">
           Payments aren&apos;t connected in this demo, so only the blocked case
           can run.
         </p>
       )}
       <div role="status" aria-live="polite" aria-busy={busy}>
-        {busy && <p className="note">Your Agent is shopping…</p>}
+        {busy && <p className="note">Working…</p>}
         {outcome === "ERROR" && (
           <p className="banner">That didn&apos;t run. Nothing changed.</p>
         )}
