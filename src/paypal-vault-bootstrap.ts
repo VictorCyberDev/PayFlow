@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  randomUUID,
+} from "node:crypto";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import type { ConsoleRequest, ConsoleSessionPort } from "./console-session.js";
@@ -9,14 +14,18 @@ const vaultIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,255}$/);
 const setupSchema = z.object({
   id: z.string().min(1).max(255),
   links: z.array(
-    z.object({ href: z.string().url().max(4000), rel: z.string().min(1).max(64) }),
+    z.object({
+      href: z.string().url().max(4000),
+      rel: z.string().min(1).max(64),
+    }),
   ),
 });
 const tokenSchema = z.object({ id: vaultIdSchema });
 
 async function jsonBody(r: Response, maximum = 65536): Promise<unknown> {
   const text = await r.text();
-  if (Buffer.byteLength(text, "utf8") > maximum) throw new Error("PAYPAL_BODY_LIMIT");
+  if (Buffer.byteLength(text, "utf8") > maximum)
+    throw new Error("PAYPAL_BODY_LIMIT");
   return JSON.parse(text) as unknown;
 }
 
@@ -39,7 +48,10 @@ export class PayPalVaultStore {
     const iv = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", this.key, iv);
     cipher.setAAD(Buffer.from(`payflow.m6.paypal|${principalId}`, "utf8"));
-    const ciphertext = Buffer.concat([cipher.update(vaultId, "utf8"), cipher.final()]);
+    const ciphertext = Buffer.concat([
+      cipher.update(vaultId, "utf8"),
+      cipher.final(),
+    ]);
     const authTag = cipher.getAuthTag();
     const now = this.clock();
     await this.sql`
@@ -54,7 +66,11 @@ export class PayPalVaultStore {
       select ciphertext, iv, auth_tag from console_demo_payment_instruments
       where principal_id=${principalId} and provider='PAYPAL_SANDBOX'`;
     if (!row) return null;
-    const decipher = createDecipheriv("aes-256-gcm", this.key, Buffer.from(row.iv as Uint8Array));
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      this.key,
+      Buffer.from(row.iv as Uint8Array),
+    );
     decipher.setAAD(Buffer.from(`payflow.m6.paypal|${principalId}`, "utf8"));
     decipher.setAuthTag(Buffer.from(row.auth_tag as Uint8Array));
     const plaintext = Buffer.concat([
@@ -77,7 +93,10 @@ export class ConsolePayPalVaultBootstrap {
   async status(req: ConsoleRequest) {
     const context = await this.sessions.read(req);
     const principal = await this.sessions.requirePrincipal(context);
-    return { version: "payflow.paypal-vault-status.v1", connected: await this.store.has(principal) };
+    return {
+      version: "payflow.paypal-vault-status.v1",
+      connected: await this.store.has(principal),
+    };
   }
   async start(req: ConsoleRequest, raw: unknown) {
     z.object({}).strict().parse(raw);
@@ -114,12 +133,22 @@ export class ConsolePayPalVaultBootstrap {
     if (!r.ok) throw new Error("PAYPAL_VAULT_SETUP_REJECTED");
     const parsed = setupSchema.parse(await jsonBody(r));
     const approvalUrl = parsed.links.find((x) => x.rel === "approve")?.href;
-    if (!approvalUrl || new URL(approvalUrl).hostname !== "www.sandbox.paypal.com")
+    if (
+      !approvalUrl ||
+      new URL(approvalUrl).hostname !== "www.sandbox.paypal.com"
+    )
       throw new Error("PAYPAL_VAULT_APPROVAL_URL_INVALID");
-    return { version: "payflow.paypal-vault-start.v1", setupTokenId: parsed.id, approvalUrl };
+    return {
+      version: "payflow.paypal-vault-start.v1",
+      setupTokenId: parsed.id,
+      approvalUrl,
+    };
   }
   async complete(req: ConsoleRequest, raw: unknown) {
-    const body = z.object({ setupTokenId: z.string().min(1).max(255) }).strict().parse(raw);
+    const body = z
+      .object({ setupTokenId: z.string().min(1).max(255) })
+      .strict()
+      .parse(raw);
     const context = await this.sessions.mutation(req, true);
     const principal = await this.sessions.requirePrincipal(context);
     const access = await this.oauth.accessToken();
@@ -132,12 +161,17 @@ export class ConsolePayPalVaultBootstrap {
         "PayPal-Request-Id": randomUUID(),
       },
       body: JSON.stringify({
-        payment_source: { token: { id: body.setupTokenId, type: "SETUP_TOKEN" } },
+        payment_source: {
+          token: { id: body.setupTokenId, type: "SETUP_TOKEN" },
+        },
       }),
     });
     if (!r.ok) throw new Error("PAYPAL_VAULT_EXCHANGE_REJECTED");
     const parsed = tokenSchema.parse(await jsonBody(r));
     await this.store.put(principal, parsed.id);
-    return { version: "payflow.paypal-vault-complete.v1", connected: true };
+    return {
+      version: "payflow.paypal-vault-complete.v1",
+      connected: true,
+    };
   }
 }
