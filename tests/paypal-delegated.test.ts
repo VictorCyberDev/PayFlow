@@ -4,6 +4,7 @@ import {
   PayPalPaymentProvider,
   paypalDelegatedProviderFromEnv,
 } from "../src/paypal.js";
+import { StoredPayPalPaymentProvider } from "../src/paypal-vault-bootstrap.js";
 
 type Call = { url: string; body: unknown };
 /** Records requests; answers OAuth, then fails the order call so we can inspect what was sent. */
@@ -57,6 +58,45 @@ describe("M6 delegated PayPal instrument (Sandbox only)", () => {
     expect(JSON.stringify(sent)).not.toMatch(
       /return_url|cancel_url|experience_context/,
     );
+  });
+  it("stored owner instrument is loaded server-side at create time and never needed for observe/capture", async () => {
+    const { calls, fetcher } = recorder();
+    const store = {
+      has: () => Promise.resolve(true),
+      get: (principal: string) =>
+        Promise.resolve(principal === "owner-1" ? "VAULT_STORED_1" : null),
+    };
+    const p = new StoredPayPalPaymentProvider(
+      new PayPalOAuthClient("id", "secret", fetcher),
+      store as never,
+      "owner-1",
+      fetcher,
+    );
+    expect(await p.connected()).toBe(true);
+    await p.createOrder(order).catch(() => undefined);
+    const sent = calls.find((c) => c.url.endsWith("/v2/checkout/orders"))!
+      .body as { payment_source?: unknown };
+    expect(sent.payment_source).toEqual({
+      paypal: { vault_id: "VAULT_STORED_1" },
+    });
+    expect(JSON.stringify(sent)).not.toMatch(/return_url|cancel_url/);
+  });
+  it("stored provider fails before provider order creation when the owner has no approved instrument", async () => {
+    const { calls, fetcher } = recorder();
+    const p = new StoredPayPalPaymentProvider(
+      new PayPalOAuthClient("id", "secret", fetcher),
+      {
+        has: () => Promise.resolve(false),
+        get: () => Promise.resolve(null),
+      } as never,
+      "owner-1",
+      fetcher,
+    );
+    expect(await p.connected()).toBe(false);
+    await expect(p.createOrder(order)).rejects.toThrow(
+      "PAYPAL_DELEGATED_INSTRUMENT_REQUIRED",
+    );
+    expect(calls.some((c) => c.url.endsWith("/v2/checkout/orders"))).toBe(false);
   });
   it("without an instrument the accepted payer-return behavior is unchanged", async () => {
     const { calls, fetcher } = recorder();
