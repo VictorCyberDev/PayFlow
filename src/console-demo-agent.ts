@@ -24,7 +24,7 @@ export class ConsoleDemoAgent {
       version: "payflow.demo-agent-status.v1",
       mode: "NON_PRODUCTION_DEMO",
       scenarios: ["VALID_PURCHASE", "PRICE_DRIFT"],
-      payment: this.agent.paymentConnected
+      payment: (await this.agent.paymentAvailable())
         ? "SANDBOX_CONNECTED"
         : "NOT_CONNECTED",
     };
