@@ -7,12 +7,19 @@
   "outputDirectory": "public",
   "rewrites": [
     {
+      "source": "/api/paypal-vault/:action",
+      "destination": "/api/vault?action=:action"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/host"
     }
   ],
   "functions": {
     "api/host.ts": {
+      "maxDuration": 15
+    },
+    "api/vault.ts": {
       "maxDuration": 15
     }
   },
