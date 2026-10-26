@@ -52,11 +52,11 @@ const provision = (databaseUrl: string) =>
       await admin.close();
     });
 
-    it("provisions an empty database once, idempotently: migrations 001-010, one principal, one passport, one policy", async () => {
+    it("provisions an empty database once, idempotently: every forward-only migration (001-011), one principal, one passport, one policy", async () => {
       const target = await freshDatabase();
       const first = await provision(target);
       expect(first.code).toBe(0);
-      expect(first.out).toMatch(/applied migrations: 10/);
+      expect(first.out).toMatch(/applied migrations: 11/);
       expect(first.out).not.toContain(target);
       const second = await provision(target);
       expect(second.code).toBe(0);
