@@ -19,6 +19,21 @@ const STATUSES = [
 ];
 const EFFECTS = ["NONE", "CAPTURED", "UNKNOWN"];
 export const SCENARIOS = ["VALID_PURCHASE", "PRICE_DRIFT"];
+const SETUP_KEY = "payflow.m6.paypal.setup";
+
+async function mutation(path, body, transport = transportDefault) {
+  const session = await transport("/api/activation/session");
+  if (session?.authenticated !== true || typeof session.csrfToken !== "string")
+    throw new Error("session");
+  return transport(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-PayFlow-CSRF": session.csrfToken,
+    },
+    body: JSON.stringify(body),
+  });
+}
 
 /** Null when the host does not offer the demo agent (for example the accepted M5 host). */
 export async function fetchDemoAgentStatus(transport = transportDefault) {
@@ -36,6 +51,49 @@ export async function fetchDemoAgentStatus(transport = transportDefault) {
   }
 }
 
+export async function fetchPayPalVaultStatus(transport = transportDefault) {
+  try {
+    const s = await transport("/api/paypal-vault/status");
+    if (s?.version !== "payflow.paypal-vault-status.v1" || typeof s.connected !== "boolean")
+      return null;
+    return s.connected;
+  } catch {
+    return null;
+  }
+}
+
+export async function startPayPalVaultConnection(transport = transportDefault) {
+  const r = await mutation("/api/paypal-vault/start", {}, transport);
+  if (
+    r?.version !== "payflow.paypal-vault-start.v1" ||
+    typeof r.setupTokenId !== "string" ||
+    typeof r.approvalUrl !== "string"
+  )
+    throw new Error("invalid");
+  const u = new URL(r.approvalUrl);
+  if (u.protocol !== "https:" || u.hostname !== "www.sandbox.paypal.com")
+    throw new Error("invalid");
+  sessionStorage.setItem(SETUP_KEY, r.setupTokenId);
+  window.location.assign(r.approvalUrl);
+}
+
+/** Called after PayPal returns to the static console. The temporary setup token stays only in
+ * sessionStorage and is deleted whether exchange succeeds or fails. */
+export async function completePayPalVaultConnection(transport = transportDefault) {
+  const setupTokenId = sessionStorage.getItem(SETUP_KEY);
+  if (!setupTokenId) return false;
+  try {
+    const r = await mutation(
+      "/api/paypal-vault/complete",
+      { setupTokenId },
+      transport,
+    );
+    return r?.version === "payflow.paypal-vault-complete.v1" && r.connected === true;
+  } finally {
+    sessionStorage.removeItem(SETUP_KEY);
+  }
+}
+
 export async function runDemoScenario(
   mandateId,
   scenario,
@@ -43,17 +101,11 @@ export async function runDemoScenario(
 ) {
   if (!SCENARIOS.includes(scenario) || typeof mandateId !== "string")
     throw new Error("invalid");
-  const session = await transport("/api/activation/session");
-  if (session?.authenticated !== true || typeof session.csrfToken !== "string")
-    throw new Error("session");
-  const r = await transport("/api/demo-agent/attempt", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-PayFlow-CSRF": session.csrfToken,
-    },
-    body: JSON.stringify({ scenario, mandateId }),
-  });
+  const r = await mutation(
+    "/api/demo-agent/attempt",
+    { scenario, mandateId },
+    transport,
+  );
   if (
     r?.version !== "payflow.demo-agent-outcome.v1" ||
     !STATUSES.includes(r.status) ||
@@ -70,20 +122,7 @@ export async function runDemoScenario(
 /** Asks the system to resolve uncertain payments. Returns false on any failure; never throws. */
 export async function reconcileDemo(transport = transportDefault) {
   try {
-    const session = await transport("/api/activation/session");
-    if (
-      session?.authenticated !== true ||
-      typeof session.csrfToken !== "string"
-    )
-      return false;
-    const r = await transport("/api/demo-agent/reconcile", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-PayFlow-CSRF": session.csrfToken,
-      },
-      body: "{}",
-    });
+    const r = await mutation("/api/demo-agent/reconcile", {}, transport);
     return r?.version === "payflow.demo-agent-reconcile.v1";
   } catch {
     return false;
