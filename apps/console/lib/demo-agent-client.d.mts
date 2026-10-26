@@ -12,10 +12,13 @@ type Transport = (
     headers?: Record<string, string>;
     body?: string;
   },
-) => Promise<unknown>;
+) => Promise<any>;
 export function fetchDemoAgentStatus(
   transport?: Transport,
 ): Promise<{ payment: "SANDBOX_CONNECTED" | "NOT_CONNECTED" } | null>;
+export function fetchPayPalVaultStatus(transport?: Transport): Promise<boolean | null>;
+export function startPayPalVaultConnection(transport?: Transport): Promise<void>;
+export function completePayPalVaultConnection(transport?: Transport): Promise<boolean>;
 export function runDemoScenario(
   mandateId: string,
   scenario: DemoScenario,
