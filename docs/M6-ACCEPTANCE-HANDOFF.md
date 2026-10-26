@@ -1,112 +1,96 @@
 # M6 Acceptance Handoff — Delegated / Human-Not-Present Commerce
 
-Status: **BLOCKED ONLY ON OWNER-RUN LIVE PAYPAL SANDBOX ACCEPTANCE**
+Status: **IMPLEMENTATION + REGRESSION HARDENING COMPLETE; LIVE PAYPAL SANDBOX ACCEPTANCE STILL REQUIRED**
 
-M6 implementation, deterministic verification, browser verification, isolated hosted environment, and hosted configuration checks are complete. **Do not merge PR #16 and do not start M7 until the fresh live PayPal Sandbox acceptance below ends in `M6 SANDBOX ACCEPTANCE: PASS`.**
+PR #16 must remain unmerged and M7 must remain unstarted until the isolated hosted wallet bootstrap and fresh live Sandbox execution end in `M6 SANDBOX ACCEPTANCE: PASS`, independent review finds no blocking defect, and the merge decision is explicitly made.
 
-## Pull request and tested implementation
+## Pull request
 
 - Repository: `VictorCyberDev/PayFlow`
 - PR: `#16 — M6 — Delegated / Human-Not-Present Commerce`
 - Branch: `m6-delegated-human-not-present-commerce`
-- Base: `main`
-- Tested implementation evidence SHA: `6c22e922de0e027a7a4547d090851325fbdfc45b`
-- GitHub Actions run: `40035436670`
-- PR state at handoff: Draft, open, mergeable, unmerged
+- Base: `main` at `880a890f9e0735d03ee7e0de625907e408f5fc73`
+- PR state: Draft, open, mergeable, unmerged
 - M7: **not started**
 
-The GitHub Actions run above completed successfully across:
+## Verification state
 
-- console lint / typecheck / tests / production build
-- console Chromium E2E
-- root format check / lint / typecheck
-- unit tests
-- isolated PostgreSQL integration tests
-- coverage gate and bounded coverage evidence export
-- production dependency audit (`npm audit --omit=dev --audit-level=high`)
-- root production build
+The repaired M6 branch has passed exact-head GitHub verification across:
 
-No M6 schema migration was added. Historical migrations `001`–`010` remain unchanged.
+- root format, lint, typecheck, unit tests, PostgreSQL integration tests, coverage, production dependency audit, and build;
+- console lint, typecheck, tests, and production build;
+- Chromium E2E.
+
+After the first green exact-head run, additional regression coverage was added specifically to lock the repaired wallet boundary:
+
+- browser callback POST contains only random `state` and never setup token / vault id / credentials;
+- stored owner wallet is loaded server-side at order-create time;
+- missing owner wallet fails before a PayPal order is created;
+- hosted Agent payment readiness follows durable wallet state, not environment-variable presence.
+
+The final PR head must be green again after these hardening/documentation commits before deployment evidence is accepted.
+
+## M6 persistence and security boundary
+
+M6 now contains two additive forward-only migrations:
+
+- `011_m6_delegated_payment_instrument.sql` — AES-256-GCM encrypted owner-bound PayPal delegated instrument;
+- `012_m6_paypal_vault_setup_state.sql` — AES-256-GCM encrypted, ten-minute, one-time setup token bound to principal + authenticated durable console session + random callback state digest.
+
+The browser never receives the PayPal setup token or stored vault id. PayPal callback completion accepts only a 43-character random state token. The corresponding setup row is atomically claimed once, then exchanged server-side. The resulting payment token is stored encrypted and owner-bound.
 
 ## Hosted M6 acceptance environment
 
-M6 has a dedicated hosted acceptance environment. It does **not** reuse or mutate the M5 deployment.
+Dedicated acceptance environment only; historical M5 deployment and financial evidence are not reused.
 
 - Stable URL: `https://payflow-m6-acceptance.vercel.app`
 - Vercel project: `payflow-m6-acceptance`
-- Verified production deployment ID: `dpl_33hvVQhTgvKDzYhQCUw219wdfVn4`
-- Verified deployment source SHA: `6c22e922de0e027a7a4547d090851325fbdfc45b`
-- Dedicated hosting root: `hosting/m6/`
+- Hosting root: `hosting/m6/`
 - Historical M5 hosting root remains `hosting/m5/`
 
-Hosted verification completed:
+The next deployment must be proven to come from the final green PR head before live acceptance proceeds.
 
-1. Stable M6 URL returns HTTP 200 and the current PayFlow console.
-2. Static responses send `Access-Control-Allow-Origin: https://payflow-m6-acceptance.vercel.app`.
-3. Security headers include CSP, HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, a restrictive Permissions Policy, and `Referrer-Policy: no-referrer`.
-4. Protected API access without a valid owner session fails closed with `{"status":"UNAVAILABLE"}`.
-5. M5 and M6 hosting origins are now independently locked by regression coverage so an M6 deploy cannot silently inherit the historical M5 origin.
+Required host configuration remains private and must not be pasted into chat, committed, or printed:
 
-## Isolated Neon state
-
-A dedicated Neon project named `payflow-m6-acceptance` is provisioned for M6 acceptance.
-
-Verified state at handoff:
-
-- 30 public tables
-- one seeded principal
-- one seeded Agent passport
-- Authorities created and revoked by the hosted browser acceptance (5 Mandates, all revoked; 1 proven zero-effect quote refusal) — authority records only
-- no transaction proposals
-- no authorization reservations
-- no execution grants
-- no payment attempts
-- no provider observations / financial history
-
-This database is isolated from historical M4/M5 payment evidence and is clean for the final live M6 acceptance. The live operator script refuses only on payment history (attempts, reservations, grants, proposals, provider observations), all of which are zero here.
-
-## Hosted browser acceptance (`npm run test:hosted` in `apps/console`)
-
-Run against `https://payflow-m6-acceptance.vercel.app`: **7 / 7 passed** — HTTPS and cookie properties, the full create → confirm → Active → reload → revoke journey, the M6 demo Agent, hosted adversarial cases (cookie, CSRF, origin, principal injection, term tampering, replay), secret review of the client bundle and every response, 375 px mobile, and the host-header check.
-
-The M6 demo Agent test proves the hosted deployment is honest about its missing payment rail: the `$84` purchase is disabled with "Payments aren't connected in this demo", and the `$184` price-drift case is blocked with `$0 moved`. Database check afterwards: 1 durable quote refusal; **0** proposals, reservations, grants, payment attempts and provider observations.
-
-Two defects found and fixed by this run: the `trailingSlash` setting required by the static pages also redirected `/api/*` to a slash-terminated path the host does not match (adapter now normalizes it, covered by `tests/hosting-m5.integration.test.ts`), and the harness's raw HTTP helper did not follow that redirect.
-
-## What is already proven without live PayPal credentials
-
-The deterministic and integration suites cover the required M6 authority behavior, including:
-
-- valid `$84` compliant delegated purchase → one authorized provider effect in the deterministic rail
-- `$184` price drift vs `$100` maximum → `$0 moved`
-- used / refurbished item denial
-- wrong merchant, product, condition, quantity, currency or capability denial
-- revoked / expired Authority and suspended Agent → zero new provider effect
-- revoke / suspend / expire after grant but before dispatch → execution boundary refuses the effect
-- grant replay / expiry / tamper / re-scope defenses
-- four-way concurrency against a one-keyboard / `$100` Authority → one winner
-- provider ambiguity quarantine and reconciliation without duplicate capture
-- Activity projection distinguishes delegated completion from human-resumed completion
-- owner isolation and hosted demo-agent boundaries
-- browser journeys including revoked Authority, ambiguous outcome reconciliation, and 375 px mobile
-
-The remaining live run is therefore a provider-conformance acceptance of the real Sandbox delegated instrument path, not a substitute for the deterministic authority tests.
-
-## Remaining hard gate — fresh live PayPal Sandbox `$84` capture
-
-The account owner must supply the following **outside chat and outside the repository** through a secure local/operator environment:
-
+- `DATABASE_URL`
+- `PAYFLOW_M5_PRINCIPAL_ID`
+- `PAYFLOW_M5_AGENT_ID`
+- `PAYFLOW_M5_BOOTSTRAP_KEY`
+- `PAYFLOW_M5_ORIGIN=https://payflow-m6-acceptance.vercel.app`
+- `PAYFLOW_M6_DEMO_AGENT=true`
+- `PAYFLOW_M6_SIGNING_KEY` (persistent Ed25519 PKCS#8 PEM)
+- `PAYPAL_ENVIRONMENT=sandbox`
 - `PAYPAL_CLIENT_ID`
 - `PAYPAL_CLIENT_SECRET`
-- `PAYPAL_ENVIRONMENT=sandbox`
-- `PAYPAL_EXPECTED_MERCHANT_ID` — the real 13-character Sandbox merchant ID PayFlow must verify
-- `PAYPAL_DELEGATED_VAULT_ID` — a pre-approved Sandbox buyer PayPal wallet/vault instrument
-- `PAYFLOW_M6_SIGNING_KEY` — persistent Ed25519 PKCS#8 PEM signing key
-- `DATABASE_URL` — the fresh isolated M6 acceptance database
+- `PAYPAL_EXPECTED_MERCHANT_ID` (real 13-character Sandbox merchant id)
 
-Do **not** paste these values into chat, commit them to GitHub, or print them into CI logs.
+`PAYPAL_DELEGATED_VAULT_ID` is **not** part of the hosted acceptance configuration anymore. The owner creates the delegated instrument through the one-time hosted wallet bootstrap, and the Agent consumes that encrypted database record.
 
-Run from a machine with network access to the isolated database:
+## Remaining live acceptance sequence
+
+### Gate A — exact-head deployment
+
+1. Confirm the final PR head is green across all CI jobs.
+2. Deploy that exact commit to the dedicated M6 Vercel project.
+3. Verify the deployment source SHA and stable acceptance alias.
+4. Verify static security headers and fail-closed unauthenticated API behavior.
+
+### Gate B — one-time owner wallet approval
+
+From the authenticated M6 console, the owner selects **Connect Sandbox PayPal** and completes PayPal Sandbox payer approval once.
+
+Acceptance requirements:
+
+- start response contains only `approvalUrl`; no setup token;
+- PayPal returns with random `state` only;
+- completion stores one encrypted owner payment instrument;
+- `/api/paypal-vault/status` becomes `connected: true` for that owner;
+- `/api/demo-agent/status` becomes `SANDBOX_CONNECTED` because the durable instrument exists;
+- no purchase occurs during wallet setup.
+
+### Gate C — true delegated execution
+
+Run the hardened acceptance runner against the same isolated database and hosted owner/Agent identity:
 
 ```bash
 RUN_M6_SANDBOX_ACCEPTANCE=true \
@@ -114,40 +98,48 @@ DATABASE_URL='…' \
 PAYPAL_ENVIRONMENT=sandbox \
 PAYPAL_CLIENT_ID='…' \
 PAYPAL_CLIENT_SECRET='…' \
-PAYPAL_DELEGATED_VAULT_ID='…' \
 PAYPAL_EXPECTED_MERCHANT_ID='…' \
+PAYFLOW_M5_PRINCIPAL_ID='…' \
+PAYFLOW_M5_AGENT_ID='…' \
+PAYFLOW_M5_BOOTSTRAP_KEY='…' \
 PAYFLOW_M6_SIGNING_KEY="$(cat key.pem)" \
 npm run acceptance:m6:sandbox
 ```
 
-The operator script must prove all of the following in one fresh acceptance run:
+The runner refuses a database with prior financial history and refuses when the owner has no approved stored instrument.
 
-- one real `$84.00 USD` PayPal Sandbox delegated purchase
-- no human approval step during the delegated execution
-- exactly one provider capture
-- no duplicate capture on a second/replay attempt
-- durable reservation ends `COMMITTED`
-- one-time execution grant ends `CONSUMED`
-- payment attempt is terminally captured / reconciled truthfully
-- Operation Trace verdict is `VERIFIED`
-- output terminates with `M6 SANDBOX ACCEPTANCE: PASS`
+A PASS requires all of the following:
 
-If any of those checks fail, M6 remains incomplete and PR #16 remains unmerged.
+- `$84.00 USD` outcome `COMPLETED`;
+- `askedHuman === false` during delegated execution;
+- exactly one PayPal order;
+- exactly one PayPal capture;
+- second attempt adds zero captures and does not complete;
+- payment attempt `CAPTURED`;
+- reservation `COMMITTED` for 8400 minor units;
+- execution grant `CONSUMED`;
+- live provider order terminally `COMPLETED` with exactly one capture;
+- Operation Trace `VERIFIED`;
+- output terminates with `M6 SANDBOX ACCEPTANCE: PASS`.
 
-## After the live PASS
+### Gate D — zero-effect drift
 
-Only after the operator script prints `M6 SANDBOX ACCEPTANCE: PASS`:
+On the hosted console, the `$184` trusted-price drift scenario must remain blocked before provider effect and project `$0 moved` in Activity/Trust Trace.
 
-1. Record only non-secret acceptance evidence needed for independent review (for example the Sandbox order/capture identifiers and script verdict). Never record credentials or signing-key material.
-2. Re-run / confirm CI on the final PR head if the branch changed.
-3. Update this handoff with the live acceptance evidence.
-4. Perform independent review of PR #16.
-5. Mark the PR ready only if the review has no unresolved blocking findings.
-6. Merge M6 only after explicit merge authorization.
-7. Start M7 only after M6 is merged and the accepted M6 evidence is preserved.
+### Gate E — independent review and merge decision
+
+After live PASS only:
+
+1. Preserve non-secret acceptance evidence: exact commit SHA, deployment ID/URL, Sandbox order id, capture id, bounded call counts, reservation/grant/payment terminal states, Trace verdict, and `$184` zero-effect evidence.
+2. Review the full PR diff independently for authority widening, browser-held authority, secret leakage, replay gaps, provider retry ambiguity, owner isolation, and stale docs/config.
+3. Resolve every blocking finding.
+4. Re-run final CI if review changes code.
+5. Mark PR ready for review only when all gates remain clean.
+6. Merge only after the merge decision is explicitly authorized.
+7. Start M7 only from the merged M6 state.
 
 ## Non-regression boundary
 
-M6 does not redesign or replace the accepted M1–M5 Trust Kernel, AgentPassport, Mandate, deterministic authorization, durable reservations/accounting, Ed25519 one-time grants, payment attempts, PayPal UNKNOWN/reconciliation/provider-conformance logic, trusted quote/sealed manifest, payer-return revalidation, EvidenceLedger, OperationTraceService, Authority projections, or owner/session controls.
+M6 does not redesign the accepted M1–M5 Trust Kernel, AgentPassport, Mandate, deterministic authorization, durable reservations/accounting, Ed25519 one-time grants, payment-attempt state machine, PayPal UNKNOWN/reconciliation logic, trusted quote/sealed manifest, EvidenceLedger, OperationTraceService, Authority projections, or owner/session controls.
 
-Browser return and hosted UI state remain notifications/projections, never financial truth. External systems remain inputs/evidence and never silently become financial authority.
+Browser returns, UI state, PayPal setup approval, and provider observations are inputs/evidence. None independently grants financial authority.
