@@ -7,7 +7,7 @@ import {
 import type { Sql } from "postgres";
 import { z } from "zod";
 import type { ConsoleRequest, ConsoleSessionPort } from "./console-session.js";
-import { PayPalOAuthClient } from "./paypal.js";
+import type { PayPalOAuthClient } from "./paypal.js";
 
 const BASE = "https://api-m.sandbox.paypal.com";
 const vaultIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,255}$/);
