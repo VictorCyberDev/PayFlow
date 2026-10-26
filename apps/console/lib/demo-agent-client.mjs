@@ -19,7 +19,6 @@ const STATUSES = [
 ];
 const EFFECTS = ["NONE", "CAPTURED", "UNKNOWN"];
 export const SCENARIOS = ["VALID_PURCHASE", "PRICE_DRIFT"];
-const SETUP_KEY = "payflow.m6.paypal.setup";
 
 async function mutation(path, body, transport = transportDefault) {
   const session = await transport("/api/activation/session");
@@ -65,40 +64,34 @@ export async function fetchPayPalVaultStatus(transport = transportDefault) {
   }
 }
 
+/** Starts the one-time payer-present bootstrap. The PayPal setup token remains server-side; the
+ * browser receives only the provider approval URL. */
 export async function startPayPalVaultConnection(transport = transportDefault) {
   const r = await mutation("/api/paypal-vault/start", {}, transport);
   if (
-    r?.version !== "payflow.paypal-vault-start.v1" ||
-    typeof r.setupTokenId !== "string" ||
-    typeof r.approvalUrl !== "string"
+    r?.version !== "payflow.paypal-vault-start.v2" ||
+    typeof r.approvalUrl !== "string" ||
+    "setupTokenId" in r
   )
     throw new Error("invalid");
   const u = new URL(r.approvalUrl);
   if (u.protocol !== "https:" || u.hostname !== "www.sandbox.paypal.com")
     throw new Error("invalid");
-  sessionStorage.setItem(SETUP_KEY, r.setupTokenId);
   window.location.assign(r.approvalUrl);
 }
 
-/** Called after PayPal returns to the static console. The temporary setup token stays only in
- * sessionStorage and is deleted whether exchange succeeds or fails. */
+/** Called after PayPal returns to the static console. Only the random callback state is echoed
+ * back; the setup token is never present in browser storage or request bodies. */
 export async function completePayPalVaultConnection(
+  state,
   transport = transportDefault,
 ) {
-  const setupTokenId = sessionStorage.getItem(SETUP_KEY);
-  if (!setupTokenId) return false;
-  try {
-    const r = await mutation(
-      "/api/paypal-vault/complete",
-      { setupTokenId },
-      transport,
-    );
-    return (
-      r?.version === "payflow.paypal-vault-complete.v1" && r.connected === true
-    );
-  } finally {
-    sessionStorage.removeItem(SETUP_KEY);
-  }
+  if (typeof state !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(state))
+    return false;
+  const r = await mutation("/api/paypal-vault/complete", { state }, transport);
+  return (
+    r?.version === "payflow.paypal-vault-complete.v2" && r.connected === true
+  );
 }
 
 export async function runDemoScenario(
