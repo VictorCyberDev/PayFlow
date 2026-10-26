@@ -8,7 +8,11 @@ import {
 import type { Sql } from "postgres";
 import { z } from "zod";
 import type { ConsoleRequest, ConsoleSessionPort } from "./console-session.js";
-import type { PayPalOAuthClient } from "./paypal.js";
+import {
+  PayPalPaymentProvider,
+  type PaymentProvider,
+  type PayPalOAuthClient,
+} from "./paypal.js";
 
 const BASE = "https://api-m.sandbox.paypal.com";
 const vaultIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,255}$/);
@@ -166,6 +170,45 @@ export class PayPalVaultStore {
           `payflow.m6.paypal.setup|${input.principalId}|${input.ownerSessionRef}|${digest(state)}`,
         ),
       );
+  }
+}
+
+/**
+ * M6 delegated provider backed by the owner-bound encrypted instrument row. The stored vault id is
+ * read only when a new order is about to be created; observations and capture of an already-created
+ * order do not require the instrument. Missing wallet state therefore fails before provider create.
+ */
+export class StoredPayPalPaymentProvider implements PaymentProvider {
+  private readonly observer: PayPalPaymentProvider;
+  constructor(
+    private readonly oauth: PayPalOAuthClient,
+    private readonly store: PayPalVaultStore,
+    private readonly principalId: string,
+    private readonly fetcher: typeof fetch = fetch,
+  ) {
+    this.observer = new PayPalPaymentProvider(oauth, fetcher, "sandbox");
+  }
+  connected(): Promise<boolean> {
+    return this.store.has(this.principalId);
+  }
+  async createOrder(
+    input: Parameters<PaymentProvider["createOrder"]>[0],
+  ): Promise<Awaited<ReturnType<PaymentProvider["createOrder"]>>> {
+    const vaultId = await this.store.get(this.principalId);
+    if (!vaultId) throw new Error("PAYPAL_DELEGATED_INSTRUMENT_REQUIRED");
+    return new PayPalPaymentProvider(
+      this.oauth,
+      this.fetcher,
+      "sandbox",
+      undefined,
+      { vaultId },
+    ).createOrder(input);
+  }
+  getOrder(orderId: string) {
+    return this.observer.getOrder(orderId);
+  }
+  captureOrder(orderId: string, requestId: string) {
+    return this.observer.captureOrder(orderId, requestId);
   }
 }
 
