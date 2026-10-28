@@ -16,10 +16,22 @@ const PortableProofSchema = z
   })
   .strict();
 export type PortableProof = Readonly<z.infer<typeof PortableProofSchema>>;
+export type PortableProofPayload = Omit<PortableProof, "signature">;
 
-function payloadBytes(proof: PortableProof): Buffer {
-  const { signature: _signature, ...payload } = proof;
-  return Buffer.from(JSON.stringify(payload), "utf8");
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, child]) => [key, canonicalize(child)]),
+    );
+  }
+  return value;
+}
+
+export function portableProofPayloadBytes(payload: PortableProofPayload): Buffer {
+  return Buffer.from(JSON.stringify(canonicalize(payload)), "utf8");
 }
 
 export function verifyPortableProof(
@@ -33,7 +45,11 @@ export function verifyPortableProof(
   const proof = parsed.data;
   const observed = Date.parse(proof.observedAt);
   const at = Date.parse(now);
-  if (!Number.isFinite(observed) || !Number.isFinite(at) || Math.abs(at - observed) > maxAgeSeconds * 1000) {
+  if (
+    !Number.isFinite(observed) ||
+    !Number.isFinite(at) ||
+    Math.abs(at - observed) > maxAgeSeconds * 1000
+  ) {
     return { valid: false, reason: "STALE_PROOF" };
   }
   let key;
@@ -42,7 +58,13 @@ export function verifyPortableProof(
   } catch {
     return { valid: false, reason: "INVALID_PUBLIC_KEY" };
   }
-  const valid = cryptoVerify(null, payloadBytes(proof), key, Buffer.from(proof.signature, "base64url"));
+  const { signature, ...payload } = proof;
+  const valid = cryptoVerify(
+    null,
+    portableProofPayloadBytes(payload),
+    key,
+    Buffer.from(signature, "base64url"),
+  );
   if (!valid) return { valid: false, reason: "SIGNATURE_INVALID" };
   if (proof.outcome === "SUCCEEDED" && proof.effectCount !== 1) {
     return { valid: false, reason: "INCONSISTENT_EFFECT_COUNT" };
@@ -57,5 +79,7 @@ export function verifyPortableProof(
 }
 
 export function proofDigest(raw: unknown): string {
-  return createHash("sha256").update(JSON.stringify(raw), "utf8").digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalize(raw)), "utf8")
+    .digest("hex");
 }

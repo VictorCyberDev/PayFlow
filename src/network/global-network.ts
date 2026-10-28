@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import type { FinancialAction } from "./financial-action.js";
 import {
-  evaluateExternalIssuerAssertion,
-  type ExternalAuthorityAssertion,
+  verifyAndEvaluateExternalIssuerAssertion,
+  type SignedExternalAuthorityAssertion,
   type IssuerTrustProfile,
 } from "./federation.js";
 import {
@@ -21,16 +21,26 @@ export interface ExternalIdentityContext {
   readonly authenticatedAt: string;
 }
 
+export interface IndependentVerifierEvidence {
+  readonly domain: string;
+  readonly verdict: "VALID" | "INVALID";
+  readonly challenge: string;
+  readonly verifiedAt: string;
+  readonly cryptographicallyVerified: boolean;
+}
+
 export interface GlobalNetworkDemoInput {
   readonly originPlatform: string;
   readonly identity: ExternalIdentityContext;
-  readonly issuerAssertion: ExternalAuthorityAssertion;
+  readonly issuerAssertion: SignedExternalAuthorityAssertion;
+  readonly issuerPublicJwk: JsonWebKey;
   readonly issuerTrustProfile: IssuerTrustProfile;
-  readonly verifierDomain: string;
-  readonly verifierVerdict: "VALID" | "INVALID";
+  readonly verifier: IndependentVerifierEvidence;
   readonly action: FinancialAction;
   readonly grant: BoundedRailGrant;
   readonly rail: FinancialRailAdapter;
+  readonly proofIssuer: string;
+  readonly proofKeyId: string;
   readonly now: string;
 }
 
@@ -56,36 +66,84 @@ export interface GlobalNetworkDemoResult {
 export async function demonstrateGlobalFinancialAuthorityNetwork(
   input: GlobalNetworkDemoInput,
 ): Promise<GlobalNetworkDemoResult> {
-  if (!input.originPlatform || !input.identity.provider) throw new Error("ORIGIN_OR_IDENTITY_PROVIDER_REQUIRED");
-  if (input.identity.agentId !== input.action.agentId) throw new Error("IDENTITY_AGENT_MISMATCH");
-  if (input.identity.audience !== input.issuerAssertion.audience) throw new Error("IDENTITY_AUDIENCE_MISMATCH");
-  const trust = evaluateExternalIssuerAssertion(
+  if (!input.originPlatform || !input.identity.provider) {
+    throw new Error("ORIGIN_OR_IDENTITY_PROVIDER_REQUIRED");
+  }
+  if (input.identity.agentId !== input.action.agentId) {
+    throw new Error("IDENTITY_AGENT_MISMATCH");
+  }
+  if (input.identity.audience !== input.issuerAssertion.payload.audience) {
+    throw new Error("IDENTITY_AUDIENCE_MISMATCH");
+  }
+  const trust = verifyAndEvaluateExternalIssuerAssertion(
     input.issuerAssertion,
     input.issuerTrustProfile,
+    input.issuerPublicJwk,
     input.identity.audience,
     input.now,
   );
-  if (!trust.trusted || !trust.assertion) throw new Error(`EXTERNAL_AUTHORITY_NOT_TRUSTED:${trust.reasons.join(",")}`);
-  if (trust.assertion.agentId !== input.action.agentId) throw new Error("AUTHORITY_AGENT_MISMATCH");
-  if (!trust.assertion.actionKinds.includes(input.action.kind)) throw new Error("AUTHORITY_ACTION_KIND_MISMATCH");
-  if (!trust.assertion.currencies.includes(input.action.amount.currency)) throw new Error("AUTHORITY_CURRENCY_MISMATCH");
-  if (input.action.amount.minor > trust.assertion.maxAmountMinor) throw new Error("AUTHORITY_AMOUNT_EXCEEDED");
-  if (input.verifierVerdict !== "VALID") throw new Error("INDEPENDENT_VERIFICATION_FAILED");
-  if (input.grant.authorityId !== trust.assertion.authorityId) throw new Error("GRANT_AUTHORITY_MISMATCH");
-  if (input.grant.actionDigest !== financialActionDigest(input.action)) throw new Error("GRANT_ACTION_MISMATCH");
+  if (!trust.trusted || !trust.assertion) {
+    throw new Error(`EXTERNAL_AUTHORITY_NOT_TRUSTED:${trust.reasons.join(",")}`);
+  }
+  if (trust.assertion.agentId !== input.action.agentId) {
+    throw new Error("AUTHORITY_AGENT_MISMATCH");
+  }
+  if (!trust.assertion.actionKinds.includes(input.action.kind)) {
+    throw new Error("AUTHORITY_ACTION_KIND_MISMATCH");
+  }
+  if (!trust.assertion.currencies.includes(input.action.amount.currency)) {
+    throw new Error("AUTHORITY_CURRENCY_MISMATCH");
+  }
+  if (input.action.amount.minor > trust.assertion.maxAmountMinor) {
+    throw new Error("AUTHORITY_AMOUNT_EXCEEDED");
+  }
+  if (
+    input.verifier.verdict !== "VALID" ||
+    !input.verifier.cryptographicallyVerified ||
+    input.verifier.domain.length === 0 ||
+    input.verifier.challenge.length < 16
+  ) {
+    throw new Error("INDEPENDENT_VERIFICATION_FAILED");
+  }
+  if (input.grant.authorityId !== trust.assertion.authorityId) {
+    throw new Error("GRANT_AUTHORITY_MISMATCH");
+  }
+  if (input.grant.actionDigest !== financialActionDigest(input.action)) {
+    throw new Error("GRANT_ACTION_MISMATCH");
+  }
 
-  const initial = await input.rail.execute({ action: input.action, grant: input.grant, now: input.now });
+  const initial = await input.rail.execute({
+    action: input.action,
+    grant: input.grant,
+    now: input.now,
+  });
   const terminal =
     initial.state === "UNKNOWN"
-      ? await reconcileWithoutReexecution(input.rail, input.action.idempotencyKey, input.now)
+      ? await reconcileWithoutReexecution(
+          input.rail,
+          input.action.idempotencyKey,
+          input.now,
+        )
       : initial;
   const evidenceDigest = createHash("sha256")
-    .update(JSON.stringify({ originPlatform: input.originPlatform, identityProvider: input.identity.provider, verifierDomain: input.verifierDomain, rail: input.rail.railId, initial, terminal }), "utf8")
+    .update(
+      JSON.stringify({
+        originPlatform: input.originPlatform,
+        identityProvider: input.identity.provider,
+        authorityIssuer: trust.assertion.issuer,
+        verifierDomain: input.verifier.domain,
+        verifierChallenge: input.verifier.challenge,
+        rail: input.rail.railId,
+        initial,
+        terminal,
+      }),
+      "utf8",
+    )
     .digest("hex");
   const proofPayload: NetworkProofPayload = {
     version: "payflow-proof/v1",
-    issuer: input.issuerTrustProfile.issuer,
-    keyId: "demo-proof-key",
+    issuer: input.proofIssuer,
+    keyId: input.proofKeyId,
     authorityId: trust.assertion.authorityId,
     actionId: input.action.id,
     outcome: terminal.state,
@@ -98,9 +156,11 @@ export async function demonstrateGlobalFinancialAuthorityNetwork(
       `origin:${input.originPlatform}`,
       `identity:${input.identity.provider}`,
       `authority:${trust.assertion.issuer}`,
-      `verify:${input.verifierDomain}`,
+      `verify:${input.verifier.domain}`,
       `rail:${input.rail.railId}`,
-      initial.state === "UNKNOWN" ? "reconcile:lookup-only" : "reconcile:not-required",
+      initial.state === "UNKNOWN"
+        ? "reconcile:lookup-only"
+        : "reconcile:not-required",
       "proof:portable",
     ],
     initialRailEvidence: initial,

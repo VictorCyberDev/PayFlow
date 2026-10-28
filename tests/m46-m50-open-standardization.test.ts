@@ -1,7 +1,13 @@
 import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { verifyPortableProof } from "../packages/verifier/src/index.js";
-import { BASE_CONFORMANCE_CASES, runConformanceSuite } from "../src/network/conformance.js";
+import {
+  portableProofPayloadBytes,
+  verifyPortableProof,
+} from "../packages/verifier/src/index.js";
+import {
+  BASE_CONFORMANCE_CASES,
+  runConformanceSuite,
+} from "../src/network/conformance.js";
 
 function signedProof() {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
@@ -16,20 +22,36 @@ function signedProof() {
     observedAt: "2026-10-28T03:00:00.000Z",
     evidenceDigest: "a".repeat(64),
   };
-  const signature = sign(null, Buffer.from(JSON.stringify(payload)), privateKey).toString("base64url");
+  const signature = sign(null, portableProofPayloadBytes(payload), privateKey).toString(
+    "base64url",
+  );
   return { proof: { ...payload, signature }, jwk: publicKey.export({ format: "jwk" }) };
 }
 
 describe("M47 open verifier", () => {
   it("verifies supported proof without any money-moving API", () => {
     const { proof, jwk } = signedProof();
-    expect(verifyPortableProof(proof, jwk, "2026-10-28T03:01:00.000Z")).toMatchObject({ valid: true, reason: "PROOF_VALID" });
+    expect(
+      verifyPortableProof(proof, jwk, "2026-10-28T03:01:00.000Z"),
+    ).toMatchObject({ valid: true, reason: "PROOF_VALID" });
   });
 
   it("rejects tampering and inconsistent effect truth", () => {
     const { proof, jwk } = signedProof();
-    expect(verifyPortableProof({ ...proof, authorityId: "attacker" }, jwk, "2026-10-28T03:01:00.000Z").valid).toBe(false);
-    expect(verifyPortableProof({ ...proof, effectCount: 0 }, jwk, "2026-10-28T03:01:00.000Z").valid).toBe(false);
+    expect(
+      verifyPortableProof(
+        { ...proof, authorityId: "attacker" },
+        jwk,
+        "2026-10-28T03:01:00.000Z",
+      ).valid,
+    ).toBe(false);
+    expect(
+      verifyPortableProof(
+        { ...proof, effectCount: 0 },
+        jwk,
+        "2026-10-28T03:01:00.000Z",
+      ).valid,
+    ).toBe(false);
   });
 });
 
