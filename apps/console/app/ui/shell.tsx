@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { BrandMark, Wordmark } from "./brand";
 import { useConsole } from "./provider";
+import { BRAND } from "../../lib/brand";
 
 const items = [
   { href: "/", label: "Home", mobile: true, match: (p: string) => p === "/" },
@@ -83,7 +84,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <header className="rail">
-        <Link href="/" className="rail__brand" aria-label="PayFlow home">
+        <Link
+          href="/"
+          className="rail__brand"
+          aria-label={`${BRAND.name} home`}
+        >
           <Wordmark />
         </Link>
         {nav("rail__nav")}
@@ -111,9 +116,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <header className="topbar">
-        <Link href="/" className="topbar__brand" aria-label="PayFlow home">
+        <Link
+          href="/"
+          className="topbar__brand"
+          aria-label={`${BRAND.name} home`}
+        >
           <BrandMark size={24} />
-          <span>PayFlow</span>
+          <span>{BRAND.name}</span>
         </Link>
         <span className="topbar__end">
           <EnvironmentBadge />

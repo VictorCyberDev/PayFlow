@@ -67,6 +67,8 @@ export const FinancialActionSchema = z
         rateNumerator: z.number().int().safe().positive(),
         rateDenominator: z.number().int().safe().positive(),
         observedSlippageBps: z.number().int().safe().nonnegative().max(100_000),
+        /** Quoted amount in sourceCurrency (minor units). Required to verify the conversion. */
+        sourceAmountMinor: z.number().int().safe().positive().optional(),
       })
       .strict()
       .optional(),
@@ -101,6 +103,18 @@ export const MonetaryBoundarySchema = z
     maxTaxesMinor: z.number().int().safe().nonnegative(),
     maxFxSlippageBps: z.number().int().safe().nonnegative().max(100_000),
     allowFx: z.boolean(),
+    /**
+     * Trusted quote the Authority fixed for FX (never agent-supplied). When
+     * present the conversion is recomputed from it; without it only the
+     * action's own rate can be checked for internal consistency.
+     */
+    referenceRate: z
+      .object({
+        numerator: z.number().int().safe().positive(),
+        denominator: z.number().int().safe().positive(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type MonetaryBoundary = Readonly<z.infer<typeof MonetaryBoundarySchema>>;
@@ -112,6 +126,8 @@ export type MonetaryViolation =
   | "TAX_BOUNDARY_EXCEEDED"
   | "FX_DENIED"
   | "FX_SLIPPAGE_EXCEEDED"
+  | "FX_SOURCE_AMOUNT_REQUIRED"
+  | "FX_CONVERSION_MISMATCH"
   | "INTEGER_OVERFLOW";
 
 function safeSum(values: readonly number[]): number | null {
@@ -121,6 +137,22 @@ function safeSum(values: readonly number[]): number | null {
     if (!Number.isSafeInteger(total)) return null;
   }
   return total;
+}
+
+/**
+ * Deterministic integer conversion: round-half-up of source * numerator /
+ * denominator, computed with BigInt so no floating-point rounding can widen
+ * or narrow the result. Returns null when the result is not a safe integer.
+ */
+export function convertMinorHalfUp(
+  sourceMinor: number,
+  rateNumerator: number,
+  rateDenominator: number,
+): number | null {
+  const numerator = BigInt(sourceMinor) * BigInt(rateNumerator);
+  const denominator = BigInt(rateDenominator);
+  const rounded = (2n * numerator + denominator) / (2n * denominator);
+  return rounded <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(rounded) : null;
 }
 
 export function evaluateMonetaryBoundary(
@@ -148,6 +180,28 @@ export function evaluateMonetaryBoundary(
     if (!boundary.allowFx) violations.push("FX_DENIED");
     if (action.fx.observedSlippageBps > boundary.maxFxSlippageBps) {
       violations.push("FX_SLIPPAGE_EXCEEDED");
+    }
+    // The agent-reported slippage is untrusted: recompute the conversion ourselves.
+    if (boundary.allowFx) {
+      if (action.fx.sourceAmountMinor === undefined) {
+        violations.push("FX_SOURCE_AMOUNT_REQUIRED");
+      } else {
+        const expected = convertMinorHalfUp(
+          action.fx.sourceAmountMinor,
+          boundary.referenceRate?.numerator ?? action.fx.rateNumerator,
+          boundary.referenceRate?.denominator ?? action.fx.rateDenominator,
+        );
+        const allowed =
+          expected === null
+            ? 0
+            : Math.floor((expected * boundary.maxFxSlippageBps) / 10_000);
+        if (
+          expected === null ||
+          Math.abs(action.amount.minor - expected) > allowed
+        ) {
+          violations.push("FX_CONVERSION_MISMATCH");
+        }
+      }
     }
   }
   return violations;

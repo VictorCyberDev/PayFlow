@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BRAND } from "../../lib/brand";
 
 export default function ProofPage() {
   return (
@@ -27,9 +28,9 @@ export default function ProofPage() {
       <section className="block">
         <h2 className="h2">UNKNOWN stays unresolved</h2>
         <p className="lead">
-          A timeout is not success and not failure. PayFlow routes the existing
-          attempt to reconciliation instead of creating a replacement financial
-          effect.
+          A timeout is not success and not failure. {BRAND.name} routes the
+          existing attempt to reconciliation instead of creating a replacement
+          financial effect.
         </p>
         <p className="outcome-line">
           Checking what happened — don&apos;t retry yet

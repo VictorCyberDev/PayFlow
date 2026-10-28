@@ -144,9 +144,37 @@ export class FinancialAuthorityGateway {
     rawRequest: unknown,
     trusted: GatewayTrustedContext,
   ): Promise<GatewayActionResult> {
+    return this.evaluate(rawAccess, rawRequest, trusted, "request");
+  }
+
+  /**
+   * Read-only fit check through the same Trust Kernel. It never consumes the
+   * caller's nonce, never issues a capability and never reserves Authority,
+   * so it can be repeated freely. It cannot observe prior replay claims.
+   */
+  async checkAction(
+    rawAccess: unknown,
+    rawRequest: unknown,
+    trusted: GatewayTrustedContext,
+  ): Promise<Omit<GatewayActionResult, "executionCapability">> {
+    const { requestId, decision } = await this.evaluate(
+      rawAccess,
+      rawRequest,
+      trusted,
+      "check",
+    );
+    return { requestId, decision };
+  }
+
+  private async evaluate(
+    rawAccess: unknown,
+    rawRequest: unknown,
+    trusted: GatewayTrustedContext,
+    mode: "request" | "check",
+  ): Promise<GatewayActionResult> {
     const access = requireAgentAccess(
       rawAccess,
-      "action:request",
+      mode === "request" ? "action:request" : "authority:read",
       trusted.now,
       GATEWAY_AUDIENCE,
     );
@@ -171,10 +199,10 @@ export class FinancialAuthorityGateway {
     }
 
     const replayScope = `gateway:${mandate.id}:${agent.id}`;
-    const firstClaim = await this.deps.claimReplayKey(
-      replayScope,
-      request.nonce,
-    );
+    const firstClaim =
+      mode === "check"
+        ? true
+        : await this.deps.claimReplayKey(replayScope, request.nonce);
     const proposal: TransactionProposal = {
       id: request.requestId ?? randomUUID(),
       agentId: agent.id,
@@ -206,7 +234,11 @@ export class FinancialAuthorityGateway {
           };
     const decision = authorize(mandate, agent, proposal, context);
 
-    if (decision.decision !== "ALLOW" || !this.deps.issueExecutionCapability) {
+    if (
+      mode === "check" ||
+      decision.decision !== "ALLOW" ||
+      !this.deps.issueExecutionCapability
+    ) {
       return { requestId: proposal.id, decision };
     }
     const executionCapability = await this.deps.issueExecutionCapability(

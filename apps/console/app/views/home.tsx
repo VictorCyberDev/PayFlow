@@ -7,6 +7,7 @@ import { ActivityRow } from "../ui/activity";
 import { AuthorityFrame } from "../ui/frame";
 import { useConsole } from "../ui/provider";
 import { Empty, Loading, Unavailable } from "./common";
+import { BRAND } from "../../lib/brand";
 
 function Welcome() {
   return (
@@ -20,15 +21,18 @@ function Welcome() {
         </h1>
         <p className="lead">
           Give an agent financial capability without giving it unrestricted
-          financial power. PayFlow binds exact actions to explicit Authority,
-          revalidates at the execution boundary, and preserves verifiable
-          financial truth afterward.
+          financial power. {BRAND.name} binds exact actions to explicit
+          Authority, revalidates at the execution boundary, and preserves
+          verifiable financial truth afterward.
         </p>
         <p className="outcome-line">
           Any agent. Any rail. One authority truth.
         </p>
       </section>
-      <ol className="gate-sequence" aria-label="PayFlow authority sequence">
+      <ol
+        className="gate-sequence"
+        aria-label={`${BRAND.name} authority sequence`}
+      >
         <li>
           <strong>Bound</strong>
           <span>Intent becomes explicit constraints.</span>

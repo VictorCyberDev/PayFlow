@@ -139,6 +139,36 @@ describe("M7 external agent gateway", () => {
     },
   );
 
+  it("checkAction is read-only: repeatable, never consumes the nonce, never issues a capability", async () => {
+    const gateway = fixture();
+    const readOnly = { ...access, scopes: ["authority:read"] };
+    const a = await gateway.checkAction(readOnly, request(), {
+      now,
+      merchantRisk: "LOW",
+    });
+    const b = await gateway.checkAction(readOnly, request(), {
+      now,
+      merchantRisk: "LOW",
+    });
+    expect(a.decision.decision).toBe("ALLOW");
+    expect(b.decision.decision).toBe("ALLOW");
+    expect("executionCapability" in a).toBe(false);
+    // The nonce is still unspent, so the real request succeeds exactly once.
+    const real = await gateway.requestAction(access, request(), {
+      now,
+      merchantRisk: "LOW",
+    });
+    expect(real.decision.decision).toBe("ALLOW");
+    // A read-only token cannot request an action.
+    await expect(
+      gateway.requestAction(
+        readOnly,
+        request({ nonce: "gateway-nonce-0000002" }),
+        { now, merchantRisk: "LOW" },
+      ),
+    ).rejects.toMatchObject({ code: "ACCESS_SCOPE_DENIED" });
+  });
+
   it("refuses an access token bound to a different agent", async () => {
     const gateway = fixture();
     await expect(

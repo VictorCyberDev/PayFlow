@@ -3,9 +3,10 @@ import "./globals.css";
 import "./commercial.css";
 import { AppShell } from "./ui/shell";
 import { ConsoleProvider } from "./ui/provider";
+import { BRAND } from "../lib/brand";
 
 export const metadata: Metadata = {
-  title: "PayFlow — Financial authority for autonomous systems",
+  title: `${BRAND.name} — ${BRAND.category}`,
   description:
     "Let agents execute financial work without surrendering financial control.",
 };
