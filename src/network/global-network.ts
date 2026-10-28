@@ -83,7 +83,9 @@ export async function demonstrateGlobalFinancialAuthorityNetwork(
     input.now,
   );
   if (!trust.trusted || !trust.assertion) {
-    throw new Error(`EXTERNAL_AUTHORITY_NOT_TRUSTED:${trust.reasons.join(",")}`);
+    throw new Error(
+      `EXTERNAL_AUTHORITY_NOT_TRUSTED:${trust.reasons.join(",")}`,
+    );
   }
   if (trust.assertion.agentId !== input.action.agentId) {
     throw new Error("AUTHORITY_AGENT_MISMATCH");

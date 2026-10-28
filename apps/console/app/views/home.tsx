@@ -24,7 +24,9 @@ function Welcome() {
           revalidates at the execution boundary, and preserves verifiable
           financial truth afterward.
         </p>
-        <p className="outcome-line">Any agent. Any rail. One authority truth.</p>
+        <p className="outcome-line">
+          Any agent. Any rail. One authority truth.
+        </p>
       </section>
       <ol className="gate-sequence" aria-label="PayFlow authority sequence">
         <li>
@@ -59,21 +61,29 @@ function Welcome() {
           </article>
           <article className="surface-card">
             <h3 className="h3">Enterprise</h3>
-            <p>Organizations, agents, delegation, controls, integrations and audit.</p>
+            <p>
+              Organizations, agents, delegation, controls, integrations and
+              audit.
+            </p>
             <Link className="text-link" href="/enterprise/">
               Open enterprise surface
             </Link>
           </article>
           <article className="surface-card">
             <h3 className="h3">Verifier / Merchant</h3>
-            <p>Read-only Authority, freshness, revocation and Proof verification.</p>
+            <p>
+              Read-only Authority, freshness, revocation and Proof verification.
+            </p>
             <Link className="text-link" href="/verify/">
               Open Verify
             </Link>
           </article>
           <article className="surface-card">
             <h3 className="h3">Proof</h3>
-            <p>What was authorized, what crossed the Gate, and what actually happened.</p>
+            <p>
+              What was authorized, what crossed the Gate, and what actually
+              happened.
+            </p>
             <Link className="text-link" href="/proof/">
               Inspect Proof product
             </Link>

@@ -65,8 +65,20 @@ describe("M44 embedded Authority", () => {
 describe("M45 abuse intelligence", () => {
   it("flags and escalates without creating financial Authority", () => {
     const result = dispositionForSignals([
-      { type: "REPLAY_CLUSTER", subjectId: "a1", observedAt: "2026-10-28T03:00:00.000Z", score: 40, evidenceRefs: ["e1"] },
-      { type: "MERCHANT_SUBSTITUTION", subjectId: "a1", observedAt: "2026-10-28T03:00:01.000Z", score: 35, evidenceRefs: ["e2"] },
+      {
+        type: "REPLAY_CLUSTER",
+        subjectId: "a1",
+        observedAt: "2026-10-28T03:00:00.000Z",
+        score: 40,
+        evidenceRefs: ["e1"],
+      },
+      {
+        type: "MERCHANT_SUBSTITUTION",
+        subjectId: "a1",
+        observedAt: "2026-10-28T03:00:01.000Z",
+        score: 35,
+        evidenceRefs: ["e2"],
+      },
     ]);
     expect(result.disposition).toBe("ESCALATE");
     expect(result).not.toHaveProperty("decision", "ALLOW");

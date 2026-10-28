@@ -12,7 +12,9 @@ export interface TransparencyEntry {
 }
 
 function computeEntryHash(input: Omit<TransparencyEntry, "entryHash">): string {
-  return createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify(input), "utf8")
+    .digest("hex");
 }
 
 export function appendTransparencyEntry(
@@ -27,7 +29,9 @@ export function appendTransparencyEntry(
   return { ...unsigned, entryHash: computeEntryHash(unsigned) };
 }
 
-export function verifyTransparencyLog(entries: readonly TransparencyEntry[]): boolean {
+export function verifyTransparencyLog(
+  entries: readonly TransparencyEntry[],
+): boolean {
   let previous: TransparencyEntry | null = null;
   for (const entry of entries) {
     const { entryHash, ...unsigned } = entry;

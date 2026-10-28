@@ -13,24 +13,36 @@ export default function AgentsPage() {
       <div className="surface-grid">
         <article className="surface-card">
           <h2 className="h3">Identity binding</h2>
-          <p>External identity maps to one scoped Agent and principal context.</p>
+          <p>
+            External identity maps to one scoped Agent and principal context.
+          </p>
         </article>
         <article className="surface-card">
           <h2 className="h3">Lifecycle</h2>
-          <p>Register, activate, sponsor, rotate, suspend, revoke and retire.</p>
+          <p>
+            Register, activate, sponsor, rotate, suspend, revoke and retire.
+          </p>
         </article>
         <article className="surface-card">
           <h2 className="h3">Delegation</h2>
-          <p>Parent-to-child delegation may attenuate. It cannot silently widen.</p>
+          <p>
+            Parent-to-child delegation may attenuate. It cannot silently widen.
+          </p>
         </article>
         <article className="surface-card">
           <h2 className="h3">Execution boundary</h2>
-          <p>Every exact action still traverses current Authority revalidation.</p>
+          <p>
+            Every exact action still traverses current Authority revalidation.
+          </p>
         </article>
       </div>
       <p className="actions">
-        <Link className="btn" href="/new/">Create Authority</Link>
-        <Link className="btn btn--quiet" href="/developer/">Developer access</Link>
+        <Link className="btn" href="/new/">
+          Create Authority
+        </Link>
+        <Link className="btn btn--quiet" href="/developer/">
+          Developer access
+        </Link>
       </p>
     </>
   );

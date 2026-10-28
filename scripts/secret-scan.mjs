@@ -4,14 +4,29 @@ import { readFileSync } from "node:fs";
 
 const files = execFileSync("git", ["ls-files", "-z"], {
   encoding: "utf8",
-}).split("\0").filter(Boolean);
+})
+  .split("\0")
+  .filter(Boolean);
 
 const binaryExtensions = new Set([
-  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".woff", ".woff2", ".ico", ".pdf", ".zip",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".woff",
+  ".woff2",
+  ".ico",
+  ".pdf",
+  ".zip",
 ]);
-const secretAssignment = /\b(?:PAYPAL_CLIENT_SECRET|GROQ_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|SUPABASE_SERVICE_ROLE_KEY|VERCEL_TOKEN|AWS_SECRET_ACCESS_KEY|DATABASE_URL)\s*[=:]\s*["']?(?!\.\.\.|<|REPLACE|postgres:\/\/payflow:payflow_test@)[A-Za-z0-9_./:+\-=]{16,}/giu;
+const secretAssignment =
+  /\b(?:PAYPAL_CLIENT_SECRET|GROQ_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|SUPABASE_SERVICE_ROLE_KEY|VERCEL_TOKEN|AWS_SECRET_ACCESS_KEY|DATABASE_URL)\s*[=:]\s*["']?(?!\.\.\.|<|REPLACE|postgres:\/\/payflow:payflow_test@)[A-Za-z0-9_./:+\-=]{16,}/giu;
 const patterns = [
-  { name: "private-key-pem", pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/gu },
+  {
+    name: "private-key-pem",
+    pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/gu,
+  },
   { name: "github-token", pattern: /\bgh[pousr]_[A-Za-z0-9_]{30,}\b/gu },
   { name: "openai-key", pattern: /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/gu },
   { name: "aws-access-key", pattern: /\bAKIA[0-9A-Z]{16}\b/gu },
@@ -46,4 +61,6 @@ if (findings.length > 0) {
   }
   process.exit(1);
 }
-console.log(`Secret scan PASS: ${files.length} tracked files checked; 0 findings.`);
+console.log(
+  `Secret scan PASS: ${files.length} tracked files checked; 0 findings.`,
+);

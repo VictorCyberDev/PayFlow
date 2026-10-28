@@ -25,11 +25,16 @@ export function validateEmbeddedSession(
   expectedEnvironment: "SANDBOX" | "PRODUCTION",
 ): EmbeddedAuthoritySession {
   const session = EmbeddedAuthoritySessionSchema.parse(raw);
-  if (session.organizationId !== expectedOrganizationId) throw new Error("EMBEDDED_TENANT_MISMATCH");
-  if (session.environment !== expectedEnvironment) throw new Error("EMBEDDED_ENVIRONMENT_MISMATCH");
+  if (session.organizationId !== expectedOrganizationId)
+    throw new Error("EMBEDDED_TENANT_MISMATCH");
+  if (session.environment !== expectedEnvironment)
+    throw new Error("EMBEDDED_ENVIRONMENT_MISMATCH");
   if (session.status !== "OPEN") throw new Error("EMBEDDED_SESSION_INACTIVE");
   const at = Date.parse(now);
-  if (at < Date.parse(session.issuedAt) || at >= Date.parse(session.expiresAt)) {
+  if (
+    at < Date.parse(session.issuedAt) ||
+    at >= Date.parse(session.expiresAt)
+  ) {
     throw new Error("EMBEDDED_SESSION_EXPIRED");
   }
   return session;
@@ -52,7 +57,8 @@ export function buildEmbeddedAuthorityCandidate(
   if (!session.allowedTemplateIds.includes(candidate.templateId)) {
     throw new Error("EMBEDDED_TEMPLATE_NOT_ALLOWED");
   }
-  if (!candidate.humanReviewed) throw new Error("EMBEDDED_HUMAN_REVIEW_REQUIRED");
+  if (!candidate.humanReviewed)
+    throw new Error("EMBEDDED_HUMAN_REVIEW_REQUIRED");
   return Object.freeze({
     templateId: candidate.templateId,
     constraints: Object.freeze({ ...candidate.constraints }),

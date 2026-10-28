@@ -1,4 +1,8 @@
-import { createHash, verify as cryptoVerify, createPublicKey } from "node:crypto";
+import {
+  createHash,
+  verify as cryptoVerify,
+  createPublicKey,
+} from "node:crypto";
 import { z } from "zod";
 
 const PortableProofSchema = z
@@ -30,7 +34,9 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
-export function portableProofPayloadBytes(payload: PortableProofPayload): Buffer {
+export function portableProofPayloadBytes(
+  payload: PortableProofPayload,
+): Buffer {
   return Buffer.from(JSON.stringify(canonicalize(payload)), "utf8");
 }
 

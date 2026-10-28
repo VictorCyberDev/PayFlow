@@ -8,9 +8,7 @@ import {
   CONSUMER_AUTHORITY_PROFILES,
   ENTERPRISE_AUTHORITY_PROFILES,
 } from "../src/network/embedded-profiles.js";
-import {
-  externalAuthorityAssertionBytes,
-} from "../src/network/federation.js";
+import { externalAuthorityAssertionBytes } from "../src/network/federation.js";
 import { FinancialActionSchema } from "../src/network/financial-action.js";
 import { demonstrateGlobalFinancialAuthorityNetwork } from "../src/network/global-network.js";
 import { evaluateRecourseEvidence } from "../src/network/network-rules.js";
@@ -22,7 +20,12 @@ import {
 describe("M56/M57 embedded profiles", () => {
   it("covers consumer and enterprise authority without treating templates as activation", () => {
     expect(CONSUMER_AUTHORITY_PROFILES.map((profile) => profile.id)).toEqual(
-      expect.arrayContaining(["travel", "groceries", "subscriptions", "household-bills"]),
+      expect.arrayContaining([
+        "travel",
+        "groceries",
+        "subscriptions",
+        "household-bills",
+      ]),
     );
     expect(ENTERPRISE_AUTHORITY_PROFILES.map((profile) => profile.id)).toEqual(
       expect.arrayContaining([
@@ -69,7 +72,10 @@ describe("M60 global Financial Authority Network local demonstrator", () => {
       proposedAt: "2026-10-28T03:00:00.000Z",
       idempotencyKey: "global-network-idempotency-0001",
     });
-    const rail = new DeterministicFakeRail("replaceable-rail-b", "TIMEOUT_AFTER_EFFECT");
+    const rail = new DeterministicFakeRail(
+      "replaceable-rail-b",
+      "TIMEOUT_AFTER_EFFECT",
+    );
     const grant = {
       grantId: "global-grant-1",
       authorityId: "external-authority-1",

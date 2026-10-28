@@ -13,7 +13,9 @@ export const IssuerTrustProfileSchema = z
     updatedAt: z.string().datetime(),
   })
   .strict();
-export type IssuerTrustProfile = Readonly<z.infer<typeof IssuerTrustProfileSchema>>;
+export type IssuerTrustProfile = Readonly<
+  z.infer<typeof IssuerTrustProfileSchema>
+>;
 
 export const ExternalAuthorityAssertionSchema = z
   .object({
@@ -74,8 +76,13 @@ export function evaluateExternalIssuerAssertion(
   rawProfile: unknown,
   expectedAudience: string,
   now: string,
-): { trusted: boolean; reasons: readonly string[]; assertion?: ExternalAuthorityAssertion } {
-  const assertionResult = ExternalAuthorityAssertionSchema.safeParse(rawAssertion);
+): {
+  trusted: boolean;
+  reasons: readonly string[];
+  assertion?: ExternalAuthorityAssertion;
+} {
+  const assertionResult =
+    ExternalAuthorityAssertionSchema.safeParse(rawAssertion);
   const profileResult = IssuerTrustProfileSchema.safeParse(rawProfile);
   if (!assertionResult.success || !profileResult.success) {
     return { trusted: false, reasons: ["MALFORMED_EXTERNAL_AUTHORITY"] };
@@ -88,7 +95,8 @@ export function evaluateExternalIssuerAssertion(
   if (!profile.acceptedSchemaVersions.includes(assertion.schemaVersion)) {
     reasons.push("SCHEMA_VERSION_DENIED");
   }
-  if (assertion.audience !== expectedAudience) reasons.push("AUDIENCE_MISMATCH");
+  if (assertion.audience !== expectedAudience)
+    reasons.push("AUDIENCE_MISMATCH");
   if (
     Date.parse(now) < Date.parse(assertion.issuedAt) ||
     Date.parse(now) >= Date.parse(assertion.expiresAt)
@@ -101,10 +109,18 @@ export function evaluateExternalIssuerAssertion(
   if (assertion.maxAmountMinor > profile.maxAmountMinor) {
     reasons.push("AMOUNT_TRUST_BOUNDARY_EXCEEDED");
   }
-  if (!assertion.actionKinds.every((kind) => profile.allowedActionKinds.includes(kind))) {
+  if (
+    !assertion.actionKinds.every((kind) =>
+      profile.allowedActionKinds.includes(kind),
+    )
+  ) {
     reasons.push("ACTION_TRUST_BOUNDARY_EXCEEDED");
   }
-  if (!assertion.currencies.every((currency) => profile.allowedCurrencies.includes(currency))) {
+  if (
+    !assertion.currencies.every((currency) =>
+      profile.allowedCurrencies.includes(currency),
+    )
+  ) {
     reasons.push("CURRENCY_TRUST_BOUNDARY_EXCEEDED");
   }
   return reasons.length === 0
@@ -118,9 +134,16 @@ export function verifyAndEvaluateExternalIssuerAssertion(
   publicJwk: JsonWebKey,
   expectedAudience: string,
   now: string,
-): { trusted: boolean; reasons: readonly string[]; assertion?: ExternalAuthorityAssertion; keyId?: string } {
-  const signed = SignedExternalAuthorityAssertionSchema.safeParse(rawSignedAssertion);
-  if (!signed.success) return { trusted: false, reasons: ["MALFORMED_SIGNED_ASSERTION"] };
+): {
+  trusted: boolean;
+  reasons: readonly string[];
+  assertion?: ExternalAuthorityAssertion;
+  keyId?: string;
+} {
+  const signed =
+    SignedExternalAuthorityAssertionSchema.safeParse(rawSignedAssertion);
+  if (!signed.success)
+    return { trusted: false, reasons: ["MALFORMED_SIGNED_ASSERTION"] };
   let publicKey;
   try {
     publicKey = createPublicKey({ key: publicJwk, format: "jwk" });
@@ -133,7 +156,8 @@ export function verifyAndEvaluateExternalIssuerAssertion(
     publicKey,
     Buffer.from(signed.data.signature, "base64url"),
   );
-  if (!authentic) return { trusted: false, reasons: ["ISSUER_SIGNATURE_INVALID"] };
+  if (!authentic)
+    return { trusted: false, reasons: ["ISSUER_SIGNATURE_INVALID"] };
   const evaluated = evaluateExternalIssuerAssertion(
     signed.data.payload,
     rawProfile,

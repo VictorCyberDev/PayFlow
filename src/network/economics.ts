@@ -28,16 +28,24 @@ export function modelVerificationEconomics(
     input.governedActionRevenueMinor,
     input.enterpriseBaseRevenueMinor,
   ]) {
-    if (!Number.isSafeInteger(value) || value < 0) throw new Error("INVALID_ECONOMICS_INPUT");
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new Error("INVALID_ECONOMICS_INPUT");
   }
   if (input.cacheHitRateBps > 10_000) throw new Error("INVALID_CACHE_HIT_RATE");
-  const cachedCalls = Math.floor((input.verificationCalls * input.cacheHitRateBps) / 10_000);
+  const cachedCalls = Math.floor(
+    (input.verificationCalls * input.cacheHitRateBps) / 10_000,
+  );
   const originCalls = input.verificationCalls - cachedCalls;
   const verificationCostMinor =
-    originCalls * input.originCostMinorPerCall + cachedCalls * input.cachedCostMinorPerCall;
+    originCalls * input.originCostMinorPerCall +
+    cachedCalls * input.cachedCostMinorPerCall;
   const revenueMinor =
-    input.governedActions * input.governedActionRevenueMinor + input.enterpriseBaseRevenueMinor;
-  if (!Number.isSafeInteger(verificationCostMinor) || !Number.isSafeInteger(revenueMinor)) {
+    input.governedActions * input.governedActionRevenueMinor +
+    input.enterpriseBaseRevenueMinor;
+  if (
+    !Number.isSafeInteger(verificationCostMinor) ||
+    !Number.isSafeInteger(revenueMinor)
+  ) {
     throw new Error("ECONOMICS_OVERFLOW");
   }
   return {

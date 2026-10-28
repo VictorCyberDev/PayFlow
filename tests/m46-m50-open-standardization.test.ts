@@ -22,10 +22,15 @@ function signedProof() {
     observedAt: "2026-10-28T03:00:00.000Z",
     evidenceDigest: "a".repeat(64),
   };
-  const signature = sign(null, portableProofPayloadBytes(payload), privateKey).toString(
-    "base64url",
-  );
-  return { proof: { ...payload, signature }, jwk: publicKey.export({ format: "jwk" }) };
+  const signature = sign(
+    null,
+    portableProofPayloadBytes(payload),
+    privateKey,
+  ).toString("base64url");
+  return {
+    proof: { ...payload, signature },
+    jwk: publicKey.export({ format: "jwk" }),
+  };
 }
 
 describe("M47 open verifier", () => {

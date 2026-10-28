@@ -1,8 +1,4 @@
-import {
-  createHash,
-  createHmac,
-  timingSafeEqual,
-} from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 export const PayFlowEventSchema = z
@@ -86,7 +82,8 @@ export function verifyWebhookDelivery(
   if (!parsed.success) return false;
   const deliveryTime = Date.parse(signed.timestamp);
   const currentTime = Date.parse(now);
-  if (!Number.isFinite(deliveryTime) || !Number.isFinite(currentTime)) return false;
+  if (!Number.isFinite(deliveryTime) || !Number.isFinite(currentTime))
+    return false;
   if (Math.abs(currentTime - deliveryTime) > maxClockSkewSeconds * 1000) {
     return false;
   }
@@ -106,7 +103,9 @@ export function verifyWebhookDelivery(
   } catch {
     return false;
   }
-  return provided.length === expected.length && timingSafeEqual(provided, expected);
+  return (
+    provided.length === expected.length && timingSafeEqual(provided, expected)
+  );
 }
 
 export interface WebhookReplayStore {
@@ -121,7 +120,9 @@ export async function acceptWebhookDeliveryOnce(
   store: WebhookReplayStore,
 ): Promise<"ACCEPTED" | "DUPLICATE" | "INVALID"> {
   if (!verifyWebhookDelivery(event, signed, secret, now)) return "INVALID";
-  const expiresAt = new Date(Date.parse(now) + 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(
+    Date.parse(now) + 24 * 60 * 60 * 1000,
+  ).toISOString();
   return (await store.claimDelivery(signed.deliveryId, expiresAt))
     ? "ACCEPTED"
     : "DUPLICATE";

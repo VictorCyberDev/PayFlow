@@ -1,11 +1,26 @@
 const surfaces = [
   ["Gateway", "Submit an exact action to deterministic Authority evaluation."],
-  ["REST API", "Versioned requests, scoped access, stable error taxonomy and idempotency."],
-  ["TypeScript SDK", "Small client surface without server secrets in browser state."],
-  ["Python SDK", "Dependency-light API access for server-side agents and services."],
+  [
+    "REST API",
+    "Versioned requests, scoped access, stable error taxonomy and idempotency.",
+  ],
+  [
+    "TypeScript SDK",
+    "Small client surface without server secrets in browser state.",
+  ],
+  [
+    "Python SDK",
+    "Dependency-light API access for server-side agents and services.",
+  ],
   ["MCP", "Five financial-authority tools with read/execution separation."],
-  ["A2A", "Agent Card plus authenticated, attenuating agent-to-agent delegation."],
-  ["Proof verifier", "Standalone verification without access to money-moving APIs."],
+  [
+    "A2A",
+    "Agent Card plus authenticated, attenuating agent-to-agent delegation.",
+  ],
+  [
+    "Proof verifier",
+    "Standalone verification without access to money-moving APIs.",
+  ],
   ["Sandbox", "Deterministic rails, fixtures, faults and reconciliation."],
 ] as const;
 
@@ -13,7 +28,9 @@ export default function DeveloperPage() {
   return (
     <>
       <p className="label">Developer platform</p>
-      <h1 className="h1">Give an agent capability without unrestricted power.</h1>
+      <h1 className="h1">
+        Give an agent capability without unrestricted power.
+      </h1>
       <p className="lead">
         Integrate once at the financial-authority boundary. Protocols and rails
         remain replaceable; the Trust Kernel remains authoritative.

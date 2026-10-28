@@ -69,10 +69,14 @@ describe("M14 reusable fault-injection matrix", () => {
   it("does not hide a boundary failure", async () => {
     const report = await runFaultInjectionMatrix((scenario) => ({
       scenarioId: scenario.id,
-      actual: scenario.id === "forged-assertion" ? "UNKNOWN" : scenario.expected,
+      actual:
+        scenario.id === "forged-assertion" ? "UNKNOWN" : scenario.expected,
       evidence: "deliberate-negative-control",
     }));
     expect(report.failed).toBe(1);
-    expect(report.results.find((result) => result.scenarioId === "forged-assertion")?.pass).toBe(false);
+    expect(
+      report.results.find((result) => result.scenarioId === "forged-assertion")
+        ?.pass,
+    ).toBe(false);
   });
 });

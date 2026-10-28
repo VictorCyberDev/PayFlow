@@ -32,8 +32,14 @@ describe("M51 active/active architecture simulation", () => {
       changedAt: "2026-10-28T03:00:00.000Z",
       sourceRegion: "eu",
     };
-    const revoked = { ...active, status: "REVOKED" as const, sourceRegion: "us" };
-    expect(resolveAuthorityReplicaConflict(active, revoked).status).toBe("REVOKED");
+    const revoked = {
+      ...active,
+      status: "REVOKED" as const,
+      sourceRegion: "us",
+    };
+    expect(resolveAuthorityReplicaConflict(active, revoked).status).toBe(
+      "REVOKED",
+    );
     expect(
       mayAssumeReservationOwnership(
         {
@@ -68,7 +74,9 @@ describe("M52 key transparency", () => {
       recordedAt: "2026-10-28T03:01:00.000Z",
     });
     expect(verifyTransparencyLog([first, second])).toBe(true);
-    expect(verifyTransparencyLog([first, { ...second, keyId: "attacker" }])).toBe(false);
+    expect(
+      verifyTransparencyLog([first, { ...second, keyId: "attacker" }]),
+    ).toBe(false);
   });
 });
 
@@ -115,22 +123,48 @@ describe("M53/M54 federation and external issuer trust", () => {
       [revoked.issuer, revoked],
     ]);
     expect(
-      (await federatedVerify(domains, trusted.issuer, {}, "merchant", "2026-10-28T03:00:00.000Z"))
-        .verdict,
+      (
+        await federatedVerify(
+          domains,
+          trusted.issuer,
+          {},
+          "merchant",
+          "2026-10-28T03:00:00.000Z",
+        )
+      ).verdict,
     ).toBe("VALID");
     expect(
-      (await federatedVerify(domains, revoked.issuer, {}, "merchant", "2026-10-28T03:00:00.000Z"))
-        .verdict,
+      (
+        await federatedVerify(
+          domains,
+          revoked.issuer,
+          {},
+          "merchant",
+          "2026-10-28T03:00:00.000Z",
+        )
+      ).verdict,
     ).toBe("REVOKED_ISSUER");
     expect(
-      (await federatedVerify(domains, "https://unknown.example", {}, "merchant", "2026-10-28T03:00:00.000Z"))
-        .verdict,
+      (
+        await federatedVerify(
+          domains,
+          "https://unknown.example",
+          {},
+          "merchant",
+          "2026-10-28T03:00:00.000Z",
+        )
+      ).verdict,
     ).toBe("UNKNOWN_ISSUER");
   });
 
   it("attenuates third-party issuer assertions through explicit trust profiles", () => {
     expect(
-      evaluateExternalIssuerAssertion(assertion, profile, "merchant", "2026-10-28T03:00:00.000Z").trusted,
+      evaluateExternalIssuerAssertion(
+        assertion,
+        profile,
+        "merchant",
+        "2026-10-28T03:00:00.000Z",
+      ).trusted,
     ).toBe(true);
     expect(
       evaluateExternalIssuerAssertion(

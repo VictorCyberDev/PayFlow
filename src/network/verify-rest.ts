@@ -26,7 +26,10 @@ function normalizedHeaders(
   headers: Readonly<Record<string, string | undefined>> | undefined,
 ): Readonly<Record<string, string | undefined>> {
   return Object.fromEntries(
-    Object.entries(headers ?? {}).map(([key, value]) => [key.toLowerCase(), value]),
+    Object.entries(headers ?? {}).map(([key, value]) => [
+      key.toLowerCase(),
+      value,
+    ]),
   );
 }
 
@@ -35,8 +38,14 @@ export function createPublicVerifyRestHandler(
 ) {
   return async (
     request: PublicVerifyRestRequest,
-  ): Promise<PublicVerifyResponse | { status: 404; headers: Readonly<Record<string, string>>; body: unknown }> => {
-    if (request.method !== "POST" || request.path !== "/v1/verify/presentations") {
+  ): Promise<
+    | PublicVerifyResponse
+    | { status: 404; headers: Readonly<Record<string, string>>; body: unknown }
+  > => {
+    if (
+      request.method !== "POST" ||
+      request.path !== "/v1/verify/presentations"
+    ) {
       return {
         status: 404,
         headers: { "cache-control": "no-store" },

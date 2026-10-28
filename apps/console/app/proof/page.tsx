@@ -14,23 +14,34 @@ export default function ProofPage() {
         <p className="label">Outcome line</p>
         <p className="outcome-line">$84 paid once</p>
         <dl className="verifier-state">
-          <dt>Authority</dt><dd>Bound to exact action</dd>
-          <dt>Execution grant</dt><dd>One-time</dd>
-          <dt>Effect count</dt><dd>1</dd>
-          <dt>Verification</dt><dd>Portable / tamper-evident</dd>
+          <dt>Authority</dt>
+          <dd>Bound to exact action</dd>
+          <dt>Execution grant</dt>
+          <dd>One-time</dd>
+          <dt>Effect count</dt>
+          <dd>1</dd>
+          <dt>Verification</dt>
+          <dd>Portable / tamper-evident</dd>
         </dl>
       </div>
       <section className="block">
         <h2 className="h2">UNKNOWN stays unresolved</h2>
         <p className="lead">
           A timeout is not success and not failure. PayFlow routes the existing
-          attempt to reconciliation instead of creating a replacement financial effect.
+          attempt to reconciliation instead of creating a replacement financial
+          effect.
         </p>
-        <p className="outcome-line">Checking what happened — don&apos;t retry yet</p>
+        <p className="outcome-line">
+          Checking what happened — don&apos;t retry yet
+        </p>
       </section>
       <p className="actions">
-        <Link className="btn btn--quiet" href="/activity/">Activity</Link>
-        <Link className="btn btn--quiet" href="/verify/">Verify</Link>
+        <Link className="btn btn--quiet" href="/activity/">
+          Activity
+        </Link>
+        <Link className="btn btn--quiet" href="/verify/">
+          Verify
+        </Link>
       </p>
     </>
   );
