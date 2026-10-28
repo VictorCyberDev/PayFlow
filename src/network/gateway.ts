@@ -12,6 +12,7 @@ import {
   type TransactionProposal,
 } from "../domain.js";
 import { authorize, type AuthorizationContext } from "../kernel.js";
+import type { AuthorityLifecycleState } from "./verify.js";
 import { requireAgentAccess, type ExternalAgentAccess } from "./access.js";
 
 export const GATEWAY_AUDIENCE = "payflow-gateway-v1";
@@ -51,6 +52,8 @@ export interface BoundedExecutionCapability {
 
 export interface GatewayDependencies {
   loadMandate(id: string): Promise<Mandate | null>;
+  /** Durable lifecycle truth. Anything other than ACTIVE fails closed before the kernel runs. */
+  authorityState(id: string): Promise<AuthorityLifecycleState>;
   loadAgent(id: string): Promise<AgentPassport | null>;
   cumulativeSpentMinor(mandateId: string): Promise<number>;
   consumedQuantity(mandateId: string): Promise<number | undefined>;
@@ -66,6 +69,7 @@ export interface GatewayDependencies {
 export type GatewayErrorCode =
   | "REQUEST_MALFORMED"
   | "AUTHORITY_NOT_FOUND"
+  | "AUTHORITY_INACTIVE"
   | "AGENT_NOT_FOUND"
   | "ACCESS_AGENT_MISMATCH"
   | "ACCESS_PRINCIPAL_MISMATCH";
@@ -100,7 +104,7 @@ export class FinancialAuthorityGateway {
     maxSingleTransactionMinor: number;
     cumulativeLimitMinor?: number;
     expiresAt: string;
-    status: "ACTIVE" | "EXPIRED";
+    status: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "REVOKED";
     fingerprint: string;
   }> {
     const access = requireAgentAccess(
@@ -112,6 +116,7 @@ export class FinancialAuthorityGateway {
     const mandate = await this.deps.loadMandate(mandateId);
     if (!mandate) throw new GatewayRequestError("AUTHORITY_NOT_FOUND");
     this.assertBinding(access, mandate, mandate.authorizedAgentId);
+    const lifecycle = await this.deps.authorityState(mandate.id);
     return {
       id: mandate.id,
       principalId: mandate.principalId,
@@ -125,7 +130,11 @@ export class FinancialAuthorityGateway {
         : { cumulativeLimitMinor: mandate.cumulativeLimitMinor }),
       expiresAt: mandate.expiresAt,
       status:
-        Date.parse(now) < Date.parse(mandate.expiresAt) ? "ACTIVE" : "EXPIRED",
+        lifecycle !== "ACTIVE"
+          ? lifecycle
+          : Date.parse(now) < Date.parse(mandate.expiresAt)
+            ? "ACTIVE"
+            : "EXPIRED",
       fingerprint: mandateFingerprint(mandate),
     };
   }
@@ -156,6 +165,10 @@ export class FinancialAuthorityGateway {
     if (!mandate) throw new GatewayRequestError("AUTHORITY_NOT_FOUND");
     if (!agent) throw new GatewayRequestError("AGENT_NOT_FOUND");
     this.assertBinding(access, mandate, agent.id);
+    // Revoked or suspended Authority must fail closed without burning the caller's nonce.
+    if ((await this.deps.authorityState(mandate.id)) !== "ACTIVE") {
+      throw new GatewayRequestError("AUTHORITY_INACTIVE");
+    }
 
     const replayScope = `gateway:${mandate.id}:${agent.id}`;
     const firstClaim = await this.deps.claimReplayKey(

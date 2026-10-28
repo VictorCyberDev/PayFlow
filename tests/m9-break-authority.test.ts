@@ -21,3 +21,45 @@ describe("M37 Break Authority 1000 local kernel suite", () => {
     expect(report.controlDecision).toBe("ALLOW");
   });
 });
+
+describe("Integrated Break Authority (production modules, fake rail)", () => {
+  it.each([100, 1000] as const)(
+    "contains all %i scenarios across all 16 categories while valid controls still complete",
+    async (count) => {
+      const { runIntegratedBreakAuthority, INTEGRATED_CATEGORIES } =
+        await import("../src/network/break-authority-integrated.js");
+      const report = await runIntegratedBreakAuthority(count);
+      expect(report.scenarioCount).toBe(count);
+      expect(report.results).toHaveLength(count);
+      expect(report.uncontainedScenarioIds).toEqual([]);
+      expect(Object.keys(report.categories)).toEqual([
+        ...INTEGRATED_CATEGORIES,
+      ]);
+      for (const category of INTEGRATED_CATEGORIES) {
+        expect(report.categories[category].total).toBeGreaterThan(0);
+        expect(report.categories[category].contained).toBe(
+          report.categories[category].total,
+        );
+      }
+      expect(report.controls.every((control) => control.passed)).toBe(true);
+      expect(report.providerEffectsExercised).toBe(false);
+      expect(report.railKind).toBe("deterministic-fake");
+    },
+  );
+});
+
+describe("committed evidence artifacts", () => {
+  it("are byte-identical to what the production modules produce today", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const { buildEvidenceArtifacts } =
+      await import("../src/network/evidence-artifacts.js");
+    const artifacts = await buildEvidenceArtifacts();
+    for (const [name, content] of Object.entries(artifacts)) {
+      const committed = await readFile(`docs/evidence/${name}`, "utf8");
+      expect(
+        committed === content,
+        `${name} is stale; run npm run evidence:generate`,
+      ).toBe(true);
+    }
+  });
+});

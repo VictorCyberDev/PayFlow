@@ -62,6 +62,12 @@ export type FakeRailMode =
  */
 export class DeterministicFakeRail implements FinancialRailAdapter {
   private readonly effects = new Map<string, NormalizedRailEvidence>();
+  private writes = 0;
+
+  /** Number of distinct provider-side effects ever created. Never exceeds one per idempotency key. */
+  get providerEffectWrites(): number {
+    return this.writes;
+  }
 
   constructor(
     readonly railId: string,
@@ -85,6 +91,7 @@ export class DeterministicFakeRail implements FinancialRailAdapter {
         observedAt: request.now,
         reason: "SIMULATED_PROVIDER_CONFIRMED",
       };
+      this.writes += 1;
       this.effects.set(request.action.idempotencyKey, evidence);
       return evidence;
     }
@@ -98,6 +105,7 @@ export class DeterministicFakeRail implements FinancialRailAdapter {
         observedAt: request.now,
         reason: "SIMULATED_PROVIDER_DECLINED",
       };
+      this.writes += 1;
       this.effects.set(request.action.idempotencyKey, evidence);
       return evidence;
     }
@@ -120,6 +128,7 @@ export class DeterministicFakeRail implements FinancialRailAdapter {
       observedAt: request.now,
       reason: "SIMULATED_PROVIDER_CONFIRMED_AFTER_TIMEOUT",
     };
+    this.writes += 1;
     this.effects.set(request.action.idempotencyKey, durableEffect);
     return {
       rail: this.railId,

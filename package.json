@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "vitest run tests/persistence.integration.test.ts tests/durable-authorization.integration.test.ts tests/execution-grant.integration.test.ts tests/execution-grant-state.integration.test.ts tests/paypal.integration.test.ts tests/intent-activation.integration.test.ts tests/trust-boundary.integration.test.ts tests/checkout.integration.test.ts tests/commerce-execution.integration.test.ts tests/payment-resume.integration.test.ts tests/commerce-discovery.integration.test.ts tests/m4-closure.integration.test.ts tests/console-activation.integration.test.ts tests/console-controls.integration.test.ts tests/m5e-adversarial.integration.test.ts tests/console-host-durable.integration.test.ts tests/hosting-m5.integration.test.ts tests/m6-delegated.integration.test.ts tests/m6-activity.integration.test.ts tests/m6-demo-agent.integration.test.ts tests/hosting-m6.integration.test.ts",
+    "test:integration": "vitest run tests/persistence.integration.test.ts tests/durable-authorization.integration.test.ts tests/execution-grant.integration.test.ts tests/execution-grant-state.integration.test.ts tests/paypal.integration.test.ts tests/intent-activation.integration.test.ts tests/trust-boundary.integration.test.ts tests/checkout.integration.test.ts tests/commerce-execution.integration.test.ts tests/payment-resume.integration.test.ts tests/commerce-discovery.integration.test.ts tests/m4-closure.integration.test.ts tests/console-activation.integration.test.ts tests/console-controls.integration.test.ts tests/m5e-adversarial.integration.test.ts tests/console-host-durable.integration.test.ts tests/hosting-m5.integration.test.ts tests/m6-delegated.integration.test.ts tests/m6-activity.integration.test.ts tests/m6-demo-agent.integration.test.ts tests/hosting-m6.integration.test.ts tests/m7-network.integration.test.ts",
     "acceptance:m6:sandbox": "tsx hosting/operator/m6-sandbox-acceptance.ts",
     "test:paypal:sandbox": "vitest run tests/paypal.sandbox.test.ts",
     "test:coverage": "vitest run --coverage",
@@ -20,7 +20,9 @@
     "format:check": "prettier --check .",
     "secret:scan": "node scripts/secret-scan.mjs",
     "test:groq:smoke": "vitest run tests/groq.smoke.test.ts",
-    "test:paypal:commerce:sandbox": "vitest run tests/paypal-commerce.sandbox.test.ts"
+    "test:paypal:commerce:sandbox": "vitest run tests/paypal-commerce.sandbox.test.ts",
+    "evidence:generate": "tsx scripts/generate-evidence.ts",
+    "evidence:check": "tsx scripts/generate-evidence.ts --check"
   },
   "dependencies": {
     "postgres": "3.4.7",
@@ -35,6 +37,7 @@
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.12.2",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "yaml": "^2.8.1"
   }
 }

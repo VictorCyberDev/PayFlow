@@ -8,6 +8,7 @@ import {
   BASE_CONFORMANCE_CASES,
   runConformanceSuite,
 } from "../src/network/conformance.js";
+import { LIVE_CONFORMANCE_CASES } from "../src/network/live-conformance.js";
 
 function signedProof() {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
@@ -63,11 +64,22 @@ describe("M47 open verifier", () => {
 describe("M48 conformance suite", () => {
   it("produces machine-readable results without certification language", async () => {
     const result = await runConformanceSuite(
-      BASE_CONFORMANCE_CASES.map((entry) => ({ ...entry, run: () => true })),
+      LIVE_CONFORMANCE_CASES,
       "2026-10-28T03:00:00.000Z",
     );
+    expect(result.results.filter((entry) => !entry.pass)).toEqual([]);
     expect(result.failed).toBe(0);
     expect(result.passed).toBe(BASE_CONFORMANCE_CASES.length);
     expect(result.certificationClaim).toBe(false);
+  });
+
+  it("fails a case whose invariant does not hold (the suite can fail)", async () => {
+    const result = await runConformanceSuite(
+      LIVE_CONFORMANCE_CASES.map((entry, index) =>
+        index === 0 ? { ...entry, run: () => false } : entry,
+      ),
+      "2026-10-28T03:00:00.000Z",
+    );
+    expect(result.failed).toBe(1);
   });
 });

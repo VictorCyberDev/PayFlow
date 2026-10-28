@@ -35,7 +35,7 @@ export interface BreakAuthorityReport {
   readonly results: readonly BreakAuthorityScenarioResult[];
 }
 
-function fixture() {
+export function kernelFixture() {
   const mandate: Mandate = {
     id: "benchmark-authority",
     principalId: "benchmark-principal",
@@ -91,7 +91,7 @@ function fixture() {
   return { mandate, agent, proposal, context };
 }
 
-function attack(
+export function attack(
   family: AttackFamily,
   variant: number,
 ): {
@@ -100,7 +100,7 @@ function attack(
   proposal: unknown;
   context: AuthorizationContext;
 } {
-  const base = fixture();
+  const base = kernelFixture();
   switch (family) {
     case "AMOUNT_WIDENING":
       return {
@@ -164,7 +164,7 @@ function attack(
   }
 }
 
-const families: readonly AttackFamily[] = [
+export const families: readonly AttackFamily[] = [
   "AMOUNT_WIDENING",
   "MERCHANT_SUBSTITUTION",
   "CURRENCY_SUBSTITUTION",
@@ -199,7 +199,7 @@ export function runBreakAuthorityBenchmark(
       reasonCodes: receipt.reasonCodes,
     });
   }
-  const control = fixture();
+  const control = kernelFixture();
   const controlReceipt = authorize(
     control.mandate,
     control.agent,

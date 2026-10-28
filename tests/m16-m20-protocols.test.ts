@@ -5,6 +5,7 @@ import {
 } from "../src/protocols/mcp.js";
 import {
   createPayFlowAgentCard,
+  evaluateDelegatedRequest,
   validateDelegationAttenuation,
   type DelegatedFinancialScope,
 } from "../src/protocols/a2a.js";
@@ -109,5 +110,83 @@ describe("M19 framework adapters and M20 discoverability evals", () => {
     const result = runToolSelectionEval();
     expect(result.failed).toBe(0);
     expect(result.passed).toBe(result.total);
+  });
+});
+
+describe("M18 delegated A2A request evaluation", () => {
+  const scopeOf = (overrides: Record<string, unknown> = {}) => ({
+    principalId: "principal-1",
+    parentAgentId: "root-agent",
+    childAgentId: "child-agent",
+    audience: "payflow-a2a-v1",
+    actionKinds: ["PURCHASE"],
+    currencies: ["USD"],
+    counterpartyIds: ["merchant-allowed"],
+    maxAmountMinor: 5_000,
+    issuedAt: "2026-10-28T02:00:00.000Z",
+    expiresAt: "2026-10-28T09:00:00.000Z",
+    nonce: "delegation-nonce-000001",
+    ...overrides,
+  });
+  const parent = scopeOf({
+    parentAgentId: "human",
+    childAgentId: "root-agent",
+    maxAmountMinor: 10_000,
+    nonce: "parent-nonce-0000000001",
+  }) as never;
+  const expected = {
+    audience: "payflow-a2a-v1",
+    now: "2026-10-28T03:00:00.000Z",
+  };
+  const freshStore = () => {
+    const claimed = new Set<string>();
+    return {
+      claimNonce: async (scopeKey: string, nonce: string) => {
+        const key = `${scopeKey}:${nonce}`;
+        if (claimed.has(key)) return false;
+        claimed.add(key);
+        return true;
+      },
+    };
+  };
+
+  it("accepts a narrower child once and treats a repeat as DUPLICATE", async () => {
+    const store = freshStore();
+    const first = await evaluateDelegatedRequest(
+      scopeOf(),
+      parent,
+      expected,
+      store,
+    );
+    const second = await evaluateDelegatedRequest(
+      scopeOf(),
+      parent,
+      expected,
+      store,
+    );
+    expect([first.verdict, second.verdict]).toEqual(["ACCEPTED", "DUPLICATE"]);
+  });
+
+  it.each([
+    ["WRONG_AUDIENCE", { audience: "someone-else" }],
+    ["EXPIRED", { expiresAt: "2026-10-28T02:30:00.000Z" }],
+    ["WIDENED", { maxAmountMinor: 10_001 }],
+    ["MALFORMED", { nonce: "short" }],
+  ])("refuses %s without consuming the nonce", async (verdict, overrides) => {
+    const store = freshStore();
+    const result = await evaluateDelegatedRequest(
+      scopeOf(overrides),
+      parent,
+      expected,
+      store,
+    );
+    expect(result.verdict).toBe(verdict);
+    const valid = await evaluateDelegatedRequest(
+      scopeOf(),
+      parent,
+      expected,
+      store,
+    );
+    expect(valid.verdict).toBe("ACCEPTED");
   });
 });

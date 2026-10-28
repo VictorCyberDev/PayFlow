@@ -19,7 +19,11 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        "200": { description: Authority projection }
+        "200":
+          description: Authority projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthorityEnvelope" }
         "403": { $ref: "#/components/responses/Denied" }
         "404": { $ref: "#/components/responses/NotFound" }
   /v1/actions:
@@ -28,22 +32,26 @@ paths:
       summary: Ask the Trust Kernel whether an exact financial action may proceed.
       description: >-
         The caller does not provide a mandate fingerprint or merchant-risk truth.
-        PayFlow loads Authority state and trusted context server-side.
+        PayFlow loads Authority state and trusted context server-side. The
+        `nonce` field is the replay/idempotency key: a second request with the
+        same nonce is denied with `REPLAY_DETECTED` and never issues a second
+        execution capability. A revoked or suspended Authority is refused with
+        `AUTHORITY_INACTIVE` before the Trust Kernel runs.
       security: [{ bearerAuth: [action:request] }]
-      parameters:
-        - in: header
-          name: Idempotency-Key
-          required: false
-          schema: { type: string, minLength: 16 }
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/ActionRequest" }
       responses:
-        "200": { description: Deterministic ALLOW, DENY, or ESCALATE decision }
+        "200":
+          description: Deterministic ALLOW, DENY, or ESCALATE decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActionResult" }
         "400": { $ref: "#/components/responses/Malformed" }
         "403": { $ref: "#/components/responses/Denied" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /v1/verify/presentations:
     post:
       operationId: verifyAuthorityPresentation
@@ -118,10 +126,66 @@ components:
         metadata:
           type: object
           additionalProperties: { type: string }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [requestId, error]
+      properties:
+        requestId: { type: string }
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+    AuthorityEnvelope:
+      type: object
+      required: [requestId, authority]
+      properties:
+        requestId: { type: string }
+        authority:
+          type: object
+          required: [id, principalId, authorizedAgentId, status, fingerprint]
+          properties:
+            id: { type: string }
+            principalId: { type: string }
+            authorizedAgentId: { type: string }
+            status:
+              { type: string, enum: [ACTIVE, EXPIRED, SUSPENDED, REVOKED] }
+            fingerprint: { type: string, pattern: "^[a-f0-9]{64}$" }
+    ActionResult:
+      type: object
+      required: [requestId, decision]
+      properties:
+        requestId: { type: string }
+        decision:
+          type: object
+          required: [decision, reasonCodes]
+          properties:
+            decision: { type: string, enum: [ALLOW, DENY, ESCALATE] }
+            reasonCodes: { type: array, items: { type: string } }
+        executionCapability:
+          type: object
+          description: Short-lived, one-time, action-bound capability. Never a payment credential.
+          required: [grantId, expiresAt, proposalDigest]
+          properties:
+            grantId: { type: string }
+            expiresAt: { type: string, format: date-time }
+            proposalDigest: { type: string }
   responses:
     Malformed:
       description: Malformed request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
     Denied:
-      description: Authentication, scope, or authority binding denied
+      description: Authentication, scope, authority binding or lifecycle denied
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
     NotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

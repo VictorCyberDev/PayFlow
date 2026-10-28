@@ -323,9 +323,12 @@ export const FAULT_INJECTION_MATRIX: readonly FaultScenario[] = [
   },
 ] as const;
 
+/** "UNSAFE" means the system permitted something the scenario forbids. It never equals an expected outcome. */
+export type ObservedFaultOutcome = SafeFaultOutcome | "UNSAFE";
+
 export interface FaultInjectionObservation {
   readonly scenarioId: string;
-  readonly actual: SafeFaultOutcome;
+  readonly actual: ObservedFaultOutcome;
   readonly evidence: string;
 }
 

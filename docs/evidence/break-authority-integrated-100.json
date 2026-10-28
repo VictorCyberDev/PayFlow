@@ -1,0 +1,702 @@
+{
+  "version": "break-authority-integrated/v1",
+  "scenarioCount": 100,
+  "categories": {
+    "IDENTITY": {
+      "total": 7,
+      "contained": 7
+    },
+    "DELEGATION": {
+      "total": 7,
+      "contained": 7
+    },
+    "AMOUNT": {
+      "total": 7,
+      "contained": 7
+    },
+    "MERCHANT": {
+      "total": 7,
+      "contained": 7
+    },
+    "PRODUCT": {
+      "total": 6,
+      "contained": 6
+    },
+    "CURRENCY": {
+      "total": 6,
+      "contained": 6
+    },
+    "FEES": {
+      "total": 6,
+      "contained": 6
+    },
+    "REPLAY": {
+      "total": 6,
+      "contained": 6
+    },
+    "CONCURRENCY": {
+      "total": 6,
+      "contained": 6
+    },
+    "PROVIDER_AMBIGUITY": {
+      "total": 6,
+      "contained": 6
+    },
+    "PROTOCOL": {
+      "total": 6,
+      "contained": 6
+    },
+    "PROOF_TAMPERING": {
+      "total": 6,
+      "contained": 6
+    },
+    "PRIVILEGE_ESCALATION": {
+      "total": 6,
+      "contained": 6
+    },
+    "CROSS_TENANT": {
+      "total": 6,
+      "contained": 6
+    },
+    "LIFECYCLE": {
+      "total": 6,
+      "contained": 6
+    },
+    "MACHINE_TO_MACHINE": {
+      "total": 6,
+      "contained": 6
+    }
+  },
+  "uncontainedScenarioIds": [],
+  "controls": [
+    {
+      "id": "valid-action-completes-through-gateway",
+      "passed": true,
+      "evidence": "ALLOW"
+    },
+    {
+      "id": "valid-action-settles-exactly-once-on-fake-rail",
+      "passed": true,
+      "evidence": "SUCCEEDED:1"
+    },
+    {
+      "id": "narrower-delegation-is-accepted",
+      "passed": true,
+      "evidence": "none"
+    },
+    {
+      "id": "untampered-proof-verifies",
+      "passed": true,
+      "evidence": "PROOF_VALID"
+    },
+    {
+      "id": "in-bounds-machine-action-is-allowed",
+      "passed": true,
+      "evidence": "none"
+    }
+  ],
+  "providerEffectsExercised": false,
+  "railKind": "deterministic-fake",
+  "results": [
+    {
+      "id": "identity-000",
+      "category": "IDENTITY",
+      "contained": true,
+      "evidence": "refused:ACCESS_AGENT_MISMATCH"
+    },
+    {
+      "id": "delegation-000",
+      "category": "DELEGATION",
+      "contained": true,
+      "evidence": "refused:DELEGATION_WIDENING:AMOUNT_WIDENED"
+    },
+    {
+      "id": "amount-000",
+      "category": "AMOUNT",
+      "contained": true,
+      "evidence": "kernel:DENY:AMOUNT_EXCEEDS_LIMIT,HUMAN_APPROVAL_LIMIT_EXCEEDED"
+    },
+    {
+      "id": "merchant-000",
+      "category": "MERCHANT",
+      "contained": true,
+      "evidence": "kernel:DENY:MERCHANT_NOT_ALLOWED"
+    },
+    {
+      "id": "product-000",
+      "category": "PRODUCT",
+      "contained": true,
+      "evidence": "kernel:DENY:CONDITION_DENIED"
+    },
+    {
+      "id": "currency-000",
+      "category": "CURRENCY",
+      "contained": true,
+      "evidence": "kernel:DENY:CURRENCY_MISMATCH"
+    },
+    {
+      "id": "fees-000",
+      "category": "FEES",
+      "contained": true,
+      "evidence": "action:MONEY:FEE_BOUNDARY_EXCEEDED"
+    },
+    {
+      "id": "replay-000",
+      "category": "REPLAY",
+      "contained": true,
+      "evidence": "capabilities=1:REPLAY_DETECTED"
+    },
+    {
+      "id": "concurrency-000",
+      "category": "CONCURRENCY",
+      "contained": true,
+      "evidence": "provider-effects=1"
+    },
+    {
+      "id": "provider_ambiguity-000",
+      "category": "PROVIDER_AMBIGUITY",
+      "contained": true,
+      "evidence": "rail:UNKNOWN:SIMULATED_TIMEOUT_BEFORE_PROVIDER_TRUTH"
+    },
+    {
+      "id": "protocol-000",
+      "category": "PROTOCOL",
+      "contained": true,
+      "evidence": "refused:MCP_AUTHENTICATION_REQUIRED"
+    },
+    {
+      "id": "proof_tampering-000",
+      "category": "PROOF_TAMPERING",
+      "contained": true,
+      "evidence": "proof:SIGNATURE_INVALID"
+    },
+    {
+      "id": "privilege_escalation-000",
+      "category": "PRIVILEGE_ESCALATION",
+      "contained": true,
+      "evidence": "kernel:DENY:CAPABILITY_DENIED"
+    },
+    {
+      "id": "cross_tenant-000",
+      "category": "CROSS_TENANT",
+      "contained": true,
+      "evidence": "refused:CROSS_TENANT_ACCESS_DENIED"
+    },
+    {
+      "id": "lifecycle-000",
+      "category": "LIFECYCLE",
+      "contained": true,
+      "evidence": "refused:AUTHORITY_INACTIVE|verify:REVOKED"
+    },
+    {
+      "id": "machine_to_machine-000",
+      "category": "MACHINE_TO_MACHINE",
+      "contained": true,
+      "evidence": "m2m:MACHINE_IDENTITY_MISMATCH"
+    },
+    {
+      "id": "identity-001",
+      "category": "IDENTITY",
+      "contained": true,
+      "evidence": "refused:ACCESS_PRINCIPAL_MISMATCH"
+    },
+    {
+      "id": "delegation-001",
+      "category": "DELEGATION",
+      "contained": true,
+      "evidence": "refused:DELEGATION_WIDENING:ACTION_KIND_WIDENED"
+    },
+    {
+      "id": "amount-001",
+      "category": "AMOUNT",
+      "contained": true,
+      "evidence": "kernel:DENY:AMOUNT_EXCEEDS_LIMIT,HUMAN_APPROVAL_LIMIT_EXCEEDED"
+    },
+    {
+      "id": "merchant-001",
+      "category": "MERCHANT",
+      "contained": true,
+      "evidence": "kernel:DENY:MERCHANT_RISK_TOO_HIGH"
+    },
+    {
+      "id": "product-001",
+      "category": "PRODUCT",
+      "contained": true,
+      "evidence": "kernel:DENY:QUANTITY_EXHAUSTED"
+    },
+    {
+      "id": "currency-001",
+      "category": "CURRENCY",
+      "contained": true,
+      "evidence": "action:MONEY:SETTLEMENT_CURRENCY_DENIED"
+    },
+    {
+      "id": "fees-001",
+      "category": "FEES",
+      "contained": true,
+      "evidence": "action:MONEY:FEE_BOUNDARY_EXCEEDED"
+    },
+    {
+      "id": "replay-001",
+      "category": "REPLAY",
+      "contained": true,
+      "evidence": "capabilities=1:REPLAY_DETECTED"
+    },
+    {
+      "id": "concurrency-001",
+      "category": "CONCURRENCY",
+      "contained": true,
+      "evidence": "provider-effects=1"
+    },
+    {
+      "id": "provider_ambiguity-001",
+      "category": "PROVIDER_AMBIGUITY",
+      "contained": true,
+      "evidence": "rail:UNKNOWN:SIMULATED_NETWORK_LOSS_AFTER_EFFECT"
+    },
+    {
+      "id": "protocol-001",
+      "category": "PROTOCOL",
+      "contained": true,
+      "evidence": "refused:MCP_SECRET_OUTPUT_BLOCKED:result.private_key"
+    },
+    {
+      "id": "proof_tampering-001",
+      "category": "PROOF_TAMPERING",
+      "contained": true,
+      "evidence": "proof:MALFORMED_PROOF"
+    },
+    {
+      "id": "privilege_escalation-001",
+      "category": "PRIVILEGE_ESCALATION",
+      "contained": true,
+      "evidence": "delegation:PRINCIPAL_CHANGED"
+    },
+    {
+      "id": "cross_tenant-001",
+      "category": "CROSS_TENANT",
+      "contained": true,
+      "evidence": "refused:CROSS_ENVIRONMENT_ACCESS_DENIED"
+    },
+    {
+      "id": "lifecycle-001",
+      "category": "LIFECYCLE",
+      "contained": true,
+      "evidence": "refused:AUTHORITY_INACTIVE|verify:REVOKED"
+    },
+    {
+      "id": "machine_to_machine-001",
+      "category": "MACHINE_TO_MACHINE",
+      "contained": true,
+      "evidence": "m2m:PURPOSE_DENIED"
+    },
+    {
+      "id": "identity-002",
+      "category": "IDENTITY",
+      "contained": true,
+      "evidence": "refused:ACCESS_AGENT_MISMATCH"
+    },
+    {
+      "id": "delegation-002",
+      "category": "DELEGATION",
+      "contained": true,
+      "evidence": "refused:DELEGATION_WIDENING:CURRENCY_WIDENED"
+    },
+    {
+      "id": "amount-002",
+      "category": "AMOUNT",
+      "contained": true,
+      "evidence": "kernel:DENY:AMOUNT_EXCEEDS_LIMIT,HUMAN_APPROVAL_LIMIT_EXCEEDED"
+    },
+    {
+      "id": "merchant-002",
+      "category": "MERCHANT",
+      "contained": true,
+      "evidence": "kernel:DENY:MERCHANT_NOT_ALLOWED"
+    },
+    {
+      "id": "product-002",
+      "category": "PRODUCT",
+      "contained": true,
+      "evidence": "kernel:DENY:CONDITION_DENIED"
+    },
+    {
+      "id": "currency-002",
+      "category": "CURRENCY",
+      "contained": true,
+      "evidence": "kernel:DENY:CURRENCY_MISMATCH"
+    },
+    {
+      "id": "fees-002",
+      "category": "FEES",
+      "contained": true,
+      "evidence": "action:MONEY:FEE_BOUNDARY_EXCEEDED"
+    },
+    {
+      "id": "replay-002",
+      "category": "REPLAY",
+      "contained": true,
+      "evidence": "capabilities=1:REPLAY_DETECTED"
+    },
+    {
+      "id": "concurrency-002",
+      "category": "CONCURRENCY",
+      "contained": true,
+      "evidence": "provider-effects=1"
+    },
+    {
+      "id": "provider_ambiguity-002",
+      "category": "PROVIDER_AMBIGUITY",
+      "contained": true,
+      "evidence": "rail:UNKNOWN:SIMULATED_TIMEOUT_BEFORE_PROVIDER_TRUTH"
+    },
+    {
+      "id": "protocol-002",
+      "category": "PROTOCOL",
+      "contained": true,
+      "evidence": "a2a:WRONG_AUDIENCE"
+    },
+    {
+      "id": "proof_tampering-002",
+      "category": "PROOF_TAMPERING",
+      "contained": true,
+      "evidence": "proof:SIGNATURE_INVALID"
+    },
+    {
+      "id": "privilege_escalation-002",
+      "category": "PRIVILEGE_ESCALATION",
+      "contained": true,
+      "evidence": "kernel:DENY:CAPABILITY_DENIED"
+    },
+    {
+      "id": "cross_tenant-002",
+      "category": "CROSS_TENANT",
+      "contained": true,
+      "evidence": "refused:CROSS_TENANT_ACCESS_DENIED"
+    },
+    {
+      "id": "lifecycle-002",
+      "category": "LIFECYCLE",
+      "contained": true,
+      "evidence": "kernel:DENY:MANDATE_EXPIRED,AGENT_EXPIRED"
+    },
+    {
+      "id": "machine_to_machine-002",
+      "category": "MACHINE_TO_MACHINE",
+      "contained": true,
+      "evidence": "m2m:RESOURCE_KIND_DENIED"
+    },
+    {
+      "id": "identity-003",
+      "category": "IDENTITY",
+      "contained": true,
+      "evidence": "refused:ACCESS_PRINCIPAL_MISMATCH"
+    },
+    {
+      "id": "delegation-003",
+      "category": "DELEGATION",
+      "contained": true,
+      "evidence": "refused:DELEGATION_WIDENING:COUNTERPARTY_WIDENED"
+    },
+    {
+      "id": "amount-003",
+      "category": "AMOUNT",
+      "contained": true,
+      "evidence": "kernel:DENY:AMOUNT_EXCEEDS_LIMIT,HUMAN_APPROVAL_LIMIT_EXCEEDED"
+    },
+    {
+      "id": "merchant-003",
+      "category": "MERCHANT",
+      "contained": true,
+      "evidence": "kernel:DENY:MERCHANT_RISK_TOO_HIGH"
+    },
+    {
+      "id": "product-003",
+      "category": "PRODUCT",
+      "contained": true,
+      "evidence": "kernel:DENY:QUANTITY_EXHAUSTED"
+    },
+    {
+      "id": "currency-003",
+      "category": "CURRENCY",
+      "contained": true,
+      "evidence": "action:MONEY:SETTLEMENT_CURRENCY_DENIED"
+    },
+    {
+      "id": "fees-003",
+      "category": "FEES",
+      "contained": true,
+      "evidence": "action:MONEY:FEE_BOUNDARY_EXCEEDED"
+    },
+    {
+      "id": "replay-003",
+      "category": "REPLAY",
+      "contained": true,
+      "evidence": "capabilities=1:REPLAY_DETECTED"
+    },
+    {
+      "id": "concurrency-003",
+      "category": "CONCURRENCY",
+      "contained": true,
+      "evidence": "provider-effects=1"
+    },
+    {
+      "id": "provider_ambiguity-003",
+      "category": "PROVIDER_AMBIGUITY",
+      "contained": true,
+      "evidence": "rail:UNKNOWN:SIMULATED_NETWORK_LOSS_AFTER_EFFECT"
+    },
+    {
+      "id": "protocol-003",
+      "category": "PROTOCOL",
+      "contained": true,
+      "evidence": "refused:MCP_AUTHENTICATION_REQUIRED"
+    },
+    {
+      "id": "proof_tampering-003",
+      "category": "PROOF_TAMPERING",
+      "contained": true,
+      "evidence": "proof:SIGNATURE_INVALID"
+    },
+    {
+      "id": "privilege_escalation-003",
+      "category": "PRIVILEGE_ESCALATION",
+      "contained": true,
+      "evidence": "delegation:PRINCIPAL_CHANGED"
+    },
+    {
+      "id": "cross_tenant-003",
+      "category": "CROSS_TENANT",
+      "contained": true,
+      "evidence": "refused:CROSS_ENVIRONMENT_ACCESS_DENIED"
+    },
+    {
+      "id": "lifecycle-003",
+      "category": "LIFECYCLE",
+      "contained": true,
+      "evidence": "refused:AUTHORITY_INACTIVE|verify:REVOKED"
+    },
+    {
+      "id": "machine_to_machine-003",
+      "category": "MACHINE_TO_MACHINE",
+      "contained": true,
+      "evidence": "m2m:SINGLE_ACTION_LIMIT_EXCEEDED"
+    },
+    {
+      "id": "identity-004",
+      "category": "IDENTITY",
+      "contained": true,
+      "evidence": "refused:ACCESS_AGENT_MISMATCH"
+    },
+    {
+      "id": "delegation-004",
+      "category": "DELEGATION",
+      "contained": true,
+      "evidence": "refused:DELEGATION_WIDENING:EXPIRY_WIDENED"
+    },
+    {
+      "id": "amount-004",
+      "category": "AMOUNT",
+      "contained": true,
+      "evidence": "kernel:DENY:AMOUNT_EXCEEDS_LIMIT,HUMAN_APPROVAL_LIMIT_EXCEEDED"
+    },
+    {
+      "id": "merchant-004",
+      "category": "MERCHANT",
+      "contained": true,
+      "evidence": "kernel:DENY:MERCHANT_NOT_ALLOWED"
+    },
+    {
+      "id": "product-004",
+      "category": "PRODUCT",
+      "contained": true,
+      "evidence": "kernel:DENY:CONDITION_DENIED"
+    },
+    {
+      "id": "currency-004",
+      "category": "CURRENCY",
+      "contained": true,
+      "evidence": "kernel:DENY:CURRENCY_MISMATCH"
+    },
+    {
+      "id": "fees-004",
+      "category": "FEES",
+      "contained": true,
+      "evidence": "action:MONEY:FEE_BOUNDARY_EXCEEDED"
+    },
+    {
+      "id": "replay-004",
+      "category": "REPLAY",
+      "contained": true,
+      "evidence": "capabilities=1:REPLAY_DETECTED"
+    },
+    {
+      "id": "concurrency-004",
+      "category": "CONCURRENCY",
+      "contained": true,
+      "evidence": "provider-effects=1"
+    },
+    {
+      "id": "provider_ambiguity-004",
+      "category": "PROVIDER_AMBIGUITY",
+      "contained": true,
+      "evidence": "rail:UNKNOWN:SIMULATED_TIMEOUT_BEFORE_PROVIDER_TRUTH"
+    },
+    {
+      "id": "protocol-004",
+      "category": "PROTOCOL",
+      "contained": true,
+      "evidence": "refused:MCP_SECRET_OUTPUT_BLOCKED:result.private_key"
+    },
+    {
+      "id": "proof_tampering-004",
+      "category": "PROOF_TAMPERING",
+      "contained": true,
+      "evidence": "proof:SIGNATURE_INVALID"
+    },
+    {
+      "id": "privilege_escalation-004",
+      "category": "PRIVILEGE_ESCALATION",
+      "contained": true,
+      "evidence": "kernel:DENY:CAPABILITY_DENIED"
+    },
+    {
+      "id": "cross_tenant-004",
+      "category": "CROSS_TENANT",
+      "contained": true,
+      "evidence": "refused:CROSS_TENANT_ACCESS_DENIED"
+    },
+    {
+      "id": "lifecycle-004",
+      "category": "LIFECYCLE",
+      "contained": true,
+      "evidence": "refused:AUTHORITY_INACTIVE|verify:REVOKED"
+    },
+    {
+      "id": "machine_to_machine-004",
+      "category": "MACHINE_TO_MACHINE",
+      "contained": true,
+      "evidence": "m2m:TOTAL_LIMIT_EXCEEDED"
+    },
+    {
+      "id": "identity-005",
+      "category": "IDENTITY",
+      "contained": true,
+      "evidence": "refused:ACCESS_PRINCIPAL_MISMATCH"
+    },
+    {
+      "id": "delegation-005",
+      "category": "DELEGATION",
+      "contained": true,
+      "evidence": "refused:DELEGATION_WIDENING:AMOUNT_WIDENED"
+    },
+    {
+      "id": "amount-005",
+      "category": "AMOUNT",
+      "contained": true,
+      "evidence": "kernel:DENY:AMOUNT_EXCEEDS_LIMIT,HUMAN_APPROVAL_LIMIT_EXCEEDED"
+    },
+    {
+      "id": "merchant-005",
+      "category": "MERCHANT",
+      "contained": true,
+      "evidence": "kernel:DENY:MERCHANT_RISK_TOO_HIGH"
+    },
+    {
+      "id": "product-005",
+      "category": "PRODUCT",
+      "contained": true,
+      "evidence": "kernel:DENY:QUANTITY_EXHAUSTED"
+    },
+    {
+      "id": "currency-005",
+      "category": "CURRENCY",
+      "contained": true,
+      "evidence": "action:MONEY:SETTLEMENT_CURRENCY_DENIED"
+    },
+    {
+      "id": "fees-005",
+      "category": "FEES",
+      "contained": true,
+      "evidence": "action:MONEY:FEE_BOUNDARY_EXCEEDED"
+    },
+    {
+      "id": "replay-005",
+      "category": "REPLAY",
+      "contained": true,
+      "evidence": "capabilities=1:REPLAY_DETECTED"
+    },
+    {
+      "id": "concurrency-005",
+      "category": "CONCURRENCY",
+      "contained": true,
+      "evidence": "provider-effects=1"
+    },
+    {
+      "id": "provider_ambiguity-005",
+      "category": "PROVIDER_AMBIGUITY",
+      "contained": true,
+      "evidence": "rail:UNKNOWN:SIMULATED_NETWORK_LOSS_AFTER_EFFECT"
+    },
+    {
+      "id": "protocol-005",
+      "category": "PROTOCOL",
+      "contained": true,
+      "evidence": "a2a:WRONG_AUDIENCE"
+    },
+    {
+      "id": "proof_tampering-005",
+      "category": "PROOF_TAMPERING",
+      "contained": true,
+      "evidence": "proof:SIGNATURE_INVALID"
+    },
+    {
+      "id": "privilege_escalation-005",
+      "category": "PRIVILEGE_ESCALATION",
+      "contained": true,
+      "evidence": "delegation:PRINCIPAL_CHANGED"
+    },
+    {
+      "id": "cross_tenant-005",
+      "category": "CROSS_TENANT",
+      "contained": true,
+      "evidence": "refused:CROSS_ENVIRONMENT_ACCESS_DENIED"
+    },
+    {
+      "id": "lifecycle-005",
+      "category": "LIFECYCLE",
+      "contained": true,
+      "evidence": "kernel:DENY:MANDATE_EXPIRED,AGENT_EXPIRED"
+    },
+    {
+      "id": "machine_to_machine-005",
+      "category": "MACHINE_TO_MACHINE",
+      "contained": true,
+      "evidence": "m2m:VELOCITY_LIMIT_EXCEEDED"
+    },
+    {
+      "id": "identity-006",
+      "category": "IDENTITY",
+      "contained": true,
+      "evidence": "refused:ACCESS_AGENT_MISMATCH"
+    },
+    {
+      "id": "delegation-006",
+      "category": "DELEGATION",
+      "contained": true,
+      "evidence": "refused:DELEGATION_WIDENING:ACTION_KIND_WIDENED"
+    },
+    {
+      "id": "amount-006",
+      "category": "AMOUNT",
+      "contained": true,
+      "evidence": "kernel:DENY:AMOUNT_EXCEEDS_LIMIT,HUMAN_APPROVAL_LIMIT_EXCEEDED"
+    },
+    {
+      "id": "merchant-006",
+      "category": "MERCHANT",
+      "contained": true,
+      "evidence": "kernel:DENY:MERCHANT_NOT_ALLOWED"
+    }
+  ]
+}

@@ -45,9 +45,10 @@ const access = {
   status: "ACTIVE",
 };
 
-function fixture() {
+function fixture(lifecycle: "ACTIVE" | "SUSPENDED" | "REVOKED" = "ACTIVE") {
   const claimed = new Set<string>();
   return new FinancialAuthorityGateway({
+    authorityState: async () => lifecycle,
     loadMandate: async (id) => (id === mandate.id ? mandate : null),
     loadAgent: async (id) => (id === agent.id ? agent : null),
     cumulativeSpentMinor: async () => 0,
@@ -124,6 +125,19 @@ describe("M7 external agent gateway", () => {
     expect(second.decision.decision).toBe("DENY");
     expect(second.decision.reasonCodes).toContain("REPLAY_DETECTED");
   });
+
+  it.each(["REVOKED", "SUSPENDED"] as const)(
+    "fails closed for %s Authority without consuming the nonce",
+    async (state) => {
+      const gateway = fixture(state);
+      await expect(
+        gateway.requestAction(access, request(), { now, merchantRisk: "LOW" }),
+      ).rejects.toMatchObject({ code: "AUTHORITY_INACTIVE" });
+      await expect(
+        gateway.readAuthority(access, mandate.id, now),
+      ).resolves.toMatchObject({ status: state });
+    },
+  );
 
   it("refuses an access token bound to a different agent", async () => {
     const gateway = fixture();

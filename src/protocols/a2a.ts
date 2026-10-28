@@ -113,3 +113,51 @@ export function validateDelegationAttenuation(
     violations.push("EXPIRY_WIDENED");
   return violations;
 }
+
+export type DelegatedRequestVerdict =
+  | "ACCEPTED"
+  | "DUPLICATE"
+  | "WRONG_AUDIENCE"
+  | "EXPIRED"
+  | "WIDENED"
+  | "MALFORMED";
+
+export interface DelegationReplayStore {
+  /** Atomic. Returns true only for the first claim of this nonce. */
+  claimNonce(scope: string, nonce: string): Promise<boolean>;
+}
+
+/**
+ * Evaluates an agent-to-agent delegation as untrusted input. It only decides
+ * whether the delegation may be *presented* to the Trust Kernel; it never
+ * authorizes money movement itself.
+ */
+export async function evaluateDelegatedRequest(
+  rawChild: unknown,
+  parent: DelegatedFinancialScope,
+  expected: { audience: string; now: string },
+  store: DelegationReplayStore,
+): Promise<{
+  verdict: DelegatedRequestVerdict;
+  violations: readonly DelegationViolation[];
+}> {
+  const parsed = DelegatedFinancialScopeSchema.safeParse(rawChild);
+  if (!parsed.success || !Number.isFinite(Date.parse(expected.now))) {
+    return { verdict: "MALFORMED", violations: [] };
+  }
+  const child = parsed.data;
+  if (child.audience !== expected.audience) {
+    return { verdict: "WRONG_AUDIENCE", violations: [] };
+  }
+  const now = Date.parse(expected.now);
+  if (now < Date.parse(child.issuedAt) || now >= Date.parse(child.expiresAt)) {
+    return { verdict: "EXPIRED", violations: [] };
+  }
+  const violations = validateDelegationAttenuation(parent, child);
+  if (violations.length > 0) return { verdict: "WIDENED", violations };
+  const first = await store.claimNonce(
+    `a2a:${child.audience}:${child.parentAgentId}:${child.childAgentId}`,
+    child.nonce,
+  );
+  return { verdict: first ? "ACCEPTED" : "DUPLICATE", violations: [] };
+}

@@ -38,6 +38,9 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run secret:scan
+      - run: npm run evidence:check
+      - name: Python SDK tests
+        run: python3 -m unittest discover -s packages/sdk-python/tests -v
       - run: npm test -- --reporter=default --reporter=json --outputFile=/tmp/payflow-tests.json
       - run: npm run test:integration -- --reporter=default --reporter=json --outputFile=/tmp/payflow-integration.json
       - run: npm run test:coverage
