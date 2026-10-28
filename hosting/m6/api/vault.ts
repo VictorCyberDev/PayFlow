@@ -22,20 +22,12 @@ const Config = z.object({
 });
 
 type App = { bootstrap: ConsolePayPalVaultBootstrap };
-type VaultStage =
-  | "INITIALIZE"
-  | "STATUS"
-  | "START"
-  | "COMPLETE"
-  | "REQUEST";
+type VaultStage = "INITIALIZE" | "STATUS" | "START" | "COMPLETE" | "REQUEST";
 let app: App | undefined;
 
 function safeFailureCode(error: unknown): string {
   if (error instanceof z.ZodError) return "CONFIG_INVALID";
-  if (
-    error instanceof Error &&
-    /^[A-Z][A-Z0-9_]{2,79}$/.test(error.message)
-  )
+  if (error instanceof Error && /^[A-Z][A-Z0-9_]{2,79}$/.test(error.message))
     return error.message;
   return "UNCLASSIFIED";
 }
