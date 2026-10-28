@@ -1,12 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./commercial.css";
 import { AppShell } from "./ui/shell";
 import { ConsoleProvider } from "./ui/provider";
 
 export const metadata: Metadata = {
-  title: "PayFlow — Permission to spend, not control of your money",
+  title: "PayFlow — Financial authority for autonomous systems",
   description:
-    "Give AI agents permission to spend — not control of your money.",
+    "Let agents execute financial work without surrendering financial control.",
 };
 export const viewport: Viewport = {
   width: "device-width",
