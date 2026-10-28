@@ -22,7 +22,26 @@ const Config = z.object({
 });
 
 type App = { bootstrap: ConsolePayPalVaultBootstrap };
+type VaultStage = "INITIALIZE" | "STATUS" | "START" | "COMPLETE" | "REQUEST";
 let app: App | undefined;
+
+function safeFailureCode(error: unknown): string {
+  if (error instanceof z.ZodError) return "CONFIG_INVALID";
+  if (
+    error instanceof Error &&
+    /^[A-Z][A-Z0-9_]{2,79}$/.test(error.message)
+  )
+    return error.message;
+  return "UNCLASSIFIED";
+}
+
+function reportFailure(stage: VaultStage, error: unknown) {
+  console.error(
+    "PAYFLOW_M6_VAULT_FAILURE",
+    JSON.stringify({ stage, code: safeFailureCode(error) }),
+  );
+}
+
 function createApp(): App {
   const c = Config.parse(process.env);
   if (new URL(c.PAYFLOW_M5_ORIGIN).origin !== c.PAYFLOW_M5_ORIGIN)
@@ -77,8 +96,10 @@ export default async function handler(
   req: IncomingMessage,
   res: ServerResponse,
 ) {
+  let stage: VaultStage = "INITIALIZE";
   try {
     app ??= createApp();
+    stage = "REQUEST";
     const url = new URL(req.url ?? "/", "http://localhost");
     const action = url.searchParams.get("action");
     const meta = {
@@ -90,13 +111,16 @@ export default async function handler(
           ? req.headers["x-payflow-csrf"]
           : undefined,
     };
-    if (req.method === "GET" && action === "status")
+    if (req.method === "GET" && action === "status") {
+      stage = "STATUS";
       return json(res, 200, await app.bootstrap.status(meta));
+    }
     if (req.method !== "POST" || !["start", "complete"].includes(action ?? ""))
       return json(res, 405, { status: "UNAVAILABLE" });
     if (!req.headers["content-type"]?.startsWith("application/json"))
       return json(res, 415, { status: "UNAVAILABLE" });
     const parsed = await body(req);
+    stage = action === "start" ? "START" : "COMPLETE";
     return json(
       res,
       200,
@@ -104,7 +128,8 @@ export default async function handler(
         ? await app.bootstrap.start(meta, parsed)
         : await app.bootstrap.complete(meta, parsed),
     );
-  } catch {
+  } catch (error) {
+    reportFailure(stage, error);
     return json(res, 400, { status: "UNAVAILABLE" });
   }
 }
