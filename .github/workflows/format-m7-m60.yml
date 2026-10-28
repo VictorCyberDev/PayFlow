@@ -1,0 +1,52 @@
+name: Format M7-M60 integration
+
+on:
+  push:
+    branches:
+      - m7-m60-master-execution
+
+permissions:
+  contents: write
+
+jobs:
+  prettier:
+    if: ${{ !contains(github.event.head_commit.message, '[formatted]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: m7-m60-master-execution
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Format M7-M60 files only
+        run: >-
+          npx prettier --write
+          "src/network/*.ts"
+          "src/protocols/*.ts"
+          "packages/**/*.ts"
+          "openapi/**/*.yaml"
+          "examples/*.ts"
+          "tests/m7*.ts"
+          "tests/m8*.ts"
+          "tests/m9*.ts"
+          "tests/m1*.ts"
+          "tests/m2*.ts"
+          "tests/m3*.ts"
+          "tests/m4*.ts"
+          "tests/m5*.ts"
+          "tests/m6*.ts"
+          "docs/COST_LEDGER_M7_M60.md"
+      - name: Commit formatting
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/network src/protocols packages openapi examples tests docs/COST_LEDGER_M7_M60.md
+          git commit -m "chore: format M7-M60 integration [formatted]"
+          git push origin HEAD:m7-m60-master-execution
