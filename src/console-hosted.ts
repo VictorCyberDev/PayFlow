@@ -38,6 +38,8 @@ const HostedConfigSchema = z.object({
   PAYFLOW_M5_PRINCIPAL_ID: z.string().min(1).max(128),
   PAYFLOW_M5_AGENT_ID: z.string().min(1).max(128),
   PAYFLOW_M5_BOOTSTRAP_KEY: z.string().min(32).max(256),
+  /** Human-entered demo login only. When absent, M5 keeps its historical bootstrap-key login. */
+  PAYFLOW_DEMO_ACCESS_CODE: z.string().min(16).max(256).optional(),
   PAYFLOW_M5_ORIGIN: z.string().url(),
 });
 /** M6 (optional): the demo Shopping Agent. Fails closed: when enabled, a persistent grant signing
@@ -83,6 +85,9 @@ export function parseHostedConfig(
     PAYFLOW_M5_PRINCIPAL_ID: env.PAYFLOW_M5_PRINCIPAL_ID,
     PAYFLOW_M5_AGENT_ID: env.PAYFLOW_M5_AGENT_ID,
     PAYFLOW_M5_BOOTSTRAP_KEY: env.PAYFLOW_M5_BOOTSTRAP_KEY,
+    ...(env.PAYFLOW_DEMO_ACCESS_CODE
+      ? { PAYFLOW_DEMO_ACCESS_CODE: env.PAYFLOW_DEMO_ACCESS_CODE }
+      : {}),
     PAYFLOW_M5_ORIGIN: env.PAYFLOW_M5_ORIGIN,
   });
   return {
@@ -153,6 +158,9 @@ export function createHostedConsole(
       principalId: config.PAYFLOW_M5_PRINCIPAL_ID,
       origin: config.PAYFLOW_M5_ORIGIN,
       bootstrapKey: config.PAYFLOW_M5_BOOTSTRAP_KEY,
+      ...(config.PAYFLOW_DEMO_ACCESS_CODE
+        ? { accessCode: config.PAYFLOW_DEMO_ACCESS_CODE }
+        : {}),
     },
     clock,
   );
