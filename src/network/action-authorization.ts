@@ -28,6 +28,7 @@ export type FinancialActionViolation =
   | "COUNTERPARTY_DENIED"
   | "INVOICE_REFERENCE_REQUIRED"
   | "RECURRING_KEY_REQUIRED"
+  | "QUANTITY_NOT_REPRESENTABLE_IN_KERNEL"
   | `MONEY:${string}`;
 
 function capabilityFor(kind: FinancialAction["kind"]): Capability {
@@ -77,6 +78,11 @@ export function authorizeFinancialAction(
   ) {
     violations.push("RECURRING_KEY_REQUIRED");
   }
+  if (action.quantity !== undefined && action.quantity > 1000) {
+    // Legacy TransactionProposal is deliberately capped at 1000. Never clamp a
+    // broader action into a narrower representation and accidentally authorize it.
+    violations.push("QUANTITY_NOT_REPRESENTABLE_IN_KERNEL");
+  }
   for (const moneyViolation of evaluateMonetaryBoundary(action, extension.monetary)) {
     violations.push(`MONEY:${moneyViolation}`);
   }
@@ -87,7 +93,9 @@ export function authorizeFinancialAction(
     mandateId: mandate.id,
     mandateFingerprint: mandateFingerprint(mandate),
     amount: action.amount,
-    ...(action.quantity === undefined ? {} : { quantity: Math.min(action.quantity, 1000) }),
+    ...(action.quantity === undefined || action.quantity > 1000
+      ? {}
+      : { quantity: action.quantity }),
     merchant: {
       id: action.counterparty.id,
       displayName: action.counterparty.displayName ?? action.counterparty.id,

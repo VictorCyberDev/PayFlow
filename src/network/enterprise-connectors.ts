@@ -1,4 +1,8 @@
-import type { FinancialAction } from "./financial-action.js";
+import { z } from "zod";
+import {
+  FinancialActionSchema,
+  type FinancialAction,
+} from "./financial-action.js";
 
 export interface EnterpriseConnectorContext {
   readonly organizationId: string;
@@ -16,23 +20,27 @@ export interface EnterpriseConnector {
   ): Promise<void>;
 }
 
+const FixtureInvoiceSchema = z
+  .object({
+    invoiceId: z.string().min(1).max(256),
+    principalId: z.string().min(1),
+    agentId: z.string().min(1),
+    supplierId: z.string().min(1),
+    amountMinor: z.number().int().safe().positive(),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    costCenter: z.string().min(1).max(128),
+    purpose: z.string().min(1).max(1024),
+    proposedAt: z.string().datetime(),
+  })
+  .strict();
+
 export class FixtureAccountsPayableConnector implements EnterpriseConnector {
   readonly connectorId = "fixture-ap/v1";
   readonly published: Array<{ context: EnterpriseConnectorContext; outcome: unknown }> = [];
 
   async normalizeInbound(raw: unknown, context: EnterpriseConnectorContext): Promise<FinancialAction> {
-    const invoice = raw as {
-      invoiceId: string;
-      principalId: string;
-      agentId: string;
-      supplierId: string;
-      amountMinor: number;
-      currency: string;
-      costCenter: string;
-      purpose: string;
-      proposedAt: string;
-    };
-    return {
+    const invoice = FixtureInvoiceSchema.parse(raw);
+    return FinancialActionSchema.parse({
       version: "financial-action/v1",
       id: `ap:${context.sourceReference}:${invoice.invoiceId}`,
       kind: "INVOICE_SETTLEMENT",
@@ -49,7 +57,7 @@ export class FixtureAccountsPayableConnector implements EnterpriseConnector {
       proposedAt: invoice.proposedAt,
       idempotencyKey: `ap-idempotency:${context.sourceSystem}:${invoice.invoiceId}`,
       metadata: { sourceSystem: context.sourceSystem },
-    };
+    });
   }
 
   async publishOutcome(
