@@ -1,201 +1,98 @@
 # PayFlow
 
-**Verifiable financial authority for AI agents.**
+**Financial authority for autonomous systems.**
 
-> Give AI agents permission to spend — not control of your money.
+> Any agent. Any rail. One authority truth.
 
-PayFlow sits between probabilistic AI intent and deterministic money movement. An AI agent may interpret, rank and propose a commerce action; PayFlow decides whether exact financial authority exists, enforces that authority at execution time, reconciles the payment provider outcome and preserves verifiable evidence of what actually happened.
+PayFlow is the financial-authority boundary between autonomous intent and consequential financial action. A model, agent, commerce protocol or payment rail may carry context; none of them becomes permission. The deterministic Trust Kernel decides whether the exact action is authorized now, execution uses bounded one-time capability, ambiguous provider outcomes remain `UNKNOWN`, and Proof preserves what actually happened.
 
-## Why PayFlow exists
+## Current repository state
 
-AI agents are becoming capable of shopping, procurement and other money-moving actions. The hard problem is not making an agent click “Pay.” It is proving:
+This repository deliberately separates accepted history from active development.
 
-- who authorized the agent;
-- which agent is acting;
-- what exact authority was delegated;
-- whether the proposed merchant/item/amount/quantity is allowed now;
-- whether that authority is still active at dispatch time;
-- whether the provider actually moved money;
-- whether the result can be verified after retries, redirects, failures or ambiguity.
+- `main` remains the accepted pre-M6 baseline for the current stack.
+- M6 — delegated / human-not-present commerce — exists on draft PR #16 and remains **unmerged and not accepted** because live PayPal Sandbox acceptance and independent M6 review are still open.
+- `m7-m60-master-execution` is a separate integration branch stacked on the exact M6 head so later work can be reviewed without rewriting M6 history.
+- Draft PR #18 contains M7–M60 company/network work. It must not be interpreted as M6 acceptance or as a production/global-adoption claim.
+- No M7–M60 work in this branch claims a live second/third rail capture, real merchant/PSP/design partner, independent audit, certification, standards-body participation, ChatGPT publication or global production adoption unless separate real evidence is added.
 
-PayFlow is the authority and evidence layer for those questions. PayPal is the current execution rail, not the source of PayFlow authority.
+See `docs/M7-M60-EXECUTION-LEDGER.md` and `docs/OVERNIGHT-M7-M60-HANDOFF.md` for exact milestone status when present.
 
-## Product status
-
-Accepted milestones on `main`:
-
-| Milestone                                                            | Result                 |
-| -------------------------------------------------------------------- | ---------------------- |
-| M1 — Trust Kernel                                                    | CLOSED / MERGED        |
-| M2 — Durable authorization, signed execution grants, PayPal recovery | CLOSED / MERGED        |
-| M3 — AI intent + authenticated mandate activation                    | CLOSED / MERGED        |
-| M4 — Trusted commerce + PayPal Sandbox acceptance                    | CLOSED / MERGED        |
-| Post-M4 — deterministic payer-return UX                              | CLOSED / MERGED        |
-| M5 — Authority Experience                                            | CLOSED / PASS / MERGED |
-| M6 — Delegated / Human-Not-Present Commerce                          | **NOT STARTED**        |
-
-The post-M5 roadmap is frozen in [`docs/ADR-016-post-m4-product-roadmap.md`](docs/ADR-016-post-m4-product-roadmap.md).
-
-## Live previews
-
-### M5 Authority Experience
-
-**https://payflow-m5-acceptance.vercel.app**
-
-This is the accepted **non-production** Authority Experience. It demonstrates:
-
-- Ask PayFlow;
-- untrusted AI interpretation presented as not yet authorized;
-- exact authenticated confirmation;
-- durable Authority views;
-- remaining budget/constraints/expiry;
-- Activity projections;
-- authenticated revoke controls;
-- durable hosted sessions and pending review state;
-- stale/replay/tamper protections.
-
-The hosted M5 environment intentionally uses a fixed-owner non-production demo identity and recorded model behavior. It is not a production identity system and M5 performs no PayPal capture.
-
-### Real PayPal Sandbox terminal-payment proof
-
-A separate accepted post-M4 deployment proves the real payment path and deterministic payer-return UX:
-
-**https://payflow-git-post-payment-ux-reconciliation-start-up16.vercel.app/paypal/return?token=6P5145740X635133T**
-
-Accepted Sandbox evidence for that operation:
-
-- amount: **$84.00 USD**;
-- PayPal order: COMPLETED;
-- capture: COMPLETED;
-- Payment Attempt: CAPTURED;
-- execution grant: CONSUMED;
-- reservation: COMMITTED;
-- Trust Trace: VERIFIED;
-- completed provider capture count: **exactly 1**;
-- safe terminal resume: **0 additional captures**.
-
-The public demos are deliberately separated today: M5 proves the premium Authority product and durable authenticated controls; the accepted M4/post-M4 environment proves real PayPal execution. M6 has not started.
-
-## The authority chain
+## The conserved authority chain
 
 ```text
-Human instruction
+Intent / commerce context / protocol message
+        ↓              (untrusted input)
+Trusted identity context
         ↓
-AI interpretation (untrusted)
-        ↓
-Exact authenticated activation
-        ↓
-Mandate + AgentPassport
+Bounded Authority + delegation path
         ↓
 Deterministic Trust Kernel
         ↓
 Durable reservation
         ↓
-Signed one-time execution grant
+One-time exact-bound execution grant
         ↓
-Immediate authority revalidation
+Immediate runtime revalidation
         ↓
-PayPal execution
+Replaceable financial rail
         ↓
-UNKNOWN-safe reconciliation
+SUCCEEDED / FAILED / UNKNOWN
         ↓
-Durable evidence + Trust Trace
+Lookup-only reconciliation when ambiguous
+        ↓
+Portable verifiable Proof
 ```
 
-The model never grants itself financial permission.
+## What the product exposes
 
-## Core security invariants
+**Authority** — people and organizations create, inspect, suspend, revoke and delegate bounded financial Authority.
 
-- AI/model output is untrusted until exact authenticated confirmation.
-- Browser state is never financial truth.
-- `Mandate` is the durable financial-authority object.
-- `AgentPassport` is the durable agent identity/capability object.
-- DENY never reaches the payment provider.
-- Escalation requires a separate authenticated human action.
-- Budget and quantity consumption use durable transactional reservations.
-- Execution grants are signed, exact-bound, short-lived and one-time claimable.
-- Authority is revalidated immediately before new provider effects.
-- Revoked or expired authority cannot authorize new dispatch.
-- Ambiguous provider outcomes enter UNKNOWN/quarantine rather than being guessed as failed.
-- Reconciliation observes existing provider effects without silently creating a replacement purchase.
-- Checkout quote/manifest terms are bound to exact merchant/item/SKU/condition/quantity/amount/currency expectations.
-- PayPal return parameters are notifications, not financial authority.
-- `OperationTraceService` verifies historical relationships from durable state.
-- Historical evidence is not rewritten to make a demo look cleaner.
+**Gateway** — agents request authorization for an exact action through REST, TypeScript/Python SDK foundations, MCP, A2A and framework adapters. External assertions cannot widen Authority.
 
-## PayPal integration
+**Verify** — merchants, platforms and auditors verify signed Authority/Proof material without a money-moving capability.
 
-The accepted payment path uses the **PayPal Sandbox Orders v2 API** with server-side OAuth and `intent=CAPTURE`.
+**Proof** — durable financial truth about authorization, delegation, reservation, execution-grant state, provider effect, effect count, `UNKNOWN`, reconciliation and final outcome.
 
-PayFlow persists a durable Payment Attempt before provider side effects and keeps stable provider idempotency identifiers. It explicitly represents payer approval, capture ambiguity and reconciliation.
+**Enterprise control plane** — organizations, roles, agent lifecycle, delegation, separation of duties, templates, integrations, retention and audit controls.
 
-A PayPal order being created is **not** treated as payment success. A successful operation requires provider conformance plus durable local finalization.
+**Rail adapters** — provider-neutral execution contract with exact action digest, idempotency, one-time grant, normalized evidence and reconciliation.
 
-Normal tests and CI do not contact PayPal. Live Sandbox smoke/acceptance paths require explicit opt-in and external credentials.
+## Core invariants
 
-## AI integration
+- model output remains untrusted input;
+- browser/client state is never financial truth;
+- delegation may attenuate but may not silently widen;
+- Authority is durably revalidated before irreversible provider effect;
+- execution grants are exact-bound, short-lived and replay resistant;
+- reservations happen before irreversible Authority consumption;
+- duplicate execution must be prevented or remain safely unresolved;
+- `UNKNOWN` is first-class truth and routes to reconciliation, not blind retry;
+- verification cannot move money;
+- protocol/identity/payment providers cannot redefine financial Authority;
+- UI never claims success before durable financial truth exists;
+- historical migrations/evidence are not rewritten to make a demo look cleaner.
 
-PayFlow's intent pipeline can use a server-side model provider to interpret natural-language delegation into a strict structured draft. The accepted implementation includes a bounded Groq integration and deterministic local compilation/semantic checks.
-
-The model:
-
-- receives untrusted source intent;
-- cannot create a trusted Mandate directly;
-- cannot authenticate the user;
-- cannot issue execution grants;
-- cannot dispatch PayPal;
-- cannot widen local review bounds;
-- cannot override deterministic authorization.
-
-The product rule is simple:
-
-> **The AI interprets your intention. It does not grant itself permission.**
-
-## Authority Experience
-
-M5 adds a premium product layer above the accepted kernel rather than a second permission model.
-
-Top-level surfaces:
-
-- Home
-- Ask PayFlow
-- Authority
-- Activity
-- Agents
-
-The primary UX uses human language such as:
-
-- “Up to $100”
-- “1 new item”
-- “Approved merchants only”
-- “Expires Friday at 6:00 PM”
-- “Your agent can complete this without asking again”
-
-Technical details remain behind progressive disclosure.
-
-See [`docs/M5_AUTHORITY_EXPERIENCE.md`](docs/M5_AUTHORITY_EXPERIENCE.md) for the accepted M5 evidence and boundaries.
-
-## Repository structure
+## Repository map
 
 ```text
-apps/console/      premium Authority Experience
-api/               bounded deployment/API entry points
-db/migrations/     forward-only PostgreSQL migrations
-hosting/            hosted M5 adapter and operator-only provisioning tooling
-src/                trust kernel, intent, authority, commerce and provider services
-tests/              deterministic, adversarial and PostgreSQL integration suites
-docs/               architecture decisions and acceptance evidence
+apps/console/       personal, developer, enterprise and verifier product surfaces
+api/                bounded API/deployment entry points
+db/migrations/      forward-only PostgreSQL migrations
+examples/            integration examples
+hosting/             hosted demo/operator adapters from accepted milestones
+openapi/             versioned public API contract
+packages/            SDK/verifier/merchant package foundations
+plugins/             plugin/MCP packaging metadata
+spec/                public financial-authority schema
+src/                 Trust Kernel plus network/control/protocol modules
+tests/               unit, adversarial, integration, concurrency and product tests
+docs/                ADRs, architecture, security, operations and evidence
 ```
 
-## Development
+## Local development
 
-Requirements:
-
-- Node.js / npm compatible with the lockfile;
-- PostgreSQL for integration tests;
-- no external provider credentials required for normal validation.
-
-Install and run the main validation gates:
+Requirements: Node.js 20+ and PostgreSQL 17 for integration tests. Normal validation uses local/sandbox fixtures and does not require a live provider.
 
 ```bash
 npm ci
@@ -209,7 +106,7 @@ npm audit --omit=dev --audit-level=high
 npm run build
 ```
 
-Console validation:
+Console:
 
 ```bash
 cd apps/console
@@ -220,85 +117,24 @@ npm test
 npm run build
 ```
 
-For integration tests, point `TEST_DATABASE_URL` at a disposable PostgreSQL database.
+Set `TEST_DATABASE_URL` to a disposable PostgreSQL database for root integration tests. See `docs/QUICKSTART-M7-M60.md` for the network-level conceptual path.
 
-### Optional live provider smoke tests
+## External provider tests
 
-Live providers are always explicit opt-in. Credentials alone do not enable them.
+Provider tests are explicit opt-in and must use sandbox credentials unless the owner separately authorizes production. Credentials alone do not enable a live test. Never commit database URLs, provider tokens, OAuth secrets, private signing keys, webhook secrets or payment credentials.
 
-Groq intent smoke:
+M6 live PayPal acceptance remains separate from M7–M60 development. Nothing in this branch fabricates `M6 SANDBOX ACCEPTANCE: PASS`.
 
-```bash
-RUN_GROQ_SMOKE_TEST=true npm run test:groq:smoke
-```
+## Commercial boundary
 
-PayPal Sandbox smoke:
+PayFlow is not a bank, wallet/custodian, card issuer, lender, proprietary LLM, generic agent orchestrator or payment rail. The company category is **Financial authority for autonomous systems**.
 
-```bash
-PAYPAL_ENVIRONMENT=sandbox \
-RUN_PAYPAL_SANDBOX_SMOKE_TEST=true \
-PAYPAL_CLIENT_ID=... \
-PAYPAL_CLIENT_SECRET=... \
-npm run test:paypal:sandbox
-```
+The commercial model is developer sandbox → platform usage/subscription → enterprise control plane/integrations, with verification kept low-friction where strategically useful. The repository does not fabricate pricing validation, revenue or customers.
 
-Never commit provider credentials, database URLs, bootstrap/operator codes, PayPal payer credentials, resume capabilities or signing secrets.
-
-## Accepted M5 verification baseline
-
-Final M5 branch head: `773de321e8ed6f262e22c4a2f489b6021b3ba3de`.
-
-Merged main baseline: `771a1128392390c2015e40a543db496f5bda8fc9`.
-
-Accepted exact-head CI: GitHub Actions run `39968156114` — SUCCESS.
-
-Final reported M5 validation included:
-
-- root tests: **1,679 passed, 0 failed, 3 skipped**;
-- PostgreSQL integration list: **755 passed, 0 failed**;
-- statements coverage: **95.37%**;
-- branches: **90.03%**;
-- functions: **94.16%**;
-- console tests: **67 / 67**;
-- Chromium E2E: **10 / 10**;
-- root and console production audits: **0 vulnerabilities**;
-- hosted acceptance: PASS.
-
-Migration `010` adds only durable non-production host/session/pending-action state for M5. Migrations `001` through `010` are frozen by ADR-016; future schema work, if explicitly authorized by a later milestone, begins at `011`.
-
-## Roadmap — frozen, M6 not started
-
-The accepted sequence is:
-
-1. **M6 — Delegated / Human-Not-Present Commerce**
-2. **M7 — Live Agent Commerce Gateway**
-3. **M8 — Interoperable Verifiable Authority**
-4. **M9 — Trust Experience + Break PayFlow Arena**
-5. **M10 — Judge-Proof Acceptance and Submission**
-
-ADR-016 also locks later work around protocol-neutral interoperability, merchant-verifiable agent identity, scoped external-agent access, portable outcome evidence, the Break PayFlow benchmark and final judge-repository/Devpost acceptance gates.
-
-None of those later milestones are implemented merely because they are described here.
-
-## Current non-goals
-
-PayFlow is deliberately not trying to become:
-
-- a bank;
-- wallet/custody infrastructure;
-- a card issuer;
-- a lender;
-- a proprietary LLM;
-- a generic browser agent;
-- a replacement for PayPal/Stripe/Visa/Mastercard payment rails;
-- a second protocol-specific policy engine.
-
-The product moat is the complete conserved authority chain from human instruction to independently verifiable financial outcome.
-
-## Open source
+## License
 
 PayFlow is released under the [MIT License](LICENSE).
 
-## Safety / environment note
+## Safety note
 
-This repository currently demonstrates financial authorization and PayPal integration in **Sandbox/non-production environments**. It is not production banking infrastructure, a custody service or a claim of regulatory certification.
+The active M7–M60 branch contains local/sandbox network primitives and product surfaces. It is not a claim of production banking infrastructure, regulatory certification, independent audit or global merchant acceptance.
