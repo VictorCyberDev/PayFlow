@@ -1,0 +1,8 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "payflow-financial-authority",
+  "version": "0.1.0-preview",
+  "description": "Bounded financial authority, verification, Proof, and reconciliation for autonomous systems.",
+  "repository": "https://github.com/VictorCyberDev/PayFlow",
+  "license": "SEE-REPOSITORY-LICENSE"
+}
