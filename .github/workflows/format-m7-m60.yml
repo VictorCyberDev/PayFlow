@@ -1,0 +1,106 @@
+name: Format M7-M60 release candidate
+
+on:
+  push:
+    branches:
+      - m7-m60-master-execution
+
+permissions:
+  contents: write
+
+jobs:
+  prettier:
+    if: ${{ !contains(github.event.head_commit.message, '[formatted]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: m7-m60-master-execution
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Format integration-owned files
+        run: |
+          npx prettier --write \
+            "src/network/*.ts" \
+            "src/protocols/*.ts" \
+            "packages/**/*.ts" \
+            "packages/**/package.json" \
+            "examples/*.ts" \
+            "openapi/**/*.yaml" \
+            "spec/**/*.json" \
+            "plugins/**/*.json" \
+            "apps/console/app/commercial.css" \
+            "apps/console/app/layout.tsx" \
+            "apps/console/app/ui/shell.tsx" \
+            "apps/console/app/views/home.tsx" \
+            "apps/console/app/agents/page.tsx" \
+            "apps/console/app/proof/page.tsx" \
+            "apps/console/app/developer/page.tsx" \
+            "apps/console/app/enterprise/page.tsx" \
+            "apps/console/app/verify/page.tsx" \
+            "tests/m7-gateway.test.ts" \
+            "tests/m7-m21-api-events.test.ts" \
+            "tests/m8-verify.test.ts" \
+            "tests/m9-break-authority.test.ts" \
+            "tests/m11-m15-foundation.test.ts" \
+            "tests/m14-fault-injection-matrix.test.ts" \
+            "tests/m16-m20-protocols.test.ts" \
+            "tests/m21-m25-verify-network.test.ts" \
+            "tests/m26-m30-rails-actions.test.ts" \
+            "tests/m31-m35-enterprise.test.ts" \
+            "tests/m36-m40-assurance.test.ts" \
+            "tests/m41-m45-acceptance-network.test.ts" \
+            "tests/m46-m50-open-standardization.test.ts" \
+            "tests/m51-m55-federation.test.ts" \
+            "tests/m56-m60-global-network.test.ts" \
+            "scripts/secret-scan.mjs" \
+            ".github/workflows/ci.yml" \
+            "package.json" \
+            "tsconfig.json" \
+            "vercel.json" \
+            "README.md" \
+            "docs/COST_LEDGER_M7_M60.md" \
+            "docs/BRAND-002-commercial-naming-transition.md" \
+            "docs/PROTOCOL-VERSIONS-M7-M60.md" \
+            "docs/DESIGN-PARTNER-PILOT-KIT.md" \
+            "docs/CHATGPT-PLUGIN-SUBMISSION.md" \
+            "docs/MERCHANT-VERIFY-KIT.md" \
+            "docs/MERCHANT-PSP-PILOT-KIT.md" \
+            "docs/RAIL-ADAPTER-CONTRACT.md" \
+            "docs/OPERATIONS-RECONCILIATION.md" \
+            "docs/DATA-PRIVACY-RETENTION.md" \
+            "docs/SECURITY-ASSURANCE-READINESS.md" \
+            "docs/STANDARDS-EVIDENCE-MAP.md" \
+            "docs/PRICING-METERING.md" \
+            "docs/AUTHORITY-MARK-BETA.md" \
+            "docs/PSP-GATEWAY-PARTNER-KIT.md" \
+            "docs/EMBEDDED-AUTHORITY.md" \
+            "docs/FINANCIAL-AUTHORITY-SCHEMA-V1.md" \
+            "docs/STANDARDS-PARTICIPATION-READINESS.md" \
+            "docs/FINANCIAL-AUTHORITY-INTEROPERABILITY-PROFILE-V1.md" \
+            "docs/MULTI-REGION-ARCHITECTURE.md" \
+            "docs/FEDERATED-VERIFICATION.md" \
+            "docs/UBIQUITOUS-AUTHORITY-ACCEPTANCE.md" \
+            "docs/NETWORK-RULES-RECOURSE.md" \
+            "docs/GLOBAL-FINANCIAL-AUTHORITY-NETWORK.md" \
+            "docs/FAULT-INJECTION-MATRIX.md" \
+            "docs/ADR-017-m7-m60-financial-authority-network.md" \
+            "docs/QUICKSTART-M7-M60.md" \
+            "docs/COMPANY-ARCHITECTURE-M7-M60.md" \
+            "docs/DEPLOYMENT-OPERATIONS-M7-M60.md" \
+            "docs/DEMO-SCRIPT-M7-M60.md"
+      - name: Commit formatting
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u
+          git add src/network src/protocols packages examples openapi spec plugins apps/console/app tests scripts .github/workflows/ci.yml package.json tsconfig.json vercel.json README.md docs
+          git commit -m "chore: format M7-M60 release candidate [formatted]"
+          git push origin HEAD:m7-m60-master-execution
