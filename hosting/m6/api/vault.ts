@@ -22,7 +22,12 @@ const Config = z.object({
 });
 
 type App = { bootstrap: ConsolePayPalVaultBootstrap };
-type VaultStage = "INITIALIZE" | "STATUS" | "START" | "COMPLETE" | "REQUEST";
+type VaultStage =
+  | "INITIALIZE"
+  | "STATUS"
+  | "START"
+  | "COMPLETE"
+  | "REQUEST";
 let app: App | undefined;
 
 function safeFailureCode(error: unknown): string {
