@@ -46,14 +46,18 @@ type Handle = {
  * process-local ConsoleSessions: opaque 256-bit token (only its SHA-256 is stored), fixed
  * server-configured principal, HttpOnly/SameSite cookie (Secure + __Host- on HTTPS), explicit
  * 15-minute expiry, CSRF synchronizer value, exact origin/host audience, bounded login and
- * mutation traffic, logout revocation. No identity-provider claim. */
+ * mutation traffic, logout revocation. No identity-provider claim.
+ *
+ * `bootstrapKey` remains the cryptographic root for CSRF and all host-derived keys. `accessCode`
+ * is an optional human-entered demo login credential only; when absent, historical M5 behavior
+ * is preserved by falling back to the bootstrap key. */
 export class DurableConsoleSessions implements ConsoleSessionPort {
   readonly #handles = new WeakMap<object, Handle>();
   readonly #actions = new WeakMap<
     object,
     { session: Handle; hash: string; expires: number }
   >();
-  readonly #bootstrapHash: Buffer;
+  readonly #accessHash: Buffer;
   readonly #principal: string;
   readonly #origin: string;
   readonly #host: string;
@@ -61,7 +65,12 @@ export class DurableConsoleSessions implements ConsoleSessionPort {
   readonly #csrfKey: Buffer;
   constructor(
     private readonly sql: Sql,
-    config: { principalId: string; origin: string; bootstrapKey: string },
+    config: {
+      principalId: string;
+      origin: string;
+      bootstrapKey: string;
+      accessCode?: string;
+    },
     private readonly clock: () => Date = () => new Date(),
   ) {
     this.#principal = z.string().min(1).max(128).parse(config.principalId);
@@ -77,10 +86,13 @@ export class DurableConsoleSessions implements ConsoleSessionPort {
       throw new Error("INVALID_HOST_ORIGIN");
     if (config.bootstrapKey.length < 32 || config.bootstrapKey.length > 256)
       throw new Error("BOOTSTRAP_CONFIGURATION_REQUIRED");
+    const accessCode = config.accessCode ?? config.bootstrapKey;
+    if (accessCode.length < 16 || accessCode.length > 256)
+      throw new Error("DEMO_ACCESS_CONFIGURATION_REQUIRED");
     this.#origin = u.origin;
     this.#host = u.host;
     this.#secure = u.protocol === "https:";
-    this.#bootstrapHash = digest(config.bootstrapKey);
+    this.#accessHash = digest(accessCode);
     this.#csrfKey = deriveHostKeys(config.bootstrapKey).csrf;
   }
   #csrf(key: string) {
@@ -125,7 +137,7 @@ export class DurableConsoleSessions implements ConsoleSessionPort {
     if (
       !w ||
       Number(w.attempts) > 5 ||
-      !timingSafeEqual(this.#bootstrapHash, digest(parsed.bootstrapCode))
+      !timingSafeEqual(this.#accessHash, digest(parsed.bootstrapCode))
     )
       throw new Error("SESSION_REQUIRED");
     await this
