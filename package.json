@@ -18,6 +18,7 @@
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "secret:scan": "node scripts/secret-scan.mjs",
     "test:groq:smoke": "vitest run tests/groq.smoke.test.ts",
     "test:paypal:commerce:sandbox": "vitest run tests/paypal-commerce.sandbox.test.ts"
   },

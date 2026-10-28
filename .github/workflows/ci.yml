@@ -37,6 +37,7 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run secret:scan
       - run: npm test -- --reporter=default --reporter=json --outputFile=/tmp/payflow-tests.json
       - run: npm run test:integration -- --reporter=default --reporter=json --outputFile=/tmp/payflow-integration.json
       - run: npm run test:coverage

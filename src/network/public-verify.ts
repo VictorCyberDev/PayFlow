@@ -21,6 +21,18 @@ export interface PublicVerifyResponse {
   readonly body: unknown;
 }
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, child]) => [key, canonicalize(child)]),
+    );
+  }
+  return value;
+}
+
 export async function publicVerify(
   request: { clientId: string; presentation: unknown; now: string },
   deps: PublicVerifyDependencies,
@@ -38,8 +50,13 @@ export async function publicVerify(
     "x-ratelimit-remaining": String(quota.remaining),
     "x-ratelimit-reset": quota.resetAt,
   };
-  if (!quota.allowed)
-    return { status: 429, headers, body: { error: "VERIFY_RATE_LIMITED" } };
+  if (!quota.allowed) {
+    return {
+      status: 429,
+      headers,
+      body: { error: "VERIFY_RATE_LIMITED" },
+    };
+  }
   return {
     status: 200,
     headers,
@@ -58,7 +75,7 @@ export interface SignedVerifierRequest {
 
 export function digestVerificationBody(body: unknown): string {
   return createHash("sha256")
-    .update(JSON.stringify(body), "utf8")
+    .update(JSON.stringify(canonicalize(body)), "utf8")
     .digest("hex");
 }
 
@@ -74,8 +91,9 @@ export function verifySignedVerifierRequest(
   const requestTime = Date.parse(request.timestamp);
   const nowTime = Date.parse(now);
   if (!Number.isFinite(requestTime) || !Number.isFinite(nowTime)) return false;
-  if (Math.abs(nowTime - requestTime) > maxClockSkewSeconds * 1000)
+  if (Math.abs(nowTime - requestTime) > maxClockSkewSeconds * 1000) {
     return false;
+  }
   const canonical = [
     request.verifierId,
     request.keyId,
