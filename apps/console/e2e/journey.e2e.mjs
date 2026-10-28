@@ -592,6 +592,7 @@ test("accessibility: keyboard-only flow, visible focus, labels, live regions, re
     );
   assert.deepEqual(await unnamed(), []);
   // One h1 per page and landmarks.
+  await page.locator("h1").first().waitFor(); // count() does not wait for render
   assert.equal(await page.locator("h1").count(), 1);
   for (const sel of ["main", "nav[aria-label='Primary']"])
     assert.ok(await page.locator(sel).count());
@@ -619,6 +620,7 @@ test("accessibility: keyboard-only flow, visible focus, labels, live regions, re
   await page
     .getByRole("heading", { level: 1, name: /what PayFlow understood/ })
     .waitFor();
+  await page.locator("h1").first().waitFor(); // count() does not wait for render
   assert.equal(await page.locator("h1").count(), 1);
   await page.getByRole("button", { name: "Continue to confirm" }).focus();
   await page.keyboard.press("Enter");
