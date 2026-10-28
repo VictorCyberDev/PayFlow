@@ -35,7 +35,9 @@ export class PayFlowClient {
     });
     const body = (await response.json()) as unknown;
     if (!response.ok) {
-      const error = new Error(`PayFlow API request failed with ${response.status}`);
+      const error = new Error(
+        `PayFlow API request failed with ${response.status}`,
+      );
       Object.assign(error, { status: response.status, body });
       throw error;
     }

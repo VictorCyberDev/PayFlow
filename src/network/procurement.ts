@@ -17,7 +17,13 @@ export const ProcurementAuthorityPackSchema = z
     maxQuantity: z.number().int().safe().positive().max(1_000_000),
     currency: z.string().regex(/^[A-Z]{3}$/),
     budgetMinor: z.number().int().safe().positive(),
-    maxRecurringActions: z.number().int().safe().positive().max(10_000).optional(),
+    maxRecurringActions: z
+      .number()
+      .int()
+      .safe()
+      .positive()
+      .max(10_000)
+      .optional(),
     invoiceReferencePrefix: z.string().min(1).max(64).optional(),
     costCenter: z.string().min(1).max(128),
     purpose: z.string().min(1).max(1024),
@@ -61,28 +67,40 @@ export function evaluateProcurementAction(
   if (!pack.approvedVendorIds.includes(action.counterparty.id)) {
     violations.push("VENDOR_DENIED");
   }
-  if (action.amount.currency !== pack.currency) violations.push("CURRENCY_MISMATCH");
-  if (action.amount.minor > pack.budgetMinor) violations.push("BUDGET_EXCEEDED");
-  if ((action.quantity ?? action.items.reduce((sum, item) => sum + item.quantity, 0)) > pack.maxQuantity) {
+  if (action.amount.currency !== pack.currency)
+    violations.push("CURRENCY_MISMATCH");
+  if (action.amount.minor > pack.budgetMinor)
+    violations.push("BUDGET_EXCEEDED");
+  if (
+    (action.quantity ??
+      action.items.reduce((sum, item) => sum + item.quantity, 0)) >
+    pack.maxQuantity
+  ) {
     violations.push("QUANTITY_EXCEEDED");
   }
-  if (action.costCenter !== pack.costCenter) violations.push("COST_CENTER_MISMATCH");
+  if (action.costCenter !== pack.costCenter)
+    violations.push("COST_CENTER_MISMATCH");
   if (action.purpose !== pack.purpose) violations.push("PURPOSE_MISMATCH");
-  if (Date.parse(now) >= Date.parse(pack.expiresAt)) violations.push("AUTHORITY_EXPIRED");
+  if (Date.parse(now) >= Date.parse(pack.expiresAt))
+    violations.push("AUTHORITY_EXPIRED");
   if (
     pack.invoiceReferencePrefix &&
     !action.invoiceReference?.startsWith(pack.invoiceReferencePrefix)
   ) {
     violations.push("INVOICE_REFERENCE_MISMATCH");
   }
-  const approved = new Map(pack.approvedSkus.map((entry) => [entry.sku, entry]));
+  const approved = new Map(
+    pack.approvedSkus.map((entry) => [entry.sku, entry]),
+  );
   for (const item of action.items) {
     const expected = approved.get(item.sku);
     if (!expected) {
       violations.push("SKU_DENIED");
       continue;
     }
-    const delta = Math.abs(item.unitPriceMinor - expected.expectedUnitPriceMinor);
+    const delta = Math.abs(
+      item.unitPriceMinor - expected.expectedUnitPriceMinor,
+    );
     const allowedDelta = Math.floor(
       (expected.expectedUnitPriceMinor * pack.priceToleranceBps) / 10_000,
     );

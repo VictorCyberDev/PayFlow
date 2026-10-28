@@ -13,10 +13,17 @@ export interface EnterpriseConnectorContext {
 
 export interface EnterpriseConnector {
   readonly connectorId: string;
-  normalizeInbound(raw: unknown, context: EnterpriseConnectorContext): Promise<FinancialAction>;
+  normalizeInbound(
+    raw: unknown,
+    context: EnterpriseConnectorContext,
+  ): Promise<FinancialAction>;
   publishOutcome(
     context: EnterpriseConnectorContext,
-    outcome: { actionId: string; state: "SUCCEEDED" | "FAILED" | "UNKNOWN"; proofUrl?: string },
+    outcome: {
+      actionId: string;
+      state: "SUCCEEDED" | "FAILED" | "UNKNOWN";
+      proofUrl?: string;
+    },
   ): Promise<void>;
 }
 
@@ -36,9 +43,15 @@ const FixtureInvoiceSchema = z
 
 export class FixtureAccountsPayableConnector implements EnterpriseConnector {
   readonly connectorId = "fixture-ap/v1";
-  readonly published: Array<{ context: EnterpriseConnectorContext; outcome: unknown }> = [];
+  readonly published: Array<{
+    context: EnterpriseConnectorContext;
+    outcome: unknown;
+  }> = [];
 
-  async normalizeInbound(raw: unknown, context: EnterpriseConnectorContext): Promise<FinancialAction> {
+  async normalizeInbound(
+    raw: unknown,
+    context: EnterpriseConnectorContext,
+  ): Promise<FinancialAction> {
     const invoice = FixtureInvoiceSchema.parse(raw);
     return FinancialActionSchema.parse({
       version: "financial-action/v1",
@@ -62,7 +75,11 @@ export class FixtureAccountsPayableConnector implements EnterpriseConnector {
 
   async publishOutcome(
     context: EnterpriseConnectorContext,
-    outcome: { actionId: string; state: "SUCCEEDED" | "FAILED" | "UNKNOWN"; proofUrl?: string },
+    outcome: {
+      actionId: string;
+      state: "SUCCEEDED" | "FAILED" | "UNKNOWN";
+      proofUrl?: string;
+    },
   ): Promise<void> {
     this.published.push({ context, outcome });
   }

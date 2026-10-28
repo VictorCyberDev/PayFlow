@@ -58,7 +58,9 @@ describe("M18 A2A", () => {
   it("builds a v1 Agent Card with per-interface protocol version", () => {
     const card = createPayFlowAgentCard("https://authority.example");
     expect(card.supportedInterfaces[0]?.protocolVersion).toBe("1.0");
-    expect(card.supportedInterfaces[0]?.url).toBe("https://authority.example/a2a/v1");
+    expect(card.supportedInterfaces[0]?.url).toBe(
+      "https://authority.example/a2a/v1",
+    );
     expect(card.skills.length).toBeGreaterThan(0);
   });
 
@@ -87,9 +89,12 @@ describe("M18 A2A", () => {
       nonce: "delegation-child-0001",
     };
     expect(validateDelegationAttenuation(parent, child)).toEqual([]);
-    expect(validateDelegationAttenuation(parent, { ...child, maxAmountMinor: 20_000 })).toContain(
-      "AMOUNT_WIDENED",
-    );
+    expect(
+      validateDelegationAttenuation(parent, {
+        ...child,
+        maxAmountMinor: 20_000,
+      }),
+    ).toContain("AMOUNT_WIDENED");
   });
 });
 

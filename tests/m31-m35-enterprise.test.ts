@@ -68,10 +68,26 @@ describe("M32 separation of duties", () => {
     });
     const result = evaluateApprovalEvidence(
       { ...policy },
-      { requesterPrincipalId: "requester", actionDigest: "digest", amountMinor: 20_000 },
+      {
+        requesterPrincipalId: "requester",
+        actionDigest: "digest",
+        amountMinor: 20_000,
+      },
       [
-        { principalId: "finance", role: "FINANCE_OWNER", actionDigest: "digest", approvedAt: "2026-10-28T03:00:00.000Z", authenticationEvidence: "authenticated-evidence-finance" },
-        { principalId: "security", role: "SECURITY_OWNER", actionDigest: "digest", approvedAt: "2026-10-28T03:00:00.000Z", authenticationEvidence: "authenticated-evidence-security" },
+        {
+          principalId: "finance",
+          role: "FINANCE_OWNER",
+          actionDigest: "digest",
+          approvedAt: "2026-10-28T03:00:00.000Z",
+          authenticationEvidence: "authenticated-evidence-finance",
+        },
+        {
+          principalId: "security",
+          role: "SECURITY_OWNER",
+          actionDigest: "digest",
+          approvedAt: "2026-10-28T03:00:00.000Z",
+          authenticationEvidence: "authenticated-evidence-security",
+        },
       ],
     );
     expect(result.approved).toBe(true);
@@ -81,8 +97,12 @@ describe("M32 separation of duties", () => {
 describe("M33-M35 lifecycle policy packs and connectors", () => {
   it("enforces terminal lifecycle transitions and exposes non-authoritative templates", () => {
     expect(transitionAgentLifecycle("ACTIVE", "SUSPENDED")).toBe("SUSPENDED");
-    expect(() => transitionAgentLifecycle("REVOKED", "ACTIVE")).toThrow("INVALID_AGENT_LIFECYCLE_TRANSITION");
-    expect(getOrganizationPolicyPack("procurement")?.candidateActionKinds).toContain("PROCUREMENT_ORDER");
+    expect(() => transitionAgentLifecycle("REVOKED", "ACTIVE")).toThrow(
+      "INVALID_AGENT_LIFECYCLE_TRANSITION",
+    );
+    expect(
+      getOrganizationPolicyPack("procurement")?.candidateActionKinds,
+    ).toContain("PROCUREMENT_ORDER");
   });
 
   it("normalizes an AP fixture into the shared financial-action schema shape", async () => {

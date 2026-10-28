@@ -9,8 +9,13 @@ export async function verifyBeforeCheckout(
   merchantClientId: string,
   signedPresentation: unknown,
 ) {
-  const verifier = new MerchantVerifierClient({ baseUrl, clientId: merchantClientId });
-  const result = (await verifier.verifyPresentation(signedPresentation)) as { verdict?: string };
+  const verifier = new MerchantVerifierClient({
+    baseUrl,
+    clientId: merchantClientId,
+  });
+  const result = (await verifier.verifyPresentation(signedPresentation)) as {
+    verdict?: string;
+  };
   requireVerifiedAuthority(result);
   return {
     result,

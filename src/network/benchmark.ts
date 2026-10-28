@@ -115,13 +115,19 @@ function attack(
         ...base,
         proposal: {
           ...base.proposal,
-          merchant: { id: `merchant-attacker-${variant}`, displayName: "Substitute" },
+          merchant: {
+            id: `merchant-attacker-${variant}`,
+            displayName: "Substitute",
+          },
         },
       };
     case "CURRENCY_SUBSTITUTION":
       return {
         ...base,
-        proposal: { ...base.proposal, amount: { currency: "EUR", minor: 5_000 } },
+        proposal: {
+          ...base.proposal,
+          amount: { currency: "EUR", minor: 5_000 },
+        },
       };
     case "CAPABILITY_ESCALATION":
       return {
@@ -171,7 +177,9 @@ const families: readonly AttackFamily[] = [
   "MERCHANT_RISK_WIDENING",
 ];
 
-export function runBreakAuthorityBenchmark(scenarioCount: 100 | 1000): BreakAuthorityReport {
+export function runBreakAuthorityBenchmark(
+  scenarioCount: 100 | 1000,
+): BreakAuthorityReport {
   const results: BreakAuthorityScenarioResult[] = [];
   for (let index = 0; index < scenarioCount; index += 1) {
     const family = families[index % families.length];
@@ -201,7 +209,8 @@ export function runBreakAuthorityBenchmark(scenarioCount: 100 | 1000): BreakAuth
   return {
     version: "break-authority/v1",
     scenarioCount,
-    unauthorizedAllows: results.filter((result) => result.decision === "ALLOW").length,
+    unauthorizedAllows: results.filter((result) => result.decision === "ALLOW")
+      .length,
     providerEffectsExercised: false,
     controlDecision: controlReceipt.decision,
     results,

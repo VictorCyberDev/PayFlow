@@ -72,7 +72,9 @@ export function requireAgentAccess(
  * verification happen upstream; this function only normalizes already-trusted
  * claims into PayFlow's bounded access model.
  */
-export function accessFromTrustedOAuthClaims(raw: unknown): ExternalAgentAccess {
+export function accessFromTrustedOAuthClaims(
+  raw: unknown,
+): ExternalAgentAccess {
   const ClaimsSchema = z
     .object({
       client_id: z.string().min(1),

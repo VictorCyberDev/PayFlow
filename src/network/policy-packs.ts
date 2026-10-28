@@ -20,7 +20,13 @@ export const ORGANIZATION_POLICY_PACKS: readonly OrganizationPolicyPack[] = [
     id: "accounts-payable",
     label: "Accounts Payable",
     candidateActionKinds: ["INVOICE_SETTLEMENT"],
-    requiredContext: ["payee", "invoiceReference", "amount", "currency", "costCenter"],
+    requiredContext: [
+      "payee",
+      "invoiceReference",
+      "amount",
+      "currency",
+      "costCenter",
+    ],
     defaultEscalation: "invoice mismatch, duplicate or amount boundary",
   },
   {
@@ -54,6 +60,8 @@ export const ORGANIZATION_POLICY_PACKS: readonly OrganizationPolicyPack[] = [
 ] as const;
 
 /** Policy packs are templates for candidate constraints, never automatic Authority. */
-export function getOrganizationPolicyPack(id: string): OrganizationPolicyPack | null {
+export function getOrganizationPolicyPack(
+  id: string,
+): OrganizationPolicyPack | null {
   return ORGANIZATION_POLICY_PACKS.find((pack) => pack.id === id) ?? null;
 }

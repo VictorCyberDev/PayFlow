@@ -12,19 +12,34 @@ export const OrganizationRoleSchema = z.enum([
 export type OrganizationRole = z.infer<typeof OrganizationRoleSchema>;
 
 export const ControlPlaneEnvironmentSchema = z.enum(["SANDBOX", "PRODUCTION"]);
-export type ControlPlaneEnvironment = z.infer<typeof ControlPlaneEnvironmentSchema>;
+export type ControlPlaneEnvironment = z.infer<
+  typeof ControlPlaneEnvironmentSchema
+>;
 
 const permissionMap: Readonly<Record<OrganizationRole, readonly string[]>> = {
   ORG_OWNER: ["org:*"],
-  FINANCE_OWNER: ["authority:approve", "authority:revoke", "billing:read", "audit:read"],
-  SECURITY_OWNER: ["agent:suspend", "agent:revoke", "audit:read", "security:manage"],
+  FINANCE_OWNER: [
+    "authority:approve",
+    "authority:revoke",
+    "billing:read",
+    "audit:read",
+  ],
+  SECURITY_OWNER: [
+    "agent:suspend",
+    "agent:revoke",
+    "audit:read",
+    "security:manage",
+  ],
   AUTHORITY_ADMIN: ["authority:create", "authority:read", "template:manage"],
   AGENT_ADMIN: ["agent:register", "agent:read", "agent:rotate"],
   AUDITOR: ["audit:read", "proof:read"],
   VIEWER: ["authority:read", "agent:read", "activity:read"],
 };
 
-export function roleAllows(role: OrganizationRole, permission: string): boolean {
+export function roleAllows(
+  role: OrganizationRole,
+  permission: string,
+): boolean {
   const allowed = permissionMap[role];
   return allowed.includes("org:*") || allowed.includes(permission);
 }

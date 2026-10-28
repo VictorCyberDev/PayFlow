@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { mandateFingerprint } from "../canonical.js";
-import type { AgentPassport, Capability, Mandate, TransactionProposal } from "../domain.js";
+import type {
+  AgentPassport,
+  Capability,
+  Mandate,
+  TransactionProposal,
+} from "../domain.js";
 import { authorize, type AuthorizationContext } from "../kernel.js";
 import {
   FinancialActionKindSchema,
@@ -60,7 +65,8 @@ export function authorizeFinancialAction(
   readonly proposal: TransactionProposal;
 } {
   const violations: FinancialActionViolation[] = [];
-  if (!extension.allowedKinds.includes(action.kind)) violations.push("ACTION_KIND_DENIED");
+  if (!extension.allowedKinds.includes(action.kind))
+    violations.push("ACTION_KIND_DENIED");
   if (!extension.allowedCounterpartyIds.includes(action.counterparty.id)) {
     violations.push("COUNTERPARTY_DENIED");
   }
@@ -72,7 +78,8 @@ export function authorizeFinancialAction(
     violations.push("INVOICE_REFERENCE_REQUIRED");
   }
   if (
-    (action.kind === "SUBSCRIPTION_RENEWAL" || action.kind === "RECURRING_PAYMENT") &&
+    (action.kind === "SUBSCRIPTION_RENEWAL" ||
+      action.kind === "RECURRING_PAYMENT") &&
     extension.requireRecurringKeyForRecurring &&
     !action.recurringKey
   ) {
@@ -83,7 +90,10 @@ export function authorizeFinancialAction(
     // broader action into a narrower representation and accidentally authorize it.
     violations.push("QUANTITY_NOT_REPRESENTABLE_IN_KERNEL");
   }
-  for (const moneyViolation of evaluateMonetaryBoundary(action, extension.monetary)) {
+  for (const moneyViolation of evaluateMonetaryBoundary(
+    action,
+    extension.monetary,
+  )) {
     violations.push(`MONEY:${moneyViolation}`);
   }
 

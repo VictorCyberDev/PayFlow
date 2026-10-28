@@ -61,9 +61,11 @@ export function signAuthorityPresentation(
   const validated = AuthorityPresentationPayloadSchema.parse(payload);
   return {
     payload: validated,
-    signature: cryptoSign(null, presentationBytes(validated), privateKey).toString(
-      "base64url",
-    ),
+    signature: cryptoSign(
+      null,
+      presentationBytes(validated),
+      privateKey,
+    ).toString("base64url"),
   };
 }
 
@@ -131,7 +133,10 @@ export async function verifyAuthorityPresentation(
       reason: "SIGNATURE_INVALID",
     };
   }
-  if (payload.audience !== expected.audience || payload.challenge !== expected.challenge) {
+  if (
+    payload.audience !== expected.audience ||
+    payload.challenge !== expected.challenge
+  ) {
     return {
       verdict: "WRONG_AUDIENCE",
       authorityId: payload.authorityId,
@@ -141,7 +146,10 @@ export async function verifyAuthorityPresentation(
     };
   }
   const now = Date.parse(expected.now);
-  if (now < Date.parse(payload.issuedAt) || now >= Date.parse(payload.expiresAt)) {
+  if (
+    now < Date.parse(payload.issuedAt) ||
+    now >= Date.parse(payload.expiresAt)
+  ) {
     return {
       verdict: "EXPIRED",
       authorityId: payload.authorityId,
@@ -166,7 +174,10 @@ export async function verifyAuthorityPresentation(
       authorityId: payload.authorityId,
       agentId: payload.agentId,
       expiresAt: payload.expiresAt,
-      reason: authority.state === "REVOKED" ? "AUTHORITY_REVOKED" : "AUTHORITY_SUSPENDED",
+      reason:
+        authority.state === "REVOKED"
+          ? "AUTHORITY_REVOKED"
+          : "AUTHORITY_SUSPENDED",
     };
   }
   if (

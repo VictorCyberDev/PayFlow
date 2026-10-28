@@ -1,7 +1,4 @@
-import {
-  generateKeyPairSync,
-  sign as cryptoSign,
-} from "node:crypto";
+import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { AuthorityDirectory } from "../src/network/directory.js";
 import {
@@ -24,13 +21,21 @@ describe("M21 public Verify", () => {
       verifyPresentation: async () => ({ verdict: "VALID" }),
     };
     const first = await publicVerify(
-      { clientId: "merchant-1", presentation: {}, now: "2026-10-28T03:30:00.000Z" },
+      {
+        clientId: "merchant-1",
+        presentation: {},
+        now: "2026-10-28T03:30:00.000Z",
+      },
       deps,
     );
     expect(first.status).toBe(200);
     allowed = false;
     const limited = await publicVerify(
-      { clientId: "merchant-1", presentation: {}, now: "2026-10-28T03:30:00.000Z" },
+      {
+        clientId: "merchant-1",
+        presentation: {},
+        now: "2026-10-28T03:30:00.000Z",
+      },
       deps,
     );
     expect(limited.status).toBe(429);
@@ -54,13 +59,25 @@ describe("M21 public Verify", () => {
     ].join("\n");
     const request = {
       ...unsigned,
-      signature: cryptoSign(null, Buffer.from(canonical), privateKey).toString("base64url"),
+      signature: cryptoSign(null, Buffer.from(canonical), privateKey).toString(
+        "base64url",
+      ),
     };
     expect(
-      verifySignedVerifierRequest(request, body, publicKey, "2026-10-28T03:31:00.000Z"),
+      verifySignedVerifierRequest(
+        request,
+        body,
+        publicKey,
+        "2026-10-28T03:31:00.000Z",
+      ),
     ).toBe(true);
     expect(
-      verifySignedVerifierRequest(request, body, publicKey, "2026-10-28T03:40:00.000Z"),
+      verifySignedVerifierRequest(
+        request,
+        body,
+        publicKey,
+        "2026-10-28T03:40:00.000Z",
+      ),
     ).toBe(false);
   });
 });
@@ -89,7 +106,19 @@ describe("M24 issuer/verifier directory", () => {
       cacheMaxAgeSeconds: 300,
       updatedAt: "2026-10-28T03:00:00.000Z",
     });
-    expect(directory.resolveActiveKey("https://issuer.example", "k1", "2026-10-28T03:30:00.000Z")?.kid).toBe("k1");
-    expect(directory.resolveActiveKey("https://issuer.example", "missing", "2026-10-28T03:30:00.000Z")).toBeNull();
+    expect(
+      directory.resolveActiveKey(
+        "https://issuer.example",
+        "k1",
+        "2026-10-28T03:30:00.000Z",
+      )?.kid,
+    ).toBe("k1");
+    expect(
+      directory.resolveActiveKey(
+        "https://issuer.example",
+        "missing",
+        "2026-10-28T03:30:00.000Z",
+      ),
+    ).toBeNull();
   });
 });

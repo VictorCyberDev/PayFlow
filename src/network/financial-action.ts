@@ -140,8 +140,10 @@ export function evaluateMonetaryBoundary(
     violations.push("INTEGER_OVERFLOW");
     return violations;
   }
-  if (feeTotal > boundary.maxFeesMinor) violations.push("FEE_BOUNDARY_EXCEEDED");
-  if (taxTotal > boundary.maxTaxesMinor) violations.push("TAX_BOUNDARY_EXCEEDED");
+  if (feeTotal > boundary.maxFeesMinor)
+    violations.push("FEE_BOUNDARY_EXCEEDED");
+  if (taxTotal > boundary.maxTaxesMinor)
+    violations.push("TAX_BOUNDARY_EXCEEDED");
   if (action.fx) {
     if (!boundary.allowFx) violations.push("FX_DENIED");
     if (action.fx.observedSlippageBps > boundary.maxFxSlippageBps) {

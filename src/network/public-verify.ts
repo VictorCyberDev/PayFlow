@@ -1,4 +1,8 @@
-import { createHash, verify as cryptoVerify, type KeyObject } from "node:crypto";
+import {
+  createHash,
+  verify as cryptoVerify,
+  type KeyObject,
+} from "node:crypto";
 
 export interface VerifyQuotaResult {
   readonly allowed: boolean;
@@ -22,7 +26,11 @@ export async function publicVerify(
   deps: PublicVerifyDependencies,
 ): Promise<PublicVerifyResponse> {
   if (!request.clientId || !Number.isFinite(Date.parse(request.now))) {
-    return { status: 400, headers: { "cache-control": "no-store" }, body: { error: "MALFORMED_VERIFY_REQUEST" } };
+    return {
+      status: 400,
+      headers: { "cache-control": "no-store" },
+      body: { error: "MALFORMED_VERIFY_REQUEST" },
+    };
   }
   const quota = await deps.consumeQuota(request.clientId, request.now);
   const headers = {
@@ -30,8 +38,13 @@ export async function publicVerify(
     "x-ratelimit-remaining": String(quota.remaining),
     "x-ratelimit-reset": quota.resetAt,
   };
-  if (!quota.allowed) return { status: 429, headers, body: { error: "VERIFY_RATE_LIMITED" } };
-  return { status: 200, headers, body: await deps.verifyPresentation(request.presentation) };
+  if (!quota.allowed)
+    return { status: 429, headers, body: { error: "VERIFY_RATE_LIMITED" } };
+  return {
+    status: 200,
+    headers,
+    body: await deps.verifyPresentation(request.presentation),
+  };
 }
 
 export interface SignedVerifierRequest {
@@ -44,7 +57,9 @@ export interface SignedVerifierRequest {
 }
 
 export function digestVerificationBody(body: unknown): string {
-  return createHash("sha256").update(JSON.stringify(body), "utf8").digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify(body), "utf8")
+    .digest("hex");
 }
 
 export function verifySignedVerifierRequest(
@@ -59,7 +74,8 @@ export function verifySignedVerifierRequest(
   const requestTime = Date.parse(request.timestamp);
   const nowTime = Date.parse(now);
   if (!Number.isFinite(requestTime) || !Number.isFinite(nowTime)) return false;
-  if (Math.abs(nowTime - requestTime) > maxClockSkewSeconds * 1000) return false;
+  if (Math.abs(nowTime - requestTime) > maxClockSkewSeconds * 1000)
+    return false;
   const canonical = [
     request.verifierId,
     request.keyId,

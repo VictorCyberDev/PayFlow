@@ -19,9 +19,9 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200': { description: Authority projection }
-        '403': { $ref: '#/components/responses/Denied' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        "200": { description: Authority projection }
+        "403": { $ref: "#/components/responses/Denied" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /v1/actions:
     post:
       operationId: requestAuthorizedAction
@@ -39,11 +39,11 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ActionRequest' }
+            schema: { $ref: "#/components/schemas/ActionRequest" }
       responses:
-        '200': { description: Deterministic ALLOW, DENY, or ESCALATE decision }
-        '400': { $ref: '#/components/responses/Malformed' }
-        '403': { $ref: '#/components/responses/Denied' }
+        "200": { description: Deterministic ALLOW, DENY, or ESCALATE decision }
+        "400": { $ref: "#/components/responses/Malformed" }
+        "403": { $ref: "#/components/responses/Denied" }
   /v1/verify/presentations:
     post:
       operationId: verifyAuthorityPresentation
@@ -52,7 +52,7 @@ paths:
         A verifier checks signature, audience, challenge, freshness, lifecycle,
         Authority binding and presentation replay. This endpoint has no execution capability.
       responses:
-        '200': { description: Verification verdict }
+        "200": { description: Verification verdict }
 components:
   securitySchemes:
     bearerAuth:
@@ -70,7 +70,7 @@ components:
       additionalProperties: false
       required: [currency, minor]
       properties:
-        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
         minor: { type: integer, minimum: 0 }
     Merchant:
       type: object
@@ -96,14 +96,23 @@ components:
         requestId: { type: string }
         mandateId: { type: string }
         agentId: { type: string }
-        amount: { $ref: '#/components/schemas/Money' }
+        amount: { $ref: "#/components/schemas/Money" }
         quantity: { type: integer, minimum: 1, maximum: 1000 }
-        merchant: { $ref: '#/components/schemas/Merchant' }
+        merchant: { $ref: "#/components/schemas/Merchant" }
         category: { type: string }
         condition: { type: string, enum: [NEW, REFURBISHED, USED] }
         requestedCapability:
           type: string
-          enum: [SEARCH_PRODUCTS, EVALUATE_PRODUCTS, CREATE_ORDER, CAPTURE_PAYMENT, REQUEST_REFUND, CREATE_SUBSCRIPTION, OPEN_DISPUTE]
+          enum:
+            [
+              SEARCH_PRODUCTS,
+              EVALUATE_PRODUCTS,
+              CREATE_ORDER,
+              CAPTURE_PAYMENT,
+              REQUEST_REFUND,
+              CREATE_SUBSCRIPTION,
+              OPEN_DISPUTE,
+            ]
         proposedAt: { type: string, format: date-time }
         nonce: { type: string, minLength: 16 }
         metadata:

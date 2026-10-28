@@ -16,7 +16,9 @@ export const AuthorityDomainMetadataSchema = z
     version: z.literal("authority-directory/v1"),
     issuer: z.string().url(),
     status: z.enum(["TRUSTED", "UNTRUSTED", "REVOKED"]),
-    capabilities: z.array(z.enum(["ISSUE_AUTHORITY", "VERIFY_AUTHORITY", "VERIFY_PROOF"])).min(1),
+    capabilities: z
+      .array(z.enum(["ISSUE_AUTHORITY", "VERIFY_AUTHORITY", "VERIFY_PROOF"]))
+      .min(1),
     endpoints: z
       .object({
         verification: z.string().url(),

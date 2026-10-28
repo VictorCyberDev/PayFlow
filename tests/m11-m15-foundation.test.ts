@@ -53,9 +53,13 @@ describe("M11 procurement pack", () => {
       maxFeeMinor: 200,
       humanEscalationAboveMinor: 10_000,
     });
-    expect(evaluateProcurementAction(pack, action, "2026-10-28T03:00:00.000Z")).toEqual([]);
+    expect(
+      evaluateProcurementAction(pack, action, "2026-10-28T03:00:00.000Z"),
+    ).toEqual([]);
     const substituted = { ...action, counterparty: { id: "vendor-evil" } };
-    expect(evaluateProcurementAction(pack, substituted, "2026-10-28T03:00:00.000Z")).toContain("VENDOR_DENIED");
+    expect(
+      evaluateProcurementAction(pack, substituted, "2026-10-28T03:00:00.000Z"),
+    ).toContain("VENDOR_DENIED");
   });
 });
 
@@ -93,8 +97,12 @@ describe("M30 monetary boundary", () => {
 
 describe("M13 tenant boundaries", () => {
   it("fails closed across organizations and environments", () => {
-    expect(() => assertSameTenant("org-a", "org-b")).toThrow("CROSS_TENANT_ACCESS_DENIED");
-    expect(() => assertEnvironmentBoundary("SANDBOX", "PRODUCTION")).toThrow("CROSS_ENVIRONMENT_ACCESS_DENIED");
+    expect(() => assertSameTenant("org-a", "org-b")).toThrow(
+      "CROSS_TENANT_ACCESS_DENIED",
+    );
+    expect(() => assertEnvironmentBoundary("SANDBOX", "PRODUCTION")).toThrow(
+      "CROSS_ENVIRONMENT_ACCESS_DENIED",
+    );
     expect(roleAllows("AUDITOR", "proof:read")).toBe(true);
     expect(roleAllows("VIEWER", "authority:revoke")).toBe(false);
   });

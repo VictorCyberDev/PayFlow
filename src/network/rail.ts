@@ -34,7 +34,9 @@ export interface FinancialRailAdapter {
 }
 
 export function financialActionDigest(action: FinancialAction): string {
-  return createHash("sha256").update(JSON.stringify(action), "utf8").digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify(action), "utf8")
+    .digest("hex");
 }
 
 function validateGrant(request: RailExecutionRequest): void {
@@ -50,10 +52,7 @@ function validateGrant(request: RailExecutionRequest): void {
 }
 
 export type FakeRailMode =
-  | "SUCCESS"
-  | "DECLINE"
-  | "TIMEOUT_BEFORE_EFFECT"
-  | "TIMEOUT_AFTER_EFFECT";
+  "SUCCESS" | "DECLINE" | "TIMEOUT_BEFORE_EFFECT" | "TIMEOUT_AFTER_EFFECT";
 
 /**
  * High-fidelity local rail simulator. It preserves one effect per idempotency
@@ -68,7 +67,9 @@ export class DeterministicFakeRail implements FinancialRailAdapter {
     private readonly mode: FakeRailMode,
   ) {}
 
-  async execute(request: RailExecutionRequest): Promise<NormalizedRailEvidence> {
+  async execute(
+    request: RailExecutionRequest,
+  ): Promise<NormalizedRailEvidence> {
     validateGrant(request);
     const existing = this.effects.get(request.action.idempotencyKey);
     if (existing) return existing;
@@ -129,7 +130,10 @@ export class DeterministicFakeRail implements FinancialRailAdapter {
     };
   }
 
-  async lookup(idempotencyKey: string, now: string): Promise<NormalizedRailEvidence> {
+  async lookup(
+    idempotencyKey: string,
+    now: string,
+  ): Promise<NormalizedRailEvidence> {
     return (
       this.effects.get(idempotencyKey) ?? {
         rail: this.railId,

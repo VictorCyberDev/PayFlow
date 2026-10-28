@@ -18,7 +18,10 @@ export interface PayFlowMcpToolDescriptor {
   };
 }
 
-const objectSchema = (properties: Record<string, unknown>, required: string[]) => ({
+const objectSchema = (
+  properties: Record<string, unknown>,
+  required: string[],
+) => ({
   type: "object",
   additionalProperties: false,
   properties,
@@ -37,14 +40,22 @@ export const PAYFLOW_MCP_TOOLS: readonly PayFlowMcpToolDescriptor[] = [
       },
       ["authorityId", "proposedAction"],
     ),
-    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
   },
   {
     name: "request_authorized_action",
     description:
       "Use only when an authenticated agent is ready to submit an exact financial action for deterministic Authority evaluation. This may reserve bounded authority or produce a one-time execution capability; it does not grant unrestricted payment power.",
     inputSchema: objectSchema({ action: { type: "object" } }, ["action"]),
-    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
   },
   {
     name: "verify_authority",
@@ -58,21 +69,35 @@ export const PAYFLOW_MCP_TOOLS: readonly PayFlowMcpToolDescriptor[] = [
       },
       ["presentation", "audience", "challenge"],
     ),
-    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
   },
   {
     name: "verify_financial_proof",
     description:
       "Use to check cryptographic or ledger evidence about what financial effect occurred. Read-only. Prefer this over requesting a new action when the question is only what happened.",
     inputSchema: objectSchema({ proof: { type: "object" } }, ["proof"]),
-    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
   },
   {
     name: "reconcile_financial_action",
     description:
       "Use when an existing financial attempt is UNKNOWN or provider evidence is ambiguous. Reconciliation must resolve truth without creating a duplicate financial effect.",
-    inputSchema: objectSchema({ attemptId: { type: "string", minLength: 1 } }, ["attemptId"]),
-    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    inputSchema: objectSchema({ attemptId: { type: "string", minLength: 1 } }, [
+      "attemptId",
+    ]),
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
   },
 ] as const;
 
@@ -82,23 +107,44 @@ export interface McpInvocationContext {
 }
 
 export interface McpAuthorityServices {
-  checkFinancialAuthority(args: unknown, context: McpInvocationContext): Promise<unknown>;
-  requestAuthorizedAction(args: unknown, context: McpInvocationContext): Promise<unknown>;
-  verifyAuthority(args: unknown, context: McpInvocationContext): Promise<unknown>;
-  verifyFinancialProof(args: unknown, context: McpInvocationContext): Promise<unknown>;
-  reconcileFinancialAction(args: unknown, context: McpInvocationContext): Promise<unknown>;
+  checkFinancialAuthority(
+    args: unknown,
+    context: McpInvocationContext,
+  ): Promise<unknown>;
+  requestAuthorizedAction(
+    args: unknown,
+    context: McpInvocationContext,
+  ): Promise<unknown>;
+  verifyAuthority(
+    args: unknown,
+    context: McpInvocationContext,
+  ): Promise<unknown>;
+  verifyFinancialProof(
+    args: unknown,
+    context: McpInvocationContext,
+  ): Promise<unknown>;
+  reconcileFinancialAction(
+    args: unknown,
+    context: McpInvocationContext,
+  ): Promise<unknown>;
 }
 
-const forbiddenOutputKey = /(?:secret|password|private[_-]?key|access[_-]?token|payment[_-]?credential)/iu;
+const forbiddenOutputKey =
+  /(?:secret|password|private[_-]?key|access[_-]?token|payment[_-]?credential)/iu;
 
 function assertSafeOutput(value: unknown, path = "result"): void {
   if (Array.isArray(value)) {
-    value.forEach((entry, index) => assertSafeOutput(entry, `${path}[${index}]`));
+    value.forEach((entry, index) =>
+      assertSafeOutput(entry, `${path}[${index}]`),
+    );
     return;
   }
   if (value !== null && typeof value === "object") {
-    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-      if (forbiddenOutputKey.test(key)) throw new Error(`MCP_SECRET_OUTPUT_BLOCKED:${path}.${key}`);
+    for (const [key, child] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      if (forbiddenOutputKey.test(key))
+        throw new Error(`MCP_SECRET_OUTPUT_BLOCKED:${path}.${key}`);
       assertSafeOutput(child, `${path}.${key}`);
     }
   }

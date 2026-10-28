@@ -42,7 +42,13 @@ const agent: AgentPassport = {
 };
 const extension = FinancialActionAuthorityExtensionSchema.parse({
   version: "financial-action-authority/v1",
-  allowedKinds: ["PURCHASE", "INVOICE_SETTLEMENT", "SUBSCRIPTION_RENEWAL", "PAYOUT", "REIMBURSEMENT"],
+  allowedKinds: [
+    "PURCHASE",
+    "INVOICE_SETTLEMENT",
+    "SUBSCRIPTION_RENEWAL",
+    "PAYOUT",
+    "REIMBURSEMENT",
+  ],
   allowedCounterpartyIds: ["vendor-1"],
   monetary: {
     settlementCurrencies: ["USD"],
@@ -56,7 +62,14 @@ const extension = FinancialActionAuthorityExtensionSchema.parse({
   requireRecurringKeyForRecurring: true,
 });
 
-function action(kind: "PURCHASE" | "INVOICE_SETTLEMENT" | "SUBSCRIPTION_RENEWAL" | "PAYOUT" | "REIMBURSEMENT") {
+function action(
+  kind:
+    | "PURCHASE"
+    | "INVOICE_SETTLEMENT"
+    | "SUBSCRIPTION_RENEWAL"
+    | "PAYOUT"
+    | "REIMBURSEMENT",
+) {
   return FinancialActionSchema.parse({
     version: "financial-action/v1",
     id: `action-${kind}`,
@@ -81,9 +94,21 @@ const context = {
 };
 
 describe("M29 consequential action semantics", () => {
-  for (const kind of ["PURCHASE", "INVOICE_SETTLEMENT", "SUBSCRIPTION_RENEWAL", "PAYOUT", "REIMBURSEMENT"] as const) {
+  for (const kind of [
+    "PURCHASE",
+    "INVOICE_SETTLEMENT",
+    "SUBSCRIPTION_RENEWAL",
+    "PAYOUT",
+    "REIMBURSEMENT",
+  ] as const) {
     it(`authorizes ${kind} through extension guard and the same Trust Kernel`, () => {
-      const result = authorizeFinancialAction(mandate, extension, agent, action(kind), context);
+      const result = authorizeFinancialAction(
+        mandate,
+        extension,
+        agent,
+        action(kind),
+        context,
+      );
       expect(result.extensionViolations).toEqual([]);
       expect(result.decision).toBe("ALLOW");
     });
@@ -95,7 +120,13 @@ describe("M29 consequential action semantics", () => {
       kind: "MARKETPLACE_DISBURSEMENT",
       counterparty: { id: "attacker" },
     });
-    const result = authorizeFinancialAction(mandate, extension, agent, widened, context);
+    const result = authorizeFinancialAction(
+      mandate,
+      extension,
+      agent,
+      widened,
+      context,
+    );
     expect(result.decision).toBe("DENY");
     expect(result.extensionViolations).toContain("ACTION_KIND_DENIED");
     expect(result.extensionViolations).toContain("COUNTERPARTY_DENIED");
@@ -114,15 +145,26 @@ describe("M26/M27 provider-neutral rail conformance", () => {
         idempotencyKey: target.idempotencyKey,
         expiresAt: "2026-10-28T03:05:00.000Z",
       };
-      const first = await rail.execute({ action: target, grant, now: context.now });
-      const duplicate = await rail.execute({ action: target, grant, now: context.now });
+      const first = await rail.execute({
+        action: target,
+        grant,
+        now: context.now,
+      });
+      const duplicate = await rail.execute({
+        action: target,
+        grant,
+        now: context.now,
+      });
       expect(first.effectCount).toBe(1);
       expect(duplicate.providerReference).toBe(first.providerReference);
     }
   });
 
   it("keeps UNKNOWN first-class and reconciles without re-execution", async () => {
-    const rail = new DeterministicFakeRail("fake-timeout-rail", "TIMEOUT_AFTER_EFFECT");
+    const rail = new DeterministicFakeRail(
+      "fake-timeout-rail",
+      "TIMEOUT_AFTER_EFFECT",
+    );
     const target = action("PURCHASE");
     const grant = {
       grantId: "grant-timeout",
@@ -131,10 +173,18 @@ describe("M26/M27 provider-neutral rail conformance", () => {
       idempotencyKey: target.idempotencyKey,
       expiresAt: "2026-10-28T03:05:00.000Z",
     };
-    const result = await rail.execute({ action: target, grant, now: context.now });
+    const result = await rail.execute({
+      action: target,
+      grant,
+      now: context.now,
+    });
     expect(result.state).toBe("UNKNOWN");
     expect(result.effectCount).toBeNull();
-    const reconciled = await reconcileWithoutReexecution(rail, target.idempotencyKey, "2026-10-28T03:01:00.000Z");
+    const reconciled = await reconcileWithoutReexecution(
+      rail,
+      target.idempotencyKey,
+      "2026-10-28T03:01:00.000Z",
+    );
     expect(reconciled.state).toBe("SUCCEEDED");
     expect(reconciled.effectCount).toBe(1);
   });

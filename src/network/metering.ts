@@ -1,8 +1,5 @@
 export type UsageMeter =
-  | "GOVERNED_ACTION"
-  | "VERIFY_CALL"
-  | "ACTIVE_AGENT"
-  | "ENTERPRISE_CONTROL";
+  "GOVERNED_ACTION" | "VERIFY_CALL" | "ACTIVE_AGENT" | "ENTERPRISE_CONTROL";
 
 export interface UsageEvent {
   readonly id: string;

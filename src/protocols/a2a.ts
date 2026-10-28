@@ -41,12 +41,15 @@ export function createPayFlowAgentCard(baseUrl: string) {
         description:
           "Check or request bounded financial Authority without exposing payment credentials.",
         tags: ["finance", "authorization", "delegation"],
-        examples: ["Can this procurement agent pay this exact invoice under its Authority?"],
+        examples: [
+          "Can this procurement agent pay this exact invoice under its Authority?",
+        ],
       },
       {
         id: "financial-proof",
         name: "Financial Proof",
-        description: "Verify what financial effect occurred, including UNKNOWN outcomes.",
+        description:
+          "Verify what financial effect occurred, including UNKNOWN outcomes.",
         tags: ["finance", "proof", "reconciliation"],
       },
     ],
@@ -81,7 +84,10 @@ export type DelegationViolation =
   | "AMOUNT_WIDENED"
   | "EXPIRY_WIDENED";
 
-function isSubset(child: readonly string[], parent: readonly string[]): boolean {
+function isSubset(
+  child: readonly string[],
+  parent: readonly string[],
+): boolean {
   return child.every((value) => parent.includes(value));
 }
 
@@ -90,14 +96,20 @@ export function validateDelegationAttenuation(
   child: DelegatedFinancialScope,
 ): readonly DelegationViolation[] {
   const violations: DelegationViolation[] = [];
-  if (child.principalId !== parent.principalId) violations.push("PRINCIPAL_CHANGED");
-  if (child.parentAgentId !== parent.childAgentId) violations.push("PARENT_CHAIN_BROKEN");
-  if (!isSubset(child.actionKinds, parent.actionKinds)) violations.push("ACTION_KIND_WIDENED");
-  if (!isSubset(child.currencies, parent.currencies)) violations.push("CURRENCY_WIDENED");
+  if (child.principalId !== parent.principalId)
+    violations.push("PRINCIPAL_CHANGED");
+  if (child.parentAgentId !== parent.childAgentId)
+    violations.push("PARENT_CHAIN_BROKEN");
+  if (!isSubset(child.actionKinds, parent.actionKinds))
+    violations.push("ACTION_KIND_WIDENED");
+  if (!isSubset(child.currencies, parent.currencies))
+    violations.push("CURRENCY_WIDENED");
   if (!isSubset(child.counterpartyIds, parent.counterpartyIds)) {
     violations.push("COUNTERPARTY_WIDENED");
   }
-  if (child.maxAmountMinor > parent.maxAmountMinor) violations.push("AMOUNT_WIDENED");
-  if (Date.parse(child.expiresAt) > Date.parse(parent.expiresAt)) violations.push("EXPIRY_WIDENED");
+  if (child.maxAmountMinor > parent.maxAmountMinor)
+    violations.push("AMOUNT_WIDENED");
+  if (Date.parse(child.expiresAt) > Date.parse(parent.expiresAt))
+    violations.push("EXPIRY_WIDENED");
   return violations;
 }

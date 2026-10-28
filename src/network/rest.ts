@@ -1,8 +1,5 @@
 import type { MerchantRisk } from "../domain.js";
-import {
-  GatewayAccessError,
-  type ExternalAgentAccess,
-} from "./access.js";
+import { GatewayAccessError, type ExternalAgentAccess } from "./access.js";
 import {
   FinancialAuthorityGateway,
   GatewayActionRequestSchema,
@@ -28,7 +25,11 @@ export interface GatewayRestDependencies {
   now(): string;
 }
 
-function response(status: number, requestId: string, body: unknown): RestResponse {
+function response(
+  status: number,
+  requestId: string,
+  body: unknown,
+): RestResponse {
   return {
     status,
     headers: {
@@ -49,7 +50,9 @@ export function createGatewayRestHandler(
     try {
       const access = await deps.authenticate(request.authorization);
       const now = deps.now();
-      const authorityMatch = request.path.match(/^\/v1\/authorities\/([^/]+)$/u);
+      const authorityMatch = request.path.match(
+        /^\/v1\/authorities\/([^/]+)$/u,
+      );
       if (request.method === "GET" && authorityMatch?.[1]) {
         const authority = await gateway.readAuthority(
           access,
@@ -63,7 +66,10 @@ export function createGatewayRestHandler(
         if (!parsed.success) {
           return response(400, requestId, {
             requestId,
-            error: { code: "REQUEST_MALFORMED", message: "Invalid action request." },
+            error: {
+              code: "REQUEST_MALFORMED",
+              message: "Invalid action request.",
+            },
           });
         }
         const risk = await deps.trustedMerchantRisk(parsed.data.merchant.id);
@@ -88,12 +94,18 @@ export function createGatewayRestHandler(
         const status = error.code.endsWith("NOT_FOUND") ? 404 : 403;
         return response(status, requestId, {
           requestId,
-          error: { code: error.code, message: "Financial authority request denied." },
+          error: {
+            code: error.code,
+            message: "Financial authority request denied.",
+          },
         });
       }
       return response(500, requestId, {
         requestId,
-        error: { code: "INTERNAL_ERROR", message: "Request could not be completed." },
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Request could not be completed.",
+        },
       });
     }
   };

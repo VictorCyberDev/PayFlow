@@ -12,10 +12,7 @@ import {
   type TransactionProposal,
 } from "../domain.js";
 import { authorize } from "../kernel.js";
-import {
-  requireAgentAccess,
-  type ExternalAgentAccess,
-} from "./access.js";
+import { requireAgentAccess, type ExternalAgentAccess } from "./access.js";
 
 export const GATEWAY_AUDIENCE = "payflow-gateway-v1";
 
@@ -127,7 +124,8 @@ export class FinancialAuthorityGateway {
         ? {}
         : { cumulativeLimitMinor: mandate.cumulativeLimitMinor }),
       expiresAt: mandate.expiresAt,
-      status: Date.parse(now) < Date.parse(mandate.expiresAt) ? "ACTIVE" : "EXPIRED",
+      status:
+        Date.parse(now) < Date.parse(mandate.expiresAt) ? "ACTIVE" : "EXPIRED",
       fingerprint: mandateFingerprint(mandate),
     };
   }
@@ -144,7 +142,10 @@ export class FinancialAuthorityGateway {
       GATEWAY_AUDIENCE,
     );
     const parsed = GatewayActionRequestSchema.safeParse(rawRequest);
-    if (!parsed.success || !MerchantRiskSchema.safeParse(trusted.merchantRisk).success) {
+    if (
+      !parsed.success ||
+      !MerchantRiskSchema.safeParse(trusted.merchantRisk).success
+    ) {
       throw new GatewayRequestError("REQUEST_MALFORMED");
     }
     const request = parsed.data;
@@ -157,7 +158,10 @@ export class FinancialAuthorityGateway {
     this.assertBinding(access, mandate, agent.id);
 
     const replayScope = `gateway:${mandate.id}:${agent.id}`;
-    const firstClaim = await this.deps.claimReplayKey(replayScope, request.nonce);
+    const firstClaim = await this.deps.claimReplayKey(
+      replayScope,
+      request.nonce,
+    );
     const proposal: TransactionProposal = {
       id: request.requestId ?? randomUUID(),
       agentId: agent.id,

@@ -85,7 +85,11 @@ describe("M8 read-only Authority verification", () => {
 
     const revoked = await verifyAuthorityPresentation(
       signed(),
-      { audience: "merchant.example", challenge: "challenge-merchant-0001", now },
+      {
+        audience: "merchant.example",
+        challenge: "challenge-merchant-0001",
+        now,
+      },
       deps("REVOKED"),
     );
     expect(revoked.verdict).toBe("REVOKED");
@@ -99,7 +103,11 @@ describe("M8 read-only Authority verification", () => {
     };
     const result = await verifyAuthorityPresentation(
       tampered,
-      { audience: "merchant.example", challenge: "challenge-merchant-0001", now },
+      {
+        audience: "merchant.example",
+        challenge: "challenge-merchant-0001",
+        now,
+      },
       deps(),
     );
     expect(result.verdict).toBe("TAMPERED");
@@ -108,7 +116,11 @@ describe("M8 read-only Authority verification", () => {
   it("detects expiry and replay independently", async () => {
     const expired = await verifyAuthorityPresentation(
       signed({ expiresAt: "2026-10-28T02:59:59.000Z" }),
-      { audience: "merchant.example", challenge: "challenge-merchant-0001", now },
+      {
+        audience: "merchant.example",
+        challenge: "challenge-merchant-0001",
+        now,
+      },
       deps(),
     );
     expect(expired.verdict).toBe("EXPIRED");
@@ -117,12 +129,20 @@ describe("M8 read-only Authority verification", () => {
     const presentation = signed();
     const first = await verifyAuthorityPresentation(
       presentation,
-      { audience: "merchant.example", challenge: "challenge-merchant-0001", now },
+      {
+        audience: "merchant.example",
+        challenge: "challenge-merchant-0001",
+        now,
+      },
       sharedDeps,
     );
     const replay = await verifyAuthorityPresentation(
       presentation,
-      { audience: "merchant.example", challenge: "challenge-merchant-0001", now },
+      {
+        audience: "merchant.example",
+        challenge: "challenge-merchant-0001",
+        now,
+      },
       sharedDeps,
     );
     expect(first.verdict).toBe("VALID");

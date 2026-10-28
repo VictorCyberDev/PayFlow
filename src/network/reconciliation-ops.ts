@@ -1,7 +1,4 @@
-import type {
-  FinancialRailAdapter,
-  NormalizedRailEvidence,
-} from "./rail.js";
+import type { FinancialRailAdapter, NormalizedRailEvidence } from "./rail.js";
 
 export type ReconciliationCaseState =
   | "PENDING"
@@ -56,7 +53,10 @@ export class ReconciliationOperationsCenter {
   async investigate(caseId: string, now: string): Promise<ReconciliationCase> {
     const current = await this.repo.load(caseId);
     if (!current) throw new Error("RECONCILIATION_CASE_NOT_FOUND");
-    if (current.state === "RESOLVED_SUCCEEDED" || current.state === "RESOLVED_FAILED") {
+    if (
+      current.state === "RESOLVED_SUCCEEDED" ||
+      current.state === "RESOLVED_FAILED"
+    ) {
       return current;
     }
     const rail = this.rails.get(current.railId);
@@ -68,17 +68,30 @@ export class ReconciliationOperationsCenter {
       updatedAt: now,
       evidence: [...current.evidence, observed],
     };
-    const updated = await this.repo.compareAndSet(caseId, current.updatedAt, next);
+    const updated = await this.repo.compareAndSet(
+      caseId,
+      current.updatedAt,
+      next,
+    );
     if (!updated) throw new Error("RECONCILIATION_CONCURRENT_UPDATE");
     return next;
   }
 
-  async addHumanNote(caseId: string, note: string, now: string): Promise<ReconciliationCase> {
+  async addHumanNote(
+    caseId: string,
+    note: string,
+    now: string,
+  ): Promise<ReconciliationCase> {
     const current = await this.repo.load(caseId);
     if (!current) throw new Error("RECONCILIATION_CASE_NOT_FOUND");
-    if (note.trim().length < 3) throw new Error("RECONCILIATION_NOTE_TOO_SHORT");
+    if (note.trim().length < 3)
+      throw new Error("RECONCILIATION_NOTE_TOO_SHORT");
     const next = { ...current, humanNote: note.trim(), updatedAt: now };
-    const updated = await this.repo.compareAndSet(caseId, current.updatedAt, next);
+    const updated = await this.repo.compareAndSet(
+      caseId,
+      current.updatedAt,
+      next,
+    );
     if (!updated) throw new Error("RECONCILIATION_CONCURRENT_UPDATE");
     return next;
   }
