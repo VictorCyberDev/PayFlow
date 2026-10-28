@@ -81,10 +81,13 @@ export function pilotReadiness(pilot: DesignPartnerPilot): {
   readonly missing: readonly string[];
 } {
   const missing: string[] = [];
-  if (!pilot.integrationChecklistCompleted) missing.push("INTEGRATION_CHECKLIST");
-  if (!pilot.securityQuestionnaireCompleted) missing.push("SECURITY_QUESTIONNAIRE");
+  if (!pilot.integrationChecklistCompleted)
+    missing.push("INTEGRATION_CHECKLIST");
+  if (!pilot.securityQuestionnaireCompleted)
+    missing.push("SECURITY_QUESTIONNAIRE");
   if (!pilot.deploymentChecklistCompleted) missing.push("DEPLOYMENT_CHECKLIST");
-  if (!pilot.agreementRequirementsReviewed) missing.push("AGREEMENT_REQUIREMENTS");
+  if (!pilot.agreementRequirementsReviewed)
+    missing.push("AGREEMENT_REQUIREMENTS");
   return {
     internallyReady: missing.length === 0,
     externallyConfirmed: pilot.externalPartnerConfirmed,

@@ -2,6 +2,7 @@ import {
   createHash,
   verify as cryptoVerify,
   createPublicKey,
+  type JsonWebKey,
 } from "node:crypto";
 import { z } from "zod";
 

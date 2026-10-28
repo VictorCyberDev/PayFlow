@@ -75,7 +75,7 @@ test("Home: an unresolved payment is elevated with safe guidance", () => {
 test("Home: signed out is a welcome with one access panel and the promise", () => {
   const html = render({ session: "signed-out" }, <HomeView />);
   assert.match(html, /Permission to spend\./);
-  assert.match(html, /Not control of your money\./);
+  assert.match(html, /Not unrestricted financial power\./);
   assert.match(html, /Demo access/);
   assert.doesNotMatch(html, /\$16|>Active</);
 });

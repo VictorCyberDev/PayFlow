@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await -- in-memory fixtures implement async adapter contracts */
 import { createHash } from "node:crypto";
 import type { FinancialAction } from "./financial-action.js";
 

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await -- in-memory fixtures implement async adapter contracts */
 import { z } from "zod";
 import {
   FinancialActionSchema,

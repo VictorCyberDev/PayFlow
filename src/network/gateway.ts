@@ -11,7 +11,7 @@ import {
   type Mandate,
   type TransactionProposal,
 } from "../domain.js";
-import { authorize } from "../kernel.js";
+import { authorize, type AuthorizationContext } from "../kernel.js";
 import { requireAgentAccess, type ExternalAgentAccess } from "./access.js";
 
 export const GATEWAY_AUDIENCE = "payflow-gateway-v1";
@@ -177,15 +177,21 @@ export class FinancialAuthorityGateway {
       nonce: request.nonce,
       metadata: request.metadata,
     };
-    const decision = authorize(mandate, agent, proposal, {
+    const base = {
       now: trusted.now,
       merchantRisk: trusted.merchantRisk,
       cumulativeSpentMinor: await this.deps.cumulativeSpentMinor(mandate.id),
       replaySeen: !firstClaim,
-      ...(mandate.quantityLimit === undefined
-        ? {}
-        : { consumedQuantity: await this.deps.consumedQuantity(mandate.id) }),
-    });
+    };
+    const context: AuthorizationContext =
+      mandate.quantityLimit === undefined
+        ? base
+        : {
+            ...base,
+            consumedQuantity:
+              (await this.deps.consumedQuantity(mandate.id)) ?? 0,
+          };
+    const decision = authorize(mandate, agent, proposal, context);
 
     if (decision.decision !== "ALLOW" || !this.deps.issueExecutionCapability) {
       return { requestId: proposal.id, decision };

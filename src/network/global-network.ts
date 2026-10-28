@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, type JsonWebKey } from "node:crypto";
 import type { FinancialAction } from "./financial-action.js";
 import {
   verifyAndEvaluateExternalIssuerAssertion,

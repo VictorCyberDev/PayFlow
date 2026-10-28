@@ -1,4 +1,8 @@
-import { createPublicKey, verify as cryptoVerify } from "node:crypto";
+import {
+  createPublicKey,
+  verify as cryptoVerify,
+  type JsonWebKey,
+} from "node:crypto";
 import { z } from "zod";
 
 export const IssuerTrustProfileSchema = z

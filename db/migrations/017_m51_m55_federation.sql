@@ -20,7 +20,7 @@ CREATE TABLE key_transparency_log (
 CREATE INDEX key_transparency_issuer_sequence ON key_transparency_log (issuer, sequence);
 
 CREATE TABLE reservation_region_ownership (
-  reservation_id text PRIMARY KEY REFERENCES reservations(id),
+  reservation_id text PRIMARY KEY REFERENCES authorization_reservations(id),
   owner_region text NOT NULL,
   epoch bigint NOT NULL CHECK (epoch > 0),
   lease_expires_at timestamptz NOT NULL,

@@ -1,7 +1,7 @@
 import type { MerchantRisk } from "../domain.js";
 import { GatewayAccessError, type ExternalAgentAccess } from "./access.js";
 import {
-  FinancialAuthorityGateway,
+  type FinancialAuthorityGateway,
   GatewayActionRequestSchema,
   GatewayRequestError,
 } from "./gateway.js";

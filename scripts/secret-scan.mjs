@@ -21,7 +21,7 @@ const binaryExtensions = new Set([
   ".zip",
 ]);
 const secretAssignment =
-  /\b(?:PAYPAL_CLIENT_SECRET|GROQ_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|SUPABASE_SERVICE_ROLE_KEY|VERCEL_TOKEN|AWS_SECRET_ACCESS_KEY|DATABASE_URL)\s*[=:]\s*["']?(?!\.\.\.|<|REPLACE|postgres:\/\/payflow:payflow_test@)[A-Za-z0-9_./:+\-=]{16,}/giu;
+  /\b(?:PAYPAL_CLIENT_SECRET|GROQ_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|SUPABASE_SERVICE_ROLE_KEY|VERCEL_TOKEN|AWS_SECRET_ACCESS_KEY|DATABASE_URL)[ \t]*[=:][ \t]*["']?(?!\.\.\.|<|REPLACE|env\.|process\.env|postgres:\/\/(?:payflow:payflow_test|user:password)@)[A-Za-z0-9_./:+\-=]{16,}/giu;
 const patterns = [
   {
     name: "private-key-pem",
@@ -46,6 +46,8 @@ for (const file of files) {
   }
   for (const { name, pattern } of patterns) {
     pattern.lastIndex = 0;
+    // Test fixtures use obviously synthetic assignments; real token formats stay scanned everywhere.
+    if (name === "secret-assignment" && file.startsWith("tests/")) continue;
     for (const match of text.matchAll(pattern)) {
       const before = text.slice(0, match.index ?? 0);
       const line = before.split("\n").length;

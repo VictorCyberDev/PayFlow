@@ -118,7 +118,7 @@ describe("M53/M54 federation and external issuer trust", () => {
       issuer: "https://issuer-b.example",
       status: "REVOKED" as const,
     };
-    const domains = new Map([
+    const domains = new Map<string, typeof trusted | typeof revoked>([
       [trusted.issuer, trusted],
       [revoked.issuer, revoked],
     ]);

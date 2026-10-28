@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await -- in-memory fixtures implement async adapter contracts */
 import { z } from "zod";
 import {
   calculateMeteredAmountMinor,
@@ -73,7 +74,10 @@ export function buildUsageInvoice(
   );
   const aggregate = new Map<UsageEvent["meter"], number>();
   for (const event of relevant) {
-    aggregate.set(event.meter, (aggregate.get(event.meter) ?? 0) + event.quantity);
+    aggregate.set(
+      event.meter,
+      (aggregate.get(event.meter) ?? 0) + event.quantity,
+    );
   }
   const lines = [
     {
