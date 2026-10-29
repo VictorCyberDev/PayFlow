@@ -61,3 +61,9 @@ Remaining work is enumerated in COMPANY-LAUNCH-MILESTONE-AUDIT.md, COMPANY-LAUNC
 Exact tested head: `5e7dd5b30c0cbc935dd1f43bf747ed4f37701fc3`. GitHub Actions run [40803546231](https://github.com/VictorCyberDev/PayFlow/actions/runs/40803546231) completed **SUCCESS**. Jobs `verify`, `console`, and `console-e2e` all succeeded. The workflow checks out the exact PR head and runs native PostgreSQL integration/coverage and authenticated browser E2E, in addition to public company browser QA. The earlier E2E failure was an outdated test waiting for collapsed raw Proof; commit 5e7dd5b opens the progressive disclosure before inspecting it. No retry was used to conceal the failure.
 
 The local no-database counts above remain local counts; they are not substituted for native CI totals. Detailed native counts were not retrieved, so no total is invented. This documentation update does not alter runtime code. The report intentionally names the validated checkpoint rather than claiming its own future documentation commit was already tested. Full company status remains PARTIAL for the enumerated engineering/commissioning work.
+
+## Retrieved native CI metrics
+
+The coverage-summary artifact from run 40803546231 confirms **1,892 passed / 0 failed / 3 skipped** of 1,895 total, and **823/823 PostgreSQL integration tests passed** with none skipped. Native coverage: 90.41% statements/lines, 90.01% functions, 86.39% branches. This does not establish external model, provider or production acceptance.
+
+The artifact's old `headSha` field used GitHub's event GITHUB_SHA (a synthetic PR merge id) despite explicit PR-head checkout. The current workflow corrects that field to `git rev-parse HEAD` and preserves the event SHA separately, so future receipts identify the actual tested checkout. The run API identifies the validated PR head as 5e7dd5b30c0cbc935dd1f43bf747ed4f37701fc3.

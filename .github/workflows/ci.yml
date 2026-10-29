@@ -50,11 +50,12 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import { readFileSync, writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
           const counts = path => {
             const r = JSON.parse(readFileSync(path, 'utf8'));
             return { total: r.numTotalTests, passed: r.numPassedTests, failed: r.numFailedTests, skipped: r.numPendingTests };
           };
-          writeFileSync('coverage/review-results.json', JSON.stringify({ headSha: process.env.GITHUB_SHA, all: counts('/tmp/payflow-tests.json'), integration: counts('/tmp/payflow-integration.json') }));
+          writeFileSync('coverage/review-results.json', JSON.stringify({ headSha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), eventSha: process.env.GITHUB_SHA, all: counts('/tmp/payflow-tests.json'), integration: counts('/tmp/payflow-integration.json') }));
           JS
       - name: Preserve bounded coverage metrics for independent review
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

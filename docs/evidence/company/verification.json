@@ -71,6 +71,27 @@
       "console": "success",
       "console-e2e": "success"
     },
-    "nativeCounts": "not retrieved; do not infer from local counts"
+    "nativeCounts": {
+      "all": {
+        "total": 1895,
+        "passed": 1892,
+        "failed": 0,
+        "skipped": 3
+      },
+      "integration": {
+        "total": 823,
+        "passed": 823,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "coverage": {
+      "statements": 90.41,
+      "lines": 90.41,
+      "functions": 90.01,
+      "branches": 86.39
+    },
+    "artifactId": 12867990343,
+    "oldArtifactHeadField": "GITHUB_SHA synthetic merge; corrected workflow records actual checkout separately"
   }
 }
