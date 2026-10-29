@@ -61,5 +61,16 @@
     "gemini": "NOT_RUN"
   },
   "providerEffectsThisSession": 0,
-  "deploymentsRequested": 0
+  "deploymentsRequested": 0,
+  "githubCI": {
+    "headSha": "5e7dd5b30c0cbc935dd1f43bf747ed4f37701fc3",
+    "runId": 40803546231,
+    "conclusion": "success",
+    "jobs": {
+      "verify": "success",
+      "console": "success",
+      "console-e2e": "success"
+    },
+    "nativeCounts": "not retrieved; do not infer from local counts"
+  }
 }

@@ -46,3 +46,9 @@ The exact M6–M60 table is in COMPANY-LAUNCH-MILESTONE-AUDIT.md and copied in P
 6. Only then evaluate merge/release. This branch remains reviewable as draft; no public launch or company freeze is authorized by local green tests.
 
 Recommended immediate engineering: trusted durable enterprise approval ingestion; hosted OAuth/service composition; exact delegated-action binding; actual second-rail adapter; role-aware enterprise console and reconciliation worker. Commercial: finalize legal identity/retention, private security intake and real inquiry delivery; seek consenting design partners without claiming them prematurely.
+
+## Final verified CI checkpoint — 2026-10-29
+
+Exact tested head: `5e7dd5b30c0cbc935dd1f43bf747ed4f37701fc3`. GitHub Actions run [40803546231](https://github.com/VictorCyberDev/PayFlow/actions/runs/40803546231) completed **SUCCESS**. Jobs `verify`, `console`, and `console-e2e` all succeeded. The workflow checks out the exact PR head and runs native PostgreSQL integration/coverage and authenticated browser E2E, in addition to public company browser QA. The earlier E2E failure was an outdated test waiting for collapsed raw Proof; commit 5e7dd5b opens the progressive disclosure before inspecting it. No retry was used to conceal the failure.
+
+The local no-database counts above remain local counts; they are not substituted for native CI totals. Detailed native counts were not retrieved, so no total is invented. This documentation update does not alter runtime code. The report intentionally names the validated checkpoint rather than claiming its own future documentation commit was already tested. Full company status remains PARTIAL for the enumerated engineering/commissioning work.
