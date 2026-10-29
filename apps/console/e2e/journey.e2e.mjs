@@ -824,6 +824,9 @@ test("M6 hero: the Agent is blocked at $184 ($0 moved) and completes $84 without
   assert.deepEqual(await provider(), { createCalls: 1, captureCalls: 1 });
   // Proof reveals the chain.
   await page.getByRole("link", { name: "View proof" }).click();
+  await page
+    .getByText("Raw Proof and technical references", { exact: true })
+    .click();
   await page.getByRole("heading", { name: "Stages" }).waitFor();
   const proof = await page.locator("main").innerText();
   assert.match(proof, /CAPTURE|VERTICAL-CAPTURE/);
@@ -970,6 +973,9 @@ test("M6 mobile 375px: Authority with the demo Agent, blocked, paid and unresolv
   assert.deepEqual(await small(), []);
   await shot(page, "m6-m02-paid");
   await page.getByRole("link", { name: "View proof" }).click();
+  await page
+    .getByText("Raw Proof and technical references", { exact: true })
+    .click();
   await page.getByRole("heading", { name: "Stages" }).waitFor();
   assert.ok((await overflow()) <= 0, "proof overflow");
   await shot(page, "m6-m03-proof");
