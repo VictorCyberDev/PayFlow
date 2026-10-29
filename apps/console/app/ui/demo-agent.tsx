@@ -52,9 +52,13 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
         setBusy(true);
         return state ? completePayPalVaultConnection(state) : false;
       })
-      .then((ok) => {
+      .then(async (ok) => {
         setVaultConnected(ok);
         setOutcome(ok ? null : "ERROR");
+        if (ok) {
+          const agent = await fetchDemoAgentStatus();
+          if (agent) setOffer(agent);
+        }
         u.searchParams.delete("paypal");
         u.searchParams.delete("state");
         window.history.replaceState({}, "", u.pathname + u.search + u.hash);
