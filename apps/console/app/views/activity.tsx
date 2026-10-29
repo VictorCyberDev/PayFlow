@@ -1,7 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { activityOutcome } from "../../lib/language";
+import {
+  activityOutcome,
+  delegatedLine,
+  merchantName,
+} from "../../lib/language";
 import { humanWhen } from "../../lib/present";
 import {
   ActivityRow,
@@ -45,6 +49,7 @@ export function ActivityDetail({ id, proof }: { id: string; proof: boolean }) {
           What happened
         </h2>
         <p className="body-lg">{o.detail}</p>
+        {x.delegated && <p className="body-lg">{delegatedLine}</p>}
         <VerificationLine x={x} />
         <dl className="boundary">
           <div>
@@ -60,7 +65,7 @@ export function ActivityDetail({ id, proof }: { id: string; proof: boolean }) {
           {x.merchant && (
             <div>
               <dt>Where</dt>
-              <dd>{x.merchant}</dd>
+              <dd>{merchantName(x.merchant)}</dd>
             </div>
           )}
           <div>

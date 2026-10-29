@@ -24,5 +24,9 @@ export default async function handler(
     res.end(JSON.stringify({ status: "UNAVAILABLE" }));
     return;
   }
+  // The static pages need Vercel's trailingSlash redirect, which also reaches /api/*; the host
+  // matches exact paths, so the API sees the same path with the slash removed.
+  if (req.url)
+    req.url = req.url.replace(/^(\/api\/[^?#]*?)\/+(?=[?#]|$)/, "$1");
   await hosted.handler(req, res);
 }

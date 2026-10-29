@@ -7,10 +7,11 @@ import {
   type IntentCompileContext,
 } from "./intent.js";
 import { IntentReviewService } from "./intent-review.js";
+import { DEMO_MERCHANT_ID } from "./commerce.js";
 
 /** Recorded fixture, not an NL parser. Only this exact source has recorded spans. */
 export function demoIntentSource(expiresAt: string): string {
-  return `Buy a mechanical keyboard; KEYBOARD; at most 100.00 USD; NEW only; only DemoMerchant; quantity 1; autonomous purchase; no additional confirmation; ${expiresAt}; CREATE_ORDER CAPTURE_PAYMENT`;
+  return `Buy a mechanical keyboard; KEYBOARD; at most 100.00 USD; NEW only; only ${DEMO_MERCHANT_ID}; quantity 1; autonomous purchase; no additional confirmation; ${expiresAt}; CREATE_ORDER CAPTURE_PAYMENT`;
 }
 export function recordedInterpretation(
   source: { reference: string; text: string },
@@ -37,8 +38,8 @@ export function recordedInterpretation(
       currency: explicit("USD", "USD"),
       conditions: explicit(["NEW"], "NEW only"),
       merchants: explicit(
-        { mode: "ONLY", ids: ["DemoMerchant"] },
-        "only DemoMerchant",
+        { mode: "ONLY", ids: [DEMO_MERCHANT_ID] },
+        `only ${DEMO_MERCHANT_ID}`,
       ),
       quantity: explicit(1, "quantity 1"),
       autonomousPurchase: explicit(true, "autonomous purchase"),
@@ -61,7 +62,7 @@ export const demoReviewBounds = (
   currency: "USD",
   quantity: 1,
   conditions: ["NEW"],
-  merchantIds: ["DemoMerchant"],
+  merchantIds: [DEMO_MERCHANT_ID],
   capabilities: ["CREATE_ORDER", "CAPTURE_PAYMENT"],
   expiresAt: new Date(now.getTime() + 86400000).toISOString(),
 });

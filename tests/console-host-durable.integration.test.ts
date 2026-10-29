@@ -49,7 +49,7 @@ const policy = {
   maximumQuantity: 1,
   currencies: ["USD"],
   capabilities,
-  merchantIds: ["DemoMerchant"],
+  merchantIds: ["payflow.demo.merchant"],
   merchantRiskCeiling: "LOW",
   maximumLifetimeSeconds: 86400 * 30,
 };

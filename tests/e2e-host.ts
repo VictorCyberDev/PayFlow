@@ -17,7 +17,10 @@ import { ConsoleSessions } from "../src/console-session.js";
 import { ConsoleActivation } from "../src/console-activation.js";
 import { ConsoleControls } from "../src/console-controls.js";
 import { ConsoleActivity } from "../src/activity-postgres.js";
-import { StaticPublicKeyRing } from "../src/execution-grant.js";
+import { ConsoleDemoAgent } from "../src/console-demo-agent.js";
+import { DemoShoppingAgent } from "../src/delegated-demo.js";
+import { generateKeyPairSync } from "node:crypto";
+import { VerticalProvider } from "./m4-vertical-fixture.js";
 import { activationHttpHandler } from "../src/console-activation-host.js";
 import { IntentReviewService } from "../src/intent-review.js";
 import {
@@ -74,7 +77,7 @@ async function seed() {
     maximumQuantity: 1,
     currencies: ["USD"],
     capabilities,
-    merchantIds: ["DemoMerchant"],
+    merchantIds: ["payflow.demo.merchant"],
     merchantRiskCeiling: "LOW",
     maximumLifetimeSeconds: 86400 * 30,
   });
@@ -91,6 +94,18 @@ const provider: IntentModelProvider = {
     ).interpretIntent();
   },
 };
+// M6: the demo Shopping Agent runs the real delegated pipeline against a deterministic provider
+// whose orders are born approved (the pre-approved instrument). Test-only; no network.
+const signingKeys = generateKeyPairSync("ed25519");
+const provider2 = new VerticalProvider();
+provider2.payer = false;
+const demoAgent = new DemoShoppingAgent({
+  repo,
+  provider: provider2,
+  signing: { kid: "e2e", ...signingKeys },
+  expectedPayPalMerchantId: "DEMOACCOUNT01",
+  clock,
+});
 const web = createServer((req, res) => {
   void handler(req, res);
 });
@@ -110,12 +125,8 @@ const handler = activationHttpHandler(
   {
     sample,
     controls: new ConsoleControls(repo, sessions, clock),
-    activity: new ConsoleActivity(
-      repo,
-      sessions,
-      new StaticPublicKeyRing(new Map()),
-      clock,
-    ),
+    activity: new ConsoleActivity(repo, sessions, demoAgent.keys, clock),
+    demoAgent: new ConsoleDemoAgent(repo, sessions, demoAgent),
     review: new IntentReviewService(provider, demoReviewBounds, clock),
     outputDirectory: resolve("apps/console/out"),
   },
@@ -143,6 +154,10 @@ const control = createServer((req, res) => {
       // Move past the accepted 60s login-guessing window instead of weakening it.
       offsetMs += 61000;
       await seed();
+      delete provider2.order;
+      provider2.createCalls = 0;
+      provider2.captureCalls = 0;
+      provider2.loseCapture = false;
       return reply({ ok: true });
     }
     if (url.pathname === "/revoke") {
@@ -151,6 +166,21 @@ const control = createServer((req, res) => {
         clock().toISOString(),
       );
       return reply({ ok: true });
+    }
+    if (url.pathname === "/provider") {
+      // Test controls for the deterministic payment provider (money-moving call counters, faults).
+      const mode = url.searchParams.get("mode");
+      if (mode === "loseCapture") provider2.loseCapture = true;
+      if (mode === "reset") {
+        delete provider2.order;
+        provider2.createCalls = 0;
+        provider2.captureCalls = 0;
+        provider2.loseCapture = false;
+      }
+      return reply({
+        createCalls: provider2.createCalls,
+        captureCalls: provider2.captureCalls,
+      });
     }
     if (url.pathname === "/counts") {
       const out: Record<string, number> = {};

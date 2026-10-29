@@ -34,6 +34,8 @@ export const ActivityItemSchema = z
     merchant: id.nullable(),
     item: id.nullable(),
     moneyMoved: z.enum(["YES", "NO", "UNKNOWN"]),
+    /** M6: true only for a completed purchase that no human approved at payment time. */
+    delegated: z.boolean(),
     verification: OperationTraceSchema.shape.status,
     stages: OperationTraceSchema.shape.stages,
     references: z
@@ -58,6 +60,8 @@ export function activityItem(
     observedAt: string;
     decision: "ALLOW" | "DENY" | "ESCALATE" | null;
     reasonCodes?: readonly string[];
+    /** True when durable evidence shows a human resumed (approved) this payment. */
+    humanResumed?: boolean;
   },
 ): ActivityItem {
   const t: OperationTrace = OperationTraceSchema.parse(raw);
@@ -193,12 +197,71 @@ export function activityItem(
     merchant: trusted ? c.logicalMerchant : null,
     item: trusted ? c.sku : null,
     moneyMoved: completed ? "YES" : noEffect || denied ? "NO" : "UNKNOWN",
+    delegated: completed && facts.decision === "ALLOW" && !facts.humanResumed,
     verification: t.status,
     stages: t.stages,
     references: {
       paymentAttemptId: t.references.paymentAttemptId,
       providerOrderId: t.references.providerOrderId,
       providerCaptureId: t.references.providerCaptureId,
+    },
+  });
+}
+
+/**
+ * M6: a trusted-quote refusal (for example a $184 trusted price against a $100 maximum) happens
+ * before any proposal, reservation, grant or provider call. It is therefore a proven zero-effect
+ * outcome, but it has no proposal id, so it is keyed by its selection. Presentation only: the
+ * accepted OperationTrace verdict is preserved unchanged.
+ */
+export function refusalActivityItem(
+  raw: unknown,
+  facts: {
+    operationId: string;
+    mandateId: string;
+    agentId: string;
+    agentName: string;
+    occurredAt: string;
+    observedAt: string;
+    item: string | null;
+  },
+): ActivityItem {
+  const t: OperationTrace = OperationTraceSchema.parse(raw);
+  const refused = t.stages.some(
+    (s) => s.stage === "QUOTE_REFUSAL" && s.status === "VERIFIED",
+  );
+  if (
+    t.references.selectionId !== facts.operationId ||
+    t.references.proposalId !== null ||
+    t.references.mandateId !== facts.mandateId ||
+    t.financialOutcome !== "DENIED" ||
+    !refused
+  )
+    throw new Error("UNAVAILABLE");
+  return ActivityItemSchema.parse({
+    operationId: facts.operationId,
+    mandateId: facts.mandateId,
+    agentId: facts.agentId,
+    agentName: facts.agentName,
+    occurredAt: facts.occurredAt,
+    observedAt: facts.observedAt,
+    decision: "DENY",
+    status: "DENIED",
+    label: "Purchase blocked",
+    explanation:
+      "The price exceeded the maximum amount permitted by this authority.",
+    amountMinor: t.authorityMeter.financial.requestedMinor,
+    currency: t.authorityMeter.financial.currency,
+    merchant: null,
+    item: facts.item,
+    moneyMoved: "NO",
+    delegated: false,
+    verification: t.status,
+    stages: t.stages,
+    references: {
+      paymentAttemptId: null,
+      providerOrderId: null,
+      providerCaptureId: null,
     },
   });
 }

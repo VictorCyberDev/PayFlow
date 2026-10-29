@@ -2,6 +2,7 @@ import {
   AuthorityProjectionSchema,
   type AuthorityViewReader,
 } from "./authority-projection.js";
+import { merchantDisplay } from "./commerce.js";
 import type { PostgresTrustRepository } from "./persistence.js";
 /** Read-only repeatable snapshot. Uses accepted accounting, never authorizes dispatch. */
 export class PostgresAuthorityViewReader implements AuthorityViewReader {
@@ -61,7 +62,7 @@ export class PostgresAuthorityViewReader implements AuthorityViewReader {
               : null,
           merchantScopeSummary:
             m.merchantScope?.mode === "ONLY"
-              ? `Only ${m.merchantScope.ids.join(", ")}`
+              ? `Only ${m.merchantScope.ids.map(merchantDisplay).join(", ")}`
               : "Any merchant, subject to existing policy",
           allowedConditions: [...m.allowedConditions],
           allowedCapabilities: [...m.allowedCapabilities],

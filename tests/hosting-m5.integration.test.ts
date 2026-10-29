@@ -52,11 +52,14 @@ const provision = (databaseUrl: string) =>
       await admin.close();
     });
 
-    it("provisions an empty database once, idempotently: migrations 001-010, one principal, one passport, one policy", async () => {
+    it("provisions an empty database once, idempotently: every forward-only migration, one principal, one passport, one policy", async () => {
       const target = await freshDatabase();
       const first = await provision(target);
       expect(first.code).toBe(0);
-      expect(first.out).toMatch(/applied migrations: 10/);
+      const migrationCount = (await readdir("db/migrations")).filter((n) =>
+        n.endsWith(".sql"),
+      ).length;
+      expect(first.out).toContain(`applied migrations: ${migrationCount}`);
       expect(first.out).not.toContain(target);
       const second = await provision(target);
       expect(second.code).toBe(0);
@@ -87,7 +90,7 @@ const provision = (databaseUrl: string) =>
       const repo = PostgresTrustRepository.connect(target);
       try {
         for (const n of (await readdir("db/migrations"))
-          .filter((n) => n.endsWith(".sql") && !n.startsWith("010_"))
+          .filter((n) => n.endsWith(".sql") && n < "010_")
           .sort())
           await repo.migrate(await readFile("db/migrations/" + n, "utf8"));
         await repo.savePrincipal({ id: "existing", displayName: "Existing" });
@@ -207,6 +210,11 @@ const provision = (databaseUrl: string) =>
         });
         expect(list.status).toBe(200);
         expect(((await list.json()) as { items: unknown[] }).items).toEqual([]);
+        // Vercel's trailingSlash redirect delivers /api/* with a slash; the adapter restores the path.
+        const slashed = await fetch(origin + "/api/activation/authorities/", {
+          headers: { cookie },
+        });
+        expect(slashed.status).toBe(200);
         const sample = (await (
           await fetch(origin + "/api/intent-review/sample", {
             headers: { cookie },

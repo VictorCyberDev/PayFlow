@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run format:check
@@ -108,15 +108,16 @@ jobs:
         working-directory: apps/console
       - run: npm run build
         working-directory: apps/console
-      # The browser download/apt step has hung on the runner mirror; bound and retry it.
+      # The apt mirror has stalled on the runner (and a killed apt leaves its dpkg lock held), so
+      # download the browser without system packages first, and only fall back to --with-deps.
       - name: Install Chromium (bounded retry)
         working-directory: apps/console
         timeout-minutes: 10
         run: |
           for attempt in 1 2 3; do
-            timeout 240 npx playwright-core install --with-deps chromium && exit 0
-            echo "Chromium install attempt $attempt failed"
+            timeout 120 npx playwright-core install chromium && exit 0
+            echo "Chromium download attempt $attempt failed"
           done
-          exit 1
+          timeout 300 npx playwright-core install --with-deps chromium
       - run: npm run test:e2e
         working-directory: apps/console

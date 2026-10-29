@@ -592,6 +592,7 @@ test("accessibility: keyboard-only flow, visible focus, labels, live regions, re
     );
   assert.deepEqual(await unnamed(), []);
   // One h1 per page and landmarks.
+  await page.locator("h1").first().waitFor(); // count() does not wait for render
   assert.equal(await page.locator("h1").count(), 1);
   for (const sel of ["main", "nav[aria-label='Primary']"])
     assert.ok(await page.locator(sel).count());
@@ -619,6 +620,7 @@ test("accessibility: keyboard-only flow, visible focus, labels, live regions, re
   await page
     .getByRole("heading", { level: 1, name: /what PayFlow understood/ })
     .waitFor();
+  await page.locator("h1").first().waitFor(); // count() does not wait for render
   assert.equal(await page.locator("h1").count(), 1);
   await page.getByRole("button", { name: "Continue to confirm" }).focus();
   await page.keyboard.press("Enter");
@@ -761,5 +763,220 @@ test("server unavailable: a failing read shows a calm state, never a stack trace
   await page.getByRole("button", { name: "Try again" }).click();
   await page.locator(".frame").first().waitFor();
   await zeroPayments();
+  await context.close();
+});
+
+// ---------------------------------------------------------------------------------------------
+// M6 delegated / human-not-present commerce, through the real UI against the real pipeline with a
+// deterministic Sandbox-shaped provider (orders born approved). No live PayPal.
+// ---------------------------------------------------------------------------------------------
+const provider = async (mode = "") =>
+  (await fetch(control + "/provider?mode=" + mode, { method: "POST" })).json();
+async function openAuthority(page) {
+  await signIn(page);
+  await createAuthority(page);
+  await page.getByRole("link", { name: "View Authority" }).click();
+  await page.getByRole("button", { name: "Revoke Authority" }).waitFor();
+}
+const agentButton = (page, name) => page.getByRole("button", { name });
+
+test("M6 hero: the Agent is blocked at $184 ($0 moved) and completes $84 without asking, exactly one capture", async () => {
+  await reset();
+  await provider("reset");
+  const { context, page, problems } = await open();
+  await openAuthority(page);
+  await page.getByRole("heading", { name: /Demo · Try your Agent/ }).waitFor();
+  await shot(page, "m6-01-authority-with-agent");
+  // 1. Price drift: trusted $184 against the $100 maximum.
+  await agentButton(page, "Agent finds a $184 keyboard").click();
+  await page
+    .getByText(/Blocked before any payment started\. \$0 moved\./)
+    .waitFor();
+  await page.getByRole("link", { name: "See what happened" }).click();
+  await page.getByRole("heading", { level: 1, name: "$0 moved" }).waitFor();
+  const blockedText = await page.locator("main").innerText();
+  assert.match(blockedText, /Stopped here/);
+  assert.match(blockedText, /Not started/);
+  assert.match(blockedText, /exceeded the maximum amount/);
+  assert.match(blockedText, /No payment was started\./);
+  assert.doesNotMatch(blockedText, /Checking what happened/);
+  await shot(page, "m6-02-blocked-detail");
+  assert.deepEqual(await provider(), { createCalls: 0, captureCalls: 0 });
+  await zeroPayments();
+  // 2. Valid purchase inside the Authority: no approval step anywhere.
+  await nav(page, "Authorities");
+  await page.locator(".frame a").first().click();
+  await agentButton(page, "Agent finds an $84 keyboard").click();
+  await page.getByText(/completed the purchase without asking you/).waitFor();
+  await page.getByRole("link", { name: "See what happened" }).click();
+  await page
+    .getByRole("heading", { level: 1, name: "$84 paid once" })
+    .waitFor();
+  const paidText = await page.locator("main").innerText();
+  assert.match(
+    paidText,
+    /Your Agent did this without asking you, within your Authority\./,
+  );
+  assert.match(paidText, /Paid/);
+  assert.doesNotMatch(
+    paidText,
+    /Mandate|grant|reservation|UNKNOWN_FINANCIAL|UTC/i,
+  );
+  await shot(page, "m6-03-paid-detail");
+  assert.deepEqual(await provider(), { createCalls: 1, captureCalls: 1 });
+  // Proof reveals the chain.
+  await page.getByRole("link", { name: "View proof" }).click();
+  await page.getByRole("heading", { name: "Stages" }).waitFor();
+  const proof = await page.locator("main").innerText();
+  assert.match(proof, /CAPTURE|VERTICAL-CAPTURE/);
+  assert.match(proof, /VERIFIED/);
+  await shot(page, "m6-04-paid-proof");
+  // Activity journal and Authority reflect it.
+  await nav(page, "Activity");
+  const journal = await page.locator(".journal").innerText();
+  assert.ok(
+    journal.indexOf("$84 paid once") >= 0 &&
+      journal.indexOf("$0 moved") > journal.indexOf("$84 paid once"),
+    "newest first: paid then blocked",
+  );
+  await shot(page, "m6-05-activity");
+  await nav(page, "Authorities");
+  await page.locator(".frame").first().waitFor();
+  assert.match(await page.locator(".frame").first().innerText(), /\$16\s*left/);
+  // 3. Replay: a second purchase cannot consume more than the Authority allows.
+  await page.locator(".frame a").first().click();
+  await agentButton(page, "Agent finds an $84 keyboard").click();
+  await page
+    .getByText(/Blocked|above what your Agent can spend|Checking/)
+    .first()
+    .waitFor();
+  assert.deepEqual(
+    await provider(),
+    { createCalls: 1, captureCalls: 1 },
+    "still exactly one capture",
+  );
+  const c = await counts();
+  assert.equal(c.payment_attempts, 1);
+  assert.equal(c.execution_grants, 1);
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test("M6 revoked Authority: the Agent cannot start a new purchase and nothing is dispatched", async () => {
+  await reset();
+  await provider("reset");
+  const { context, page } = await open();
+  await openAuthority(page);
+  const id = new URL(page.url()).searchParams.get("id");
+  await ctl("/revoke?mandateId=" + encodeURIComponent(id));
+  const status = await page.evaluate(async (mandateId) => {
+    const s = await (await fetch("/api/activation/session")).json();
+    const r = await fetch("/api/demo-agent/attempt", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-PayFlow-CSRF": s.csrfToken,
+      },
+      body: JSON.stringify({ scenario: "VALID_PURCHASE", mandateId }),
+    });
+    return { http: r.status, body: await r.json() };
+  }, id);
+  assert.equal(status.body.status, "REFUSED");
+  assert.equal(status.body.providerEffect, "NONE");
+  assert.deepEqual(await provider(), { createCalls: 0, captureCalls: 0 });
+  await context.close();
+});
+
+test("M6 ambiguous provider outcome: 'Checking what happened — don't retry yet', never a success", async () => {
+  await reset();
+  await provider("reset");
+  const { context, page } = await open();
+  await openAuthority(page);
+  await provider("loseCapture");
+  await agentButton(page, "Agent finds an $84 keyboard").click();
+  await page
+    .getByText(/Checking what happened — don.t retry yet\./)
+    .first()
+    .waitFor();
+  await page.getByRole("link", { name: "See what happened" }).click();
+  await page
+    .getByRole("heading", {
+      level: 1,
+      name: /Checking what happened — don.t retry yet/,
+    })
+    .waitFor();
+  const text = await page.locator("main").innerText();
+  assert.match(
+    text,
+    /We haven.t confirmed whether money moved\. Don.t retry yet\./,
+  );
+  assert.doesNotMatch(text, /paid once|\$0 moved/);
+  assert.equal(await page.locator(".trace__step--unconfirmed").count(), 1);
+  await shot(page, "m6-06-unresolved");
+  await nav(page, "Home");
+  await page
+    .getByRole("heading", { level: 1, name: "1 payment needs attention." })
+    .waitFor();
+  await shot(page, "m6-07-home-attention");
+  assert.equal(
+    (await provider()).captureCalls,
+    1,
+    "the one attempt is never retried by the app",
+  );
+  await context.close();
+});
+
+test("M6 mobile 375px: Authority with the demo Agent, blocked, paid and unresolved states fit and are touchable", async () => {
+  await reset();
+  await provider("reset");
+  const { context, page } = await open(
+    { width: 375, height: 812 },
+    { hasTouch: true, isMobile: true, deviceScaleFactor: 2 },
+  );
+  const overflow = () =>
+    page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+  const small = () =>
+    page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          "button, a[href], summary, input, textarea",
+        ),
+      ]
+        .filter((e) => e.getClientRects().length)
+        .map((e) => ({
+          t: (e.textContent || e.id).trim().slice(0, 30),
+          r: e.getBoundingClientRect(),
+        }))
+        .filter((x) => x.r.height < 44 || x.r.width < 44)
+        .map(
+          (x) => `${x.t} ${Math.round(x.r.width)}x${Math.round(x.r.height)}`,
+        ),
+    );
+  await openAuthority(page);
+  await agentButton(page, "Agent finds a $184 keyboard").click();
+  await page.getByRole("link", { name: "See what happened" }).click();
+  await page.getByRole("heading", { level: 1, name: "$0 moved" }).waitFor();
+  assert.ok((await overflow()) <= 0, "blocked overflow");
+  assert.deepEqual(await small(), []);
+  await shot(page, "m6-m01-blocked");
+  await nav(page, "Authorities");
+  await page.locator(".frame a").first().click();
+  await agentButton(page, "Agent finds an $84 keyboard").click();
+  await page.getByRole("link", { name: "See what happened" }).click();
+  await page
+    .getByRole("heading", { level: 1, name: "$84 paid once" })
+    .waitFor();
+  assert.ok((await overflow()) <= 0, "paid overflow");
+  assert.deepEqual(await small(), []);
+  await shot(page, "m6-m02-paid");
+  await page.getByRole("link", { name: "View proof" }).click();
+  await page.getByRole("heading", { name: "Stages" }).waitFor();
+  assert.ok((await overflow()) <= 0, "proof overflow");
+  await shot(page, "m6-m03-proof");
+  await nav(page, "Activity");
+  assert.ok((await overflow()) <= 0, "activity overflow");
+  await shot(page, "m6-m04-activity");
   await context.close();
 });
