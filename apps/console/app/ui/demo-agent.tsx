@@ -70,7 +70,7 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
     setBusy(true);
     setOutcome(null);
     try {
-      await startPayPalVaultConnection();
+      await startPayPalVaultConnection(mandateId);
     } catch {
       setBusy(false);
       setOutcome("ERROR");
