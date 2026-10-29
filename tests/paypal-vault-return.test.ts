@@ -7,7 +7,10 @@ describe("M6 PayPal vault return routing", () => {
   it("returns approval and cancellation to the same Authority detail", async () => {
     const requests: unknown[] = [];
     const setups: unknown[] = [];
-    const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const fetcher = (async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
       requests.push(JSON.parse(String(init?.body ?? "{}")));
       return new Response(
         JSON.stringify({
