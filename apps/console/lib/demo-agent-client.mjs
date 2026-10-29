@@ -65,9 +65,24 @@ export async function fetchPayPalVaultStatus(transport = transportDefault) {
 }
 
 /** Starts the one-time payer-present bootstrap. The PayPal setup token remains server-side; the
- * browser receives only the provider approval URL. */
-export async function startPayPalVaultConnection(transport = transportDefault) {
-  const r = await mutation("/api/paypal-vault/start", {}, transport);
+ * browser receives only the provider approval URL. The Authority id is navigation-only so PayPal
+ * can return to the same detail panel that completes the state-bound exchange. */
+export async function startPayPalVaultConnection(
+  authorityId,
+  transport = transportDefault,
+) {
+  if (
+    typeof authorityId !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      authorityId,
+    )
+  )
+    throw new Error("invalid");
+  const r = await mutation(
+    "/api/paypal-vault/start",
+    { authorityId },
+    transport,
+  );
   if (
     r?.version !== "payflow.paypal-vault-start.v2" ||
     typeof r.approvalUrl !== "string" ||
