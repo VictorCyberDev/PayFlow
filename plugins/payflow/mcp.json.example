@@ -3,7 +3,18 @@
   "mcpServers": {
     "payflow": {
       "type": "streamable-http",
-      "url": "https://REPLACE-WITH-STABLE-PAYFLOW-HOST.example/mcp"
+      "url": "https://replace-before-submission.invalid/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": {
+              "mode": "cimd"
+            },
+            "baseScopes": ["authority:read", "verify:read", "proof:read"]
+          }
+        }
+      }
     }
   }
 }

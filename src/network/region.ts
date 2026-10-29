@@ -67,6 +67,14 @@ export function mayAssumeReservationOwnership(
   candidateEpoch: number,
   now: string,
 ): boolean {
+  if (
+    !Number.isSafeInteger(candidateEpoch) ||
+    !Number.isSafeInteger(current.epoch) ||
+    current.epoch < 0 ||
+    !Number.isFinite(Date.parse(now)) ||
+    !Number.isFinite(Date.parse(current.leaseExpiresAt))
+  )
+    return false;
   if (candidateEpoch <= current.epoch) return false;
   return (
     Date.parse(now) >= Date.parse(current.leaseExpiresAt) &&

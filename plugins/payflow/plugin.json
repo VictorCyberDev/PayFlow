@@ -4,5 +4,27 @@
   "version": "0.1.0-preview",
   "description": "Bounded financial authority, verification, Proof, and reconciliation for autonomous systems.",
   "repository": "https://github.com/VictorCyberDev/PayFlow",
-  "license": "SEE-REPOSITORY-LICENSE"
+  "license": "SEE-REPOSITORY-LICENSE",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "PayFlow",
+        "shortDescription": "Financial authority for autonomous systems",
+        "longDescription": "Check bounded financial Authority, verify signed presentations and Proof, and reconcile original attempts. Model output never grants financial permission. Public commissioning remains pending.",
+        "developerName": "Victor Nnamdi",
+        "category": "Productivity",
+        "websiteURL": "https://payflow-one-kappa.vercel.app/",
+        "supportURL": "https://payflow-one-kappa.vercel.app/contact/",
+        "privacyPolicyURL": "https://payflow-one-kappa.vercel.app/privacy/",
+        "termsOfServiceURL": "https://payflow-one-kappa.vercel.app/terms/",
+        "defaultPrompt": [
+          "Check whether an exact action fits existing Authority.",
+          "Verify this financial Proof.",
+          "Reconcile the original UNKNOWN attempt."
+        ],
+        "brandColor": "#111418",
+        "brandColorDark": "#F3F0E8"
+      }
+    }
+  }
 }

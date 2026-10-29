@@ -88,7 +88,11 @@ export function evaluateExternalIssuerAssertion(
   const assertionResult =
     ExternalAuthorityAssertionSchema.safeParse(rawAssertion);
   const profileResult = IssuerTrustProfileSchema.safeParse(rawProfile);
-  if (!assertionResult.success || !profileResult.success) {
+  if (
+    !assertionResult.success ||
+    !profileResult.success ||
+    !Number.isFinite(Date.parse(now))
+  ) {
     return { trusted: false, reasons: ["MALFORMED_EXTERNAL_AUTHORITY"] };
   }
   const assertion = assertionResult.data;
@@ -202,12 +206,20 @@ export async function federatedVerify(
   const domain = domains.get(issuer);
   if (!domain) return { verdict: "UNKNOWN_ISSUER" };
   if (domain.status === "REVOKED") return { verdict: "REVOKED_ISSUER" };
-  if (Date.parse(now) >= Date.parse(domain.metadataFreshUntil)) {
+  if (
+    !Number.isFinite(Date.parse(now)) ||
+    !Number.isFinite(Date.parse(domain.metadataFreshUntil)) ||
+    Date.parse(now) >= Date.parse(domain.metadataFreshUntil)
+  ) {
     return { verdict: "STALE_METADATA" };
   }
-  const result = await domain.verify(presentation, audience, now);
-  return {
-    verdict: result.verdict === "VALID" ? "VALID" : "INVALID",
-    remoteVerdict: result.verdict,
-  };
+  try {
+    const result = await domain.verify(presentation, audience, now);
+    return {
+      verdict: result.verdict === "VALID" ? "VALID" : "INVALID",
+      remoteVerdict: result.verdict,
+    };
+  } catch {
+    return { verdict: "INVALID" };
+  }
 }

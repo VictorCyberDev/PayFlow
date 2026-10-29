@@ -55,5 +55,10 @@
         }
       ]
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "m7-m60-master-execution": false
+    }
+  }
 }

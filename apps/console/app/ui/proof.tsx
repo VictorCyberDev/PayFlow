@@ -58,7 +58,14 @@ export function ActivityProof({ x }: { x: ActivityView }) {
       title={o.headline}
     >
       <FlowTrace x={x} />
-      <h2 className="h3">Decision</h2>
+      <h2 className="h3">Authority & Agent</h2>
+      <Rows
+        rows={[
+          ["Authority", x.mandateId],
+          ["Agent", x.agentId],
+        ]}
+      />
+      <h2 className="h3">Gate decision</h2>
       <Rows
         rows={[
           ["decision", x.decision ?? "none recorded"],
@@ -68,7 +75,7 @@ export function ActivityProof({ x }: { x: ActivityView }) {
           ["explanation", x.explanation],
         ]}
       />
-      <h2 className="h3">Evaluated request</h2>
+      <h2 className="h3">Exact action</h2>
       <Rows
         rows={[
           [
@@ -81,43 +88,67 @@ export function ActivityProof({ x }: { x: ActivityView }) {
           ["merchant", x.merchant],
         ]}
       />
-      <h2 className="h3">Stages</h2>
-      <table className="proof__table">
-        <thead>
-          <tr>
-            <th scope="col">stage</th>
-            <th scope="col">status</th>
-            <th scope="col">reason</th>
-          </tr>
-        </thead>
-        <tbody>
-          {x.stages.map((s) => (
-            <tr key={s.stage}>
-              <td>{s.stage}</td>
-              <td>{s.status}</td>
-              <td>{s.reasonCode}</td>
+      <h2 className="h3">Execution & outcome</h2>
+      <Rows
+        rows={[
+          ["Provider order", x.references.providerOrderId],
+          ["Provider capture", x.references.providerCaptureId],
+          ["Provider effect", x.moneyMoved],
+        ]}
+      />
+      <h2 className="h3">Reconciliation</h2>
+      <p>
+        {x.moneyMoved === "UNKNOWN"
+          ? "We haven't confirmed whether money moved. Don't retry this action. We're checking the original attempt."
+          : x.explanation}
+      </p>
+      <h2 className="h3">Verification</h2>
+      <Rows
+        rows={[
+          ["Verification", x.verification],
+          ["Observed", exactUtc(x.observedAt)],
+        ]}
+      />
+      <details>
+        <summary>Raw Proof and technical references</summary>
+        <h2 className="h3">Stages</h2>
+        <table className="proof__table">
+          <thead>
+            <tr>
+              <th scope="col">stage</th>
+              <th scope="col">status</th>
+              <th scope="col">reason</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <h2 className="h3">References</h2>
-      <Rows
-        rows={[
-          ["operation", x.operationId],
-          ["authority", x.mandateId],
-          ["agent", x.agentId],
-          ["payment attempt", x.references.paymentAttemptId],
-          ["provider order", x.references.providerOrderId],
-          ["provider capture", x.references.providerCaptureId],
-        ]}
-      />
-      <h2 className="h3">Times (UTC)</h2>
-      <Rows
-        rows={[
-          ["occurred", exactUtc(x.occurredAt)],
-          ["observed", exactUtc(x.observedAt)],
-        ]}
-      />
+          </thead>
+          <tbody>
+            {x.stages.map((s) => (
+              <tr key={s.stage}>
+                <td>{s.stage}</td>
+                <td>{s.status}</td>
+                <td>{s.reasonCode}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <h2 className="h3">References</h2>
+        <Rows
+          rows={[
+            ["operation", x.operationId],
+            ["authority", x.mandateId],
+            ["agent", x.agentId],
+            ["payment attempt", x.references.paymentAttemptId],
+            ["provider order", x.references.providerOrderId],
+            ["provider capture", x.references.providerCaptureId],
+          ]}
+        />
+        <h2 className="h3">Times (UTC)</h2>
+        <Rows
+          rows={[
+            ["occurred", exactUtc(x.occurredAt)],
+            ["observed", exactUtc(x.observedAt)],
+          ]}
+        />
+      </details>
     </ProofShell>
   );
 }

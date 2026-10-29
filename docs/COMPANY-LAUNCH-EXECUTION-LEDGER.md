@@ -1,0 +1,57 @@
+# Company launch execution ledger
+
+Verified 2026-10-29 (Africa/Lagos). This ledger supersedes optimistic classifications in the earlier M7–M60 handoff. No deployment, publication, model evaluation or provider effect is inferred from local tests.
+
+## Independently verified starting point
+
+- Repository: public `VictorCyberDev/PayFlow`; default `main` = `880a890f9e0735d03ee7e0de625907e408f5fc73`.
+- PR #16: OPEN, DRAFT, unmerged; current M6 head `36a34c1530a79b487ea382b41094334639146bf2`. M6 acceptance remains unproven.
+- PR #18: OPEN, DRAFT, unmerged; branch `m7-m60-master-execution`; head `6bcab82a25a4aca4bf5b3eecbaf6e52bd48bdae6`; base snapshot `9f1aca949c1bb492c83a52772c2fb2b16ef01b6e`. M6 has advanced independently. Do not silently merge its changes.
+- GitHub Actions run `40659651703`: completed SUCCESS for the starting PR #18 head. This is historical CI, not validation of future edits.
+- GitHub issue search returned no open issues.
+- Vercel projects: `payflow`, `payflow-m5-acceptance`, `payflow-m6-acceptance`, team `team_gn8cWAsH7Qmm2KQMl4sHat6f`.
+- Latest M6 deployment listed: READY, production, `dpl_H4wNUTfGk3E4Hj5S6Bn4ayGMkKN6`, source `9ce47e4b7087db91378639324a55a7bb6b588a40`; differs from current PR #16 head.
+- Main PayFlow project is not live in project metadata; latest listed preview source `e11b8c43c676b7d622853a60884984b540e99194`. Preview uses Vercel SSO protection.
+- No M7–M60 deployment shown in inspected deployment results. No deployment initiated by this session.
+- Source review: stdio MCP and transport-neutral handler exist; no HTTP MCP transport. Five tools exist. Authentication context is a boolean and does not itself bind scopes/tenant identity.
+- A2A module has a card and attenuation function but no wire server/client. Card security requirements need the v1.0 wrapper (`schemes`).
+- Tool adapters convert schemas only; no provider request/tool-result loops. Tool-selection artifact uses 14 deterministic cases, no real model.
+- Console root is a sandbox home with persistent app shell; no separate public company root. Static Next export and existing root Vercel public output require deliberate packaging.
+- Earlier ledger explicitly eliminated PARTIAL and defined COMPLETE_REAL as software-only tests. Both conflict with this mandate.
+
+## Source verification
+
+Official pages fetched on 2026-10-29:
+
+- MCP current transport index: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports (latest redirects here); previous stable transport: https://modelcontextprotocol.io/specification/2025-11-25/basic/transports . Version differences must be negotiated, not conflated.
+- OpenAI current integration: https://developers.openai.com/plugins/build/auth and https://developers.openai.com/plugins/deploy/connect-chatgpt (Apps SDK URLs redirect here). OAuth protected-resource discovery, authorization code + S256 PKCE, resource/audience binding and real connection testing are required for authenticated ChatGPT use.
+- A2A current: https://a2a-protocol.org/latest/specification/ . v1.0 uses SendMessage JSON-RPC or HTTP+JSON `/message:send`, version header and protobuf JSON representations.
+- Claude: https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools . Client tools require a tool-use/tool-result loop.
+- Gemini: https://ai.google.dev/gemini-api/docs/function-calling . Client executes declared functions and returns results; schema conversion is insufficient.
+
+## Execution policy
+
+Local first. No real-money execution. No M6 acceptance claim. Keep both PRs draft. No new paid projects, previews or model calls without bounded free/authorized access. Every remaining internal task may be PARTIAL; external events are never manufactured.
+
+## Progress
+
+Starting-point verification complete. Corrected milestone audit and implementation evidence follow in the accompanying reports.
+
+## Implemented in this session
+
+- Corrected the M7–M60 vocabulary/table and created a conservative M6–M60 audit with exact internal residue.
+- Added HTTP MCP and local A2A wire profile/client, server-owned identity/scope interfaces, OAuth JWT verification, strict MCP outer arguments and stable safe errors.
+- Connected two official MCP SDK clients over loopback HTTP and exercised local kernel-backed invocation. Added A2A HTTP exchange tests.
+- Added OpenAI/Claude/Gemini request/tool-result loops and opt-in provider eval capability; no live model calls.
+- Built separate public company root and /app, public docs/security/status/pricing/evidence/legal/contact/research, brand V2 and reusable assets. No publication or deployment.
+- Fixed concrete invalid-time/counter, reconciliation binding and NaN epoch bugs discovered during review; preserved benchmark semantics and historical artifacts.
+- Public-browser QA covers seven widths, interaction with UNKNOWN/denial, automated homepage WCAG checks and destination smoke tests. Native authenticated DB E2E remains unrun locally.
+- Disabled automatic deployment of this integration branch in each of the three existing Vercel roots. No new project, preview, deployment or paid model run was requested.
+
+## Browser/account observations
+
+- ChatGPT: current browser redirected to the signed-out login page. No connection, scan or submission performed.
+- M6 acceptance: stable site loaded successfully but shows Demo access / Access code. Existing session is signed out. Latest deployed source is behind current M6 head, so logging into that deployment would not satisfy current exact-head acceptance.
+- Vercel connector lists configured M6 Sandbox credential names. Sensitive values were not printed or copied into source. No OpenAI/Anthropic/Gemini credential was available in the workspace. No other product's live credential was reused.
+
+Remaining work is enumerated in COMPANY-LAUNCH-MILESTONE-AUDIT.md, COMPANY-LAUNCH-SECURITY-REVIEW.md and COMPANY-LAUNCH-MANDATE-COVERAGE.md. These documents deliberately retain PARTIAL milestones.

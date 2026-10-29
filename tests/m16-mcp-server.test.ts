@@ -175,10 +175,14 @@ describe("M16 MCP server (JSON-RPC handler)", () => {
 
 describe("M16 MCP server over stdio (real subprocess client)", () => {
   async function session(env: Record<string, string>) {
-    const child = spawn("npx", ["tsx", "packages/mcp-server/src/stdio.ts"], {
-      env: { ...process.env, ...env },
-      stdio: ["pipe", "pipe", "inherit"],
-    });
+    const child = spawn(
+      process.execPath,
+      ["--import", "tsx", "packages/mcp-server/src/stdio.ts"],
+      {
+        env: { ...process.env, ...env },
+        stdio: ["pipe", "pipe", "inherit"],
+      },
+    );
     const lines = createInterface({ input: child.stdout });
     const pending = new Map<number, (value: Record<string, unknown>) => void>();
     lines.on("line", (line) => {

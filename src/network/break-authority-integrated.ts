@@ -286,7 +286,11 @@ const runners: Record<IntegratedCategory, Run> = {
         () =>
           invokePayFlowMcpTool(
             "verify_authority",
-            {},
+            {
+              presentation: {},
+              audience: "test",
+              challenge: "test-challenge-16chars",
+            },
             { authenticated: true, requestId: `mcp-${variant}` },
             {
               verifyAuthority: leaky,

@@ -7,7 +7,12 @@ import { useConsole } from "./provider";
 import { BRAND } from "../../lib/brand";
 
 const items = [
-  { href: "/", label: "Home", mobile: true, match: (p: string) => p === "/" },
+  {
+    href: "/app/",
+    label: "Overview",
+    mobile: true,
+    match: (p: string) => p.startsWith("/app"),
+  },
   {
     href: "/new/",
     label: "New Authority",
@@ -131,7 +136,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
         </span>
       </header>
-      <main id="main" className="main" tabIndex={-1}>
+      <main
+        id="main"
+        className={`main ${path.startsWith("/enterprise") || path.startsWith("/developer") || path.startsWith("/agents") ? "main--workspace" : path.startsWith("/activity") ? "main--data" : "main--focused"}`}
+        tabIndex={-1}
+      >
         {children}
       </main>
       {nav("tabbar", true, true)}

@@ -37,6 +37,20 @@ export function evaluateMachineEconomicAction(
   },
 ): readonly string[] {
   const reasons: string[] = [];
+  if (
+    !MachineAuthoritySchema.safeParse(authority).success ||
+    !Number.isFinite(Date.parse(context.now)) ||
+    !Number.isFinite(Date.parse(action.proposedAt)) ||
+    !Number.isSafeInteger(context.cumulativeSpentMinor) ||
+    context.cumulativeSpentMinor < 0 ||
+    !Number.isSafeInteger(context.actionsInPreviousHour) ||
+    context.actionsInPreviousHour < 0
+  )
+    return ["INVALID_MACHINE_CONTEXT"];
+  if (!Number.isSafeInteger(context.cumulativeSpentMinor + action.amountMinor))
+    reasons.push("AMOUNT_OVERFLOW");
+  if (Date.parse(action.proposedAt) > Date.parse(context.now))
+    reasons.push("FUTURE_ACTION");
   if (authority.machineIdentity !== action.machineIdentity)
     reasons.push("MACHINE_IDENTITY_MISMATCH");
   if (!authority.allowedPurposes.includes(action.purpose))

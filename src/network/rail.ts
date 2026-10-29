@@ -41,6 +41,13 @@ export function financialActionDigest(action: FinancialAction): string {
 }
 
 function validateGrant(request: RailExecutionRequest): void {
+  if (
+    !Number.isFinite(Date.parse(request.now)) ||
+    !Number.isFinite(Date.parse(request.grant.expiresAt))
+  )
+    throw new Error("EXECUTION_GRANT_INVALID_TIME");
+  if (!request.grant.grantId || !request.grant.authorityId)
+    throw new Error("EXECUTION_GRANT_INVALID_BINDING");
   if (Date.parse(request.now) >= Date.parse(request.grant.expiresAt)) {
     throw new Error("EXECUTION_GRANT_EXPIRED");
   }

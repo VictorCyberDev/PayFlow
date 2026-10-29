@@ -355,7 +355,7 @@ export default function NewAuthorityView() {
             >
               View Authority
             </Link>
-            <Link className="btn btn--quiet" href="/">
+            <Link className="btn btn--quiet" href="/app/">
               Done
             </Link>
           </p>

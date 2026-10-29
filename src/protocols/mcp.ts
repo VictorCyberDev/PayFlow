@@ -104,6 +104,8 @@ export const PAYFLOW_MCP_TOOLS: readonly PayFlowMcpToolDescriptor[] = [
 export interface McpInvocationContext {
   readonly authenticated: boolean;
   readonly requestId: string;
+  readonly scopes?: readonly string[];
+  readonly subject?: string;
 }
 
 export interface McpAuthorityServices {
@@ -157,6 +159,42 @@ export async function invokePayFlowMcpTool(
   services: McpAuthorityServices,
 ): Promise<{ structuredContent: unknown }> {
   if (!context.authenticated) throw new Error("MCP_AUTHENTICATION_REQUIRED");
+  const requiredScopes: Record<PayFlowMcpToolName, string> = {
+    check_financial_authority: "authority:read",
+    request_authorized_action: "action:request",
+    verify_authority: "verify:read",
+    verify_financial_proof: "proof:read",
+    reconcile_financial_action: "reconcile:request",
+  };
+  if (!requiredScopes[name]) throw new Error("MCP_UNKNOWN_TOOL");
+  if (context.scopes && !context.scopes.includes(requiredScopes[name]))
+    throw new Error("MCP_SCOPE_DENIED");
+  const descriptor = PAYFLOW_MCP_TOOLS.find((t) => t.name === name)!;
+  if (args === null || typeof args !== "object" || Array.isArray(args))
+    throw new Error("MCP_INVALID_ARGUMENTS");
+  const input = args as Record<string, unknown>;
+  const schema = descriptor.inputSchema as {
+    required: string[];
+    properties: Record<string, { type: string; minLength?: number }>;
+  };
+  if (
+    Object.keys(input).some((k) => !Object.hasOwn(schema.properties, k)) ||
+    schema.required.some((k) => !Object.hasOwn(input, k))
+  )
+    throw new Error("MCP_INVALID_ARGUMENTS");
+  for (const [key, value] of Object.entries(input)) {
+    const property = schema.properties[key]!;
+    if (
+      property.type === "string" &&
+      (typeof value !== "string" || value.length < (property.minLength ?? 0))
+    )
+      throw new Error("MCP_INVALID_ARGUMENTS");
+    if (
+      property.type === "object" &&
+      (value === null || typeof value !== "object" || Array.isArray(value))
+    )
+      throw new Error("MCP_INVALID_ARGUMENTS");
+  }
   let result: unknown;
   switch (name) {
     case "check_financial_authority":

@@ -883,10 +883,14 @@ const handlers: Record<string, Handler> = {
       verifyFinancialProof: unsupported,
       reconcileFinancialAction: unsupported,
       requestAuthorizedAction: async (args) => {
-        const result = await gateway.requestAction(accessFor(agent), args, {
-          now: NOW,
-          merchantRisk: "LOW",
-        });
+        const result = await gateway.requestAction(
+          accessFor(agent),
+          (args as { action: unknown }).action,
+          {
+            now: NOW,
+            merchantRisk: "LOW",
+          },
+        );
         return {
           decision: result.decision.decision,
           reasonCodes: result.decision.reasonCodes,
@@ -897,7 +901,7 @@ const handlers: Record<string, Handler> = {
     const call = () =>
       invokePayFlowMcpTool(
         "request_authorized_action",
-        requestBody(),
+        { action: requestBody() },
         { authenticated: true, requestId: "mcp-1" },
         services,
       );

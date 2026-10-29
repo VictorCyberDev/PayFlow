@@ -103,6 +103,14 @@ export function evaluateApprovalEvidence(
   },
   approvals: readonly ApprovalEvidence[],
 ): { approved: boolean; reasons: readonly string[] } {
+  if (
+    !ApprovalPolicySchema.safeParse(policy).success ||
+    !Number.isSafeInteger(request.amountMinor) ||
+    request.amountMinor < 0 ||
+    !request.requesterPrincipalId ||
+    !request.actionDigest
+  )
+    return { approved: false, reasons: ["INVALID_APPROVAL_CONTEXT"] };
   if (request.amountMinor < policy.thresholdMinor)
     return { approved: true, reasons: [] };
   const reasons: string[] = [];
@@ -114,7 +122,11 @@ export function evaluateApprovalEvidence(
       approval.principalId === request.requesterPrincipalId
     )
       return false;
-    return approval.authenticationEvidence.length >= 16;
+    return (
+      typeof approval.authenticationEvidence === "string" &&
+      approval.authenticationEvidence.length >= 16 &&
+      Number.isFinite(Date.parse(approval.approvedAt))
+    );
   });
   if (
     new Set(valid.map((approval) => approval.principalId)).size <

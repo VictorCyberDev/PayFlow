@@ -7,8 +7,8 @@ import { signedProof } from "../src/network/live-fault-injector.js";
 
 function run(proofFile: string, jwkFile: string) {
   return spawnSync(
-    "npx",
-    ["tsx", "packages/verifier/src/cli.ts", proofFile, jwkFile],
+    process.execPath,
+    ["--import", "tsx", "packages/verifier/src/cli.ts", proofFile, jwkFile],
     {
       encoding: "utf8",
     },
@@ -46,9 +46,13 @@ describe("M47 open verifier CLI", () => {
     });
 
     expect(
-      spawnSync("npx", ["tsx", "packages/verifier/src/cli.ts"], {
-        encoding: "utf8",
-      }).status,
+      spawnSync(
+        process.execPath,
+        ["--import", "tsx", "packages/verifier/src/cli.ts"],
+        {
+          encoding: "utf8",
+        },
+      ).status,
     ).toBe(2);
   }, 60_000);
 });

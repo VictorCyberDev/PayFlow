@@ -51,6 +51,8 @@ export class ReconciliationOperationsCenter {
    * cannot create a duplicate financial effect.
    */
   async investigate(caseId: string, now: string): Promise<ReconciliationCase> {
+    if (!Number.isFinite(Date.parse(now)))
+      throw new Error("RECONCILIATION_INVALID_TIME");
     const current = await this.repo.load(caseId);
     if (!current) throw new Error("RECONCILIATION_CASE_NOT_FOUND");
     if (
@@ -62,6 +64,12 @@ export class ReconciliationOperationsCenter {
     const rail = this.rails.get(current.railId);
     if (!rail) throw new Error("RECONCILIATION_RAIL_UNAVAILABLE");
     const observed = await rail.lookup(current.idempotencyKey, now);
+    if (
+      observed.rail !== current.railId ||
+      observed.idempotencyKey !== current.idempotencyKey ||
+      !Number.isFinite(Date.parse(observed.observedAt))
+    )
+      throw new Error("RECONCILIATION_EVIDENCE_BINDING_MISMATCH");
     const next: ReconciliationCase = {
       ...current,
       state: deriveReconciliationState(observed),
@@ -82,6 +90,8 @@ export class ReconciliationOperationsCenter {
     note: string,
     now: string,
   ): Promise<ReconciliationCase> {
+    if (!Number.isFinite(Date.parse(now)))
+      throw new Error("RECONCILIATION_INVALID_TIME");
     const current = await this.repo.load(caseId);
     if (!current) throw new Error("RECONCILIATION_CASE_NOT_FOUND");
     if (note.trim().length < 3)

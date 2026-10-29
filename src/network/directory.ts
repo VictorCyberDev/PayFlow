@@ -52,6 +52,10 @@ export class AuthorityDirectory {
     const metadata = this.resolveIssuer(issuer);
     if (!metadata || metadata.status !== "TRUSTED") return null;
     const at = Date.parse(now);
+    if (!Number.isFinite(at)) return null;
+    const updated = Date.parse(metadata.updatedAt);
+    if (at < updated || at >= updated + metadata.cacheMaxAgeSeconds * 1000)
+      return null;
     return (
       metadata.keys.find((key) => {
         if (key.kid !== kid || key.status === "REVOKED") return false;

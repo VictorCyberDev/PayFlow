@@ -17,6 +17,10 @@ export interface McpServerOptions {
   readonly services: McpAuthorityServices;
   /** Whether the transport authenticated the caller. Never derived from message content. */
   readonly authenticated: boolean;
+  readonly scopes?: readonly string[];
+  readonly subject?: string;
+  readonly requestId?: string;
+  readonly protocolVersion?: string;
 }
 
 interface JsonRpcRequest {
@@ -43,6 +47,14 @@ export async function handleMcpMessage(
   if (message.jsonrpc !== "2.0" || typeof message.method !== "string") {
     return rpcError(message.id, -32600, "Invalid Request");
   }
+  if (
+    message.id !== undefined &&
+    typeof message.id !== "string" &&
+    typeof message.id !== "number"
+  )
+    return rpcError(null, -32600, "Invalid Request");
+  if (message.id === undefined && !message.method.startsWith("notifications/"))
+    return rpcError(null, -32600, "Request id required");
   const isNotification = message.id === undefined;
   const id = message.id;
   switch (message.method) {
@@ -51,7 +63,7 @@ export async function handleMcpMessage(
         jsonrpc: "2.0",
         id,
         result: {
-          protocolVersion: MCP_PROTOCOL_VERSION,
+          protocolVersion: options.protocolVersion ?? MCP_PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false } },
           serverInfo: {
             name: PAYFLOW_MCP_SERVER_INFO.name,
@@ -92,7 +104,12 @@ export async function handleMcpMessage(
         const result = await invokePayFlowMcpTool(
           params.name as PayFlowMcpToolName,
           params.arguments ?? {},
-          { authenticated: options.authenticated, requestId: String(id) },
+          {
+            authenticated: options.authenticated,
+            requestId: options.requestId ?? String(id),
+            ...(options.scopes ? { scopes: options.scopes } : {}),
+            ...(options.subject ? { subject: options.subject } : {}),
+          },
           options.services,
         );
         return {
@@ -108,7 +125,14 @@ export async function handleMcpMessage(
         };
       } catch (error) {
         // Tool failures are results, not protocol errors, and carry only a stable code.
-        const code = (error as Error).message.split(":")[0] ?? "TOOL_ERROR";
+        const message = error instanceof Error ? error.message : "";
+        const candidate = message.split(":")[0] ?? "";
+        const code =
+          /^(MCP_|ACCESS_|GATEWAY_|AUTHORITY_|ACTION_|REQUEST_)[A-Z_]+$/.test(
+            candidate,
+          )
+            ? candidate
+            : "TOOL_ERROR";
         return {
           jsonrpc: "2.0",
           id,

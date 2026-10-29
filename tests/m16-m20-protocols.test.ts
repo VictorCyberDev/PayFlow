@@ -47,7 +47,11 @@ describe("M16 MCP distribution", () => {
     await expect(
       invokePayFlowMcpTool(
         "verify_authority",
-        {},
+        {
+          presentation: {},
+          audience: "test",
+          challenge: "test-challenge-16chars",
+        },
         { authenticated: true, requestId: "r2" },
         { ...services, verifyAuthority: async () => ({ privateKey: "never" }) },
       ),

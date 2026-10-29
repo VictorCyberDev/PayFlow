@@ -1,28 +1,27 @@
-# ChatGPT / OpenAI plugin submission readiness
+# ChatGPT / OpenAI submission
 
-Status: **COMPLETE_LOCAL / BLOCKED_EXTERNAL** for public submission and publication.
+Status: **PARTIAL**. Publication state: **not submitted**. Not connected, scanned, approved or published.
 
-Checked 2026-10-28 against current OpenAI plugin documentation. The current distribution path packages a plugin with a portable Agent Plugins `plugin.json` and an MCP server configuration; public MCP submission requires a stable public HTTPS endpoint and organization/publisher eligibility. Publication is an external review event and is not claimed here.
+The prior COMPLETE_LOCAL classification was incorrect. A portable manifest, stdio server and schema conversions did not complete authenticated ChatGPT integration.
 
-## Local deliverables
+Checked official OpenAI documentation on 2026-10-29. Apps SDK URLs currently redirect to the Plugins documentation. A portable package can contain root plugin.json, mcp.json, optional skills and assets. OpenAI listing fields live under extensions.com.openai.interface. Public submission requires a real remote HTTPS MCP connection and actual automated scan/review. Fixed API-key declarations do not provide the portal's end-user OAuth connection flow.
 
-- Five-tool MCP vocabulary with read/write separation.
-- Tool metadata that says when each tool should and should not be used.
-- `readOnlyHint` on verification/check tools.
-- Secret-output guard.
-- Deterministic positive, negative and ambiguous tool-selection golden set.
-- Portable `plugins/payflow/plugin.json`.
-- `mcp.json.example` intentionally uses a non-routable replacement hostname so it cannot be mistaken for a live submitted integration.
-- Framework-compatible OpenAI/Anthropic/Gemini tool declarations generated from the same vocabulary.
+## Present
 
-## External steps before submission
+- Real local HTTP MCP handler and two official SDK client connections.
+- Five tools, read/write hints, scope checks, strict outer arguments and safe error/output handling.
+- Local public website, contact, legal drafts and brand assets.
+- Portable listing metadata; mcp.json.example uses a deliberately invalid hostname and OAuth/CIMD example.
+- Model request/tool-result loops with recorded-response tests and separate evaluation capability.
 
-1. Expose the tested MCP server at one stable public HTTPS `/mcp` endpoint without violating the deployment budget.
-2. Replace the example MCP URL with that real endpoint and produce the final `mcp.json`.
-3. Run ChatGPT plugin connection tests and golden prompt evaluations against the real endpoint.
-4. Complete publisher identity/organization requirements.
-5. Upload the package, resolve automated findings, submit for review, and publish only after approval.
+## Not ready for upload
 
-## Privacy and safety posture
+No final mcp.json is generated because no commissioned endpoint exists. Listing URLs target the existing intended PayFlow origin but these new routes are NOT yet deployed. Legal pages are drafts. This package must not be uploaded as launch-ready.
 
-Tool output is intentionally narrow. Do not return payment credentials, bearer tokens, private signing keys, raw provider secrets or unnecessary personal data. `verify_authority` and `verify_financial_proof` are read-only. `request_authorized_action` never means “model permission”; it submits an exact action to deterministic Authority evaluation. UNKNOWN outcomes route to reconciliation instead of retrying money movement.
+Internal work: commissioned OAuth issuer with S256 PKCE/resource binding; tenant-bound durable services; distributed rate/replay controls; exact output schemas and final tool metadata; package/schema validation; full integration acceptance. External work: eligible publisher login, real ChatGPT connection, prompt evaluation, submission, review and approval. The browser is signed out of ChatGPT in this session.
+
+## Privacy and safety
+
+Never return provider credentials, bearer tokens, signing keys or raw financial records. Verify/check tools do not request execution. request_authorized_action submits to the deterministic boundary; it cannot grant Authority. UNKNOWN requires lookup of the original attempt.
+
+Sources: https://developers.openai.com/plugins/build/plugins , https://developers.openai.com/plugins/build/auth , https://developers.openai.com/plugins/deploy/connect-chatgpt , https://developers.openai.com/plugins/deploy/submission .

@@ -77,8 +77,8 @@ test("client never contains a host assertion, bootstrap key or payment route", (
 
 test("the old generic design is gone: one stylesheet, one token set, no rounded-card or gradient identity", () => {
   const css = read("app/globals.css");
-  assert.match(css, /--ink:\s*#12161b/i);
-  assert.match(css, /--signal:\s*#f5b301/i);
+  assert.match(css, /--ink:\s*#111418/i);
+  assert.match(css, /--signal:\s*#e8aa00/i);
   assert.doesNotMatch(
     css,
     /backdrop-filter|(?<!repeating-)linear-gradient|radial-gradient|#18382f|#2d7a5d/i,

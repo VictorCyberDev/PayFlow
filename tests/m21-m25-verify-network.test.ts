@@ -110,9 +110,19 @@ describe("M24 issuer/verifier directory", () => {
       directory.resolveActiveKey(
         "https://issuer.example",
         "k1",
-        "2026-10-28T03:30:00.000Z",
+        "2026-10-28T03:02:00.000Z",
       )?.kid,
     ).toBe("k1");
+    expect(
+      directory.resolveActiveKey(
+        "https://issuer.example",
+        "k1",
+        "2026-10-28T03:30:00.000Z",
+      ),
+    ).toBeNull();
+    expect(
+      directory.resolveActiveKey("https://issuer.example", "k1", "invalid"),
+    ).toBeNull();
     expect(
       directory.resolveActiveKey(
         "https://issuer.example",

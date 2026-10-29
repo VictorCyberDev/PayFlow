@@ -28,10 +28,10 @@ export function createPayFlowAgentCard(baseUrl: string) {
     },
     securitySchemes: {
       oauth: {
-        httpAuthSecurityScheme: { scheme: "Bearer", bearerFormat: "OAuth2" },
+        httpAuthSecurityScheme: { scheme: "Bearer", bearerFormat: "JWT" },
       },
     },
-    securityRequirements: [{ oauth: [] }],
+    securityRequirements: [{ schemes: { oauth: { list: [] } } }],
     defaultInputModes: ["application/json"],
     defaultOutputModes: ["application/json"],
     skills: [
@@ -146,6 +146,16 @@ export async function evaluateDelegatedRequest(
     return { verdict: "MALFORMED", violations: [] };
   }
   const child = parsed.data;
+  const parsedParent = DelegatedFinancialScopeSchema.safeParse(parent);
+  if (!parsedParent.success) return { verdict: "MALFORMED", violations: [] };
+  const parentAt = Date.parse(expected.now);
+  if (
+    parentAt < Date.parse(parent.issuedAt) ||
+    parentAt >= Date.parse(parent.expiresAt) ||
+    Date.parse(child.issuedAt) < Date.parse(parent.issuedAt) ||
+    Date.parse(child.expiresAt) <= Date.parse(child.issuedAt)
+  )
+    return { verdict: "EXPIRED", violations: [] };
   if (child.audience !== expected.audience) {
     return { verdict: "WRONG_AUDIENCE", violations: [] };
   }

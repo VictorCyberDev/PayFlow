@@ -1,3 +1,5 @@
+> **2026-10-29 company launch correction:** PayFlow remains a developer preview. M6 is unaccepted; PR #18 remains draft. The company website and new protocol work are local, not a public launch. See [Company RC](docs/PAYFLOW-COMPANY-LAUNCH-RC.md), [corrected milestone audit](docs/COMPANY-LAUNCH-MILESTONE-AUDIT.md), [protocol commissioning](docs/PROTOCOL-COMMISSIONING.md), and [security review](docs/COMPANY-LAUNCH-SECURITY-REVIEW.md). Historical reports below are not current launch certifications.
+
 # PayFlow
 
 **Financial authority for autonomous systems.**

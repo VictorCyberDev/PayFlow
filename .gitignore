@@ -12,3 +12,15 @@ apps/console/out/
 *.tsbuildinfo
 hosting/m5/public
 hosting/m5/node_modules
+# Generated consolidated company export (payer-return source assets remain tracked)
+public/_next/
+public/**/*.html
+public/**/*.txt
+public/**/*.xml
+public/brand/
+public/icon.svg
+public/robots.txt
+public/sitemap.xml
+
+__pycache__/
+*.pyc
