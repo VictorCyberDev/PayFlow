@@ -5,6 +5,7 @@ import {
   fetchDemoAgentStatus,
   fetchPayPalVaultStatus,
   runDemoScenario,
+  startPayPalVaultConnection,
 } from "../lib/demo-agent-client.mjs";
 
 const session = {
@@ -75,6 +76,31 @@ test("vault status is accepted only from the exact server contract", async () =>
     })),
     null,
   );
+});
+test("PayPal start sends only the active Authority selector and navigates only to Sandbox PayPal", async () => {
+  const seen = [];
+  const authorityId = "622fe9d7-fb08-4cde-8bb8-256e7a2cd94c";
+  const assigned = [];
+  const previousWindow = globalThis.window;
+  globalThis.window = { location: { assign: (url) => assigned.push(url) } };
+  try {
+    await startPayPalVaultConnection(authorityId, async (path, options) => {
+      seen.push({ path, options });
+      if (path === "/api/activation/session") return session;
+      return {
+        version: "payflow.paypal-vault-start.v2",
+        approvalUrl: "https://www.sandbox.paypal.com/checkoutnow?token=SETUP",
+      };
+    });
+  } finally {
+    globalThis.window = previousWindow;
+  }
+  const post = seen.find((s) => s.path === "/api/paypal-vault/start");
+  assert.equal(post.options.headers["X-PayFlow-CSRF"], "csrf-token");
+  assert.deepEqual(JSON.parse(post.options.body), { authorityId });
+  assert.deepEqual(assigned, [
+    "https://www.sandbox.paypal.com/checkoutnow?token=SETUP",
+  ]);
 });
 test("PayPal completion echoes only callback state; no setup token or provider credential enters browser POST", async () => {
   const seen = [];
