@@ -177,7 +177,13 @@ describe("M16 MCP server over stdio (real subprocess client)", () => {
   async function session(env: Record<string, string>) {
     const child = spawn(
       process.execPath,
-      ["--import", "tsx", "packages/mcp-server/src/stdio.ts"],
+      [
+        "--import",
+        "tsx",
+        "--import",
+        "./tests/helpers/stdio-fixture-clock.ts",
+        "packages/mcp-server/src/stdio.ts",
+      ],
       {
         env: { ...process.env, ...env },
         stdio: ["pipe", "pipe", "inherit"],
@@ -233,6 +239,25 @@ describe("M16 MCP server over stdio (real subprocess client)", () => {
       expect(malformed.result.content[0]?.text).toBe("REQUEST_MALFORMED");
     } finally {
       authed.close();
+    }
+    const expired = await session({
+      PAYFLOW_MCP_ACCESS_TOKEN: "local-sandbox",
+      PAYFLOW_TEST_CLOCK_NOW: "2026-10-29T03:00:00.000Z",
+    });
+    try {
+      const reply = (await expired.request("tools/call", {
+        name: "check_financial_authority",
+        arguments: {
+          authorityId: "benchmark-authority",
+          proposedAction: requestBody(),
+        },
+      })) as {
+        result: { isError: boolean; structuredContent: { fits: boolean } };
+      };
+      expect(reply.result.isError).toBe(false);
+      expect(reply.result.structuredContent.fits).toBe(false);
+    } finally {
+      expired.close();
     }
     const anonymous = await session({ PAYFLOW_MCP_ACCESS_TOKEN: "" });
     try {

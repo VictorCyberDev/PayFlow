@@ -90,7 +90,7 @@ See COMPANY-LAUNCH-MANDATE-COVERAGE.md for every numbered requirement, COMPANY-L
 
 | Milestone                                        | Status           | Verified scope / exact remaining work                                                                                                                                                               |
 | ------------------------------------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M6                                               | BLOCKED_EXTERNAL | Current head 36a34c1 differs from deployed 9ce47e4. Exact-head acceptance, owner Sandbox wallet consent and live HNP capture are unproven. Do not merge or reuse historical capture as M6 evidence. |
+| M6                                               | PARTIAL          | Current head 36a34c1 differs from deployed 9ce47e4. Exact-head acceptance, owner Sandbox wallet consent and live HNP capture are unproven. Do not merge or reuse historical capture as M6 evidence. |
 | M7 — Authority platform + external agent Gateway | PARTIAL          | Bind durable Gateway to a deployed authenticated agent service and complete governed SDK→provider→Proof acceptance; M6 capture remains separate.                                                    |
 | M8 — Verify + interoperable Authority            | COMPLETE_LOCAL   | Local signed verification works; independently operated external verifier commissioning remains.                                                                                                    |
 | M9 — Trust experience + Break Authority 100      | COMPLETE_LOCAL   | Local fake-rail benchmark and UI exist; current browser acceptance is required, real-provider claims remain excluded.                                                                               |
@@ -157,3 +157,7 @@ The local no-database counts above remain local counts; they are not substituted
 The coverage-summary artifact from run 40803546231 confirms **1,892 passed / 0 failed / 3 skipped** of 1,895 total, and **823/823 PostgreSQL integration tests passed** with none skipped. Native coverage: 90.41% statements/lines, 90.01% functions, 86.39% branches. This does not establish external model, provider or production acceptance.
 
 The artifact's old `headSha` field used GitHub's event GITHUB_SHA (a synthetic PR merge id) despite explicit PR-head checkout. The current workflow corrects that field to `git rev-parse HEAD` and preserves the event SHA separately, so future receipts identify the actual tested checkout. The run API identifies the validated PR head as 5e7dd5b30c0cbc935dd1f43bf747ed4f37701fc3.
+
+## Clock-dependent CI defect corrected
+
+Run 40843418969 failed the stdio subprocess test after the fixed benchmark Authority expired at 2026-10-29T03:00:00Z. Earlier green run 40803546231 occurred before that expiry. This was a test-clock defect, not permission to weaken the kernel or retry blindly. A test-only Node Date preload now fixes the subprocess clock to its fixture timestamp; a second subprocess runs at the actual expiry boundary and must report fits=false. Production expiry code is unchanged. No result from the failed head is called green.

@@ -47,3 +47,7 @@ Card securityRequirements now uses the v1 `schemes` wrapper. No streaming, push 
 - https://a2a-protocol.org/latest/specification/
 - https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools
 - https://ai.google.dev/gemini-api/docs/function-calling
+
+## Dated Sandbox seed limitation
+
+The runnable fixture services still use a dated benchmark Authority. After its expiry they correctly deny requests; they are not a self-serve rolling Sandbox. Before calling the developer Sandbox complete, implement explicit fresh fixture issuance/reset with real current timestamps and retain separate expiry-boundary tests. Do not disable expiry to make an example pass.
