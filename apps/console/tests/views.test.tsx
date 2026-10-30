@@ -75,7 +75,7 @@ test("Home: an unresolved payment is elevated with safe guidance", () => {
 test("Home: signed out is a welcome with one access panel and the promise", () => {
   const html = render({ session: "signed-out" }, <HomeView />);
   assert.match(html, /Permission to spend\./);
-  assert.match(html, /Not control of your money\./);
+  assert.match(html, /Not unrestricted financial power\./);
   assert.match(html, /Demo access/);
   assert.doesNotMatch(html, /\$16|>Active</);
 });
@@ -262,7 +262,8 @@ test("Proof is a deliberate mode with identifiers, stages, and exact UTC", () =>
     "Back to this activity",
   ])
     assert.ok(html.includes(t), t);
-  assert.equal((html.match(/<details/g) ?? []).length, 0);
+  assert.equal((html.match(/<details/g) ?? []).length, 1);
+  assert.ok(html.includes("Raw Proof and technical references"));
 });
 
 test("Authority proof exposes terms in minor units and states they never authorize payment", () => {

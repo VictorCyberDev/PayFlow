@@ -1,0 +1,51 @@
+{
+  "version": "financial-authority-conformance/v1",
+  "generatedAt": "2026-10-28T03:00:00.000Z",
+  "passed": 7,
+  "failed": 0,
+  "results": [
+    {
+      "id": "issuer-no-widening",
+      "role": "AUTHORITY_ISSUER",
+      "invariant": "Authority cannot silently widen after issuance",
+      "pass": true
+    },
+    {
+      "id": "agent-exact-action",
+      "role": "AGENT",
+      "invariant": "Agent submits an exact bounded action",
+      "pass": true
+    },
+    {
+      "id": "verifier-read-only",
+      "role": "VERIFIER",
+      "invariant": "Verification cannot move money",
+      "pass": true
+    },
+    {
+      "id": "rail-one-time-grant",
+      "role": "RAIL_ADAPTER",
+      "invariant": "Rail requires a bounded one-time grant",
+      "pass": true
+    },
+    {
+      "id": "rail-unknown",
+      "role": "RAIL_ADAPTER",
+      "invariant": "Ambiguous provider effect remains UNKNOWN",
+      "pass": true
+    },
+    {
+      "id": "proof-tamper",
+      "role": "PROOF_IMPLEMENTATION",
+      "invariant": "Tampered Proof fails verification",
+      "pass": true
+    },
+    {
+      "id": "protocol-non-authority",
+      "role": "PROTOCOL_ADAPTER",
+      "invariant": "Protocol assertions cannot create Authority",
+      "pass": true
+    }
+  ],
+  "certificationClaim": false
+}

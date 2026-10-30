@@ -1,0 +1,10 @@
+{
+  "name": "@payflow/open-verifier",
+  "version": "0.1.0-preview.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "payflow-verify": "./src/cli.ts"
+  },
+  "exports": "./src/index.ts"
+}

@@ -17,6 +17,8 @@
     "src/**/*.ts",
     "api/**/*.ts",
     "hosting/**/*.ts",
+    "packages/**/*.ts",
+    "examples/**/*.ts",
     "tests/**/*.ts",
     "eslint.config.js",
     "vitest.config.ts"

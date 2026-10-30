@@ -1,0 +1,97 @@
+{
+  "baselineSha": "6bcab82a25a4aca4bf5b3eecbaf6e52bd48bdae6",
+  "date": "2026-10-29",
+  "all": {
+    "numTotalTests": 1895,
+    "numPassedTests": 1069,
+    "numFailedTests": 0,
+    "numPendingTests": 826
+  },
+  "integration": {
+    "numTotalTests": 823,
+    "numPassedTests": 0,
+    "numFailedTests": 0,
+    "numPendingTests": 823
+  },
+  "console": {
+    "passed": 97,
+    "failed": 0
+  },
+  "pythonSdk": {
+    "passed": 4,
+    "failed": 0
+  },
+  "nativePostgresLocal": "NOT_RUN_NO_TEST_DATABASE_URL",
+  "authenticatedE2ELocal": "BLOCKED_E2E_DATABASE_URL_REQUIRED",
+  "coverage": {
+    "lines": {
+      "total": 18804,
+      "covered": 11358,
+      "skipped": 0,
+      "pct": 60.4
+    },
+    "statements": {
+      "total": 18804,
+      "covered": 11358,
+      "skipped": 0,
+      "pct": 60.4
+    },
+    "functions": {
+      "total": 743,
+      "covered": 461,
+      "skipped": 0,
+      "pct": 62.04
+    },
+    "branches": {
+      "total": 2696,
+      "covered": 2272,
+      "skipped": 0,
+      "pct": 84.27
+    },
+    "branchesTrue": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "liveModels": {
+    "openai": "NOT_RUN",
+    "claude": "NOT_RUN",
+    "gemini": "NOT_RUN"
+  },
+  "providerEffectsThisSession": 0,
+  "deploymentsRequested": 0,
+  "githubCI": {
+    "headSha": "5e7dd5b30c0cbc935dd1f43bf747ed4f37701fc3",
+    "runId": 40803546231,
+    "conclusion": "success",
+    "jobs": {
+      "verify": "success",
+      "console": "success",
+      "console-e2e": "success"
+    },
+    "nativeCounts": {
+      "all": {
+        "total": 1895,
+        "passed": 1892,
+        "failed": 0,
+        "skipped": 3
+      },
+      "integration": {
+        "total": 823,
+        "passed": 823,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "coverage": {
+      "statements": 90.41,
+      "lines": 90.41,
+      "functions": 90.01,
+      "branches": 86.39
+    },
+    "artifactId": 12867990343,
+    "oldArtifactHeadField": "GITHUB_SHA synthetic merge; corrected workflow records actual checkout separately"
+  }
+}

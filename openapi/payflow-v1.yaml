@@ -1,0 +1,191 @@
+openapi: 3.1.0
+info:
+  title: PayFlow Financial Authority API
+  version: 1.0.0-preview
+  description: >-
+    Developer-preview API for bounded financial authority. Protocol and rail
+    adapters never override Trust Kernel decisions. Verification is read-only.
+servers:
+  - url: http://localhost:3000
+paths:
+  /v1/authorities/{authorityId}:
+    get:
+      operationId: readAuthority
+      summary: Read the bounded Authority visible to the authenticated agent.
+      security: [{ bearerAuth: [authority:read] }]
+      parameters:
+        - in: path
+          name: authorityId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Authority projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthorityEnvelope" }
+        "403": { $ref: "#/components/responses/Denied" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/actions:
+    post:
+      operationId: requestAuthorizedAction
+      summary: Ask the Trust Kernel whether an exact financial action may proceed.
+      description: >-
+        The caller does not provide a mandate fingerprint or merchant-risk truth.
+        PayFlow loads Authority state and trusted context server-side. The
+        `nonce` field is the replay/idempotency key: a second request with the
+        same nonce is denied with `REPLAY_DETECTED` and never issues a second
+        execution capability. A revoked or suspended Authority is refused with
+        `AUTHORITY_INACTIVE` before the Trust Kernel runs.
+      security: [{ bearerAuth: [action:request] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ActionRequest" }
+      responses:
+        "200":
+          description: Deterministic ALLOW, DENY, or ESCALATE decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActionResult" }
+        "400": { $ref: "#/components/responses/Malformed" }
+        "403": { $ref: "#/components/responses/Denied" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/verify/presentations:
+    post:
+      operationId: verifyAuthorityPresentation
+      summary: Verify a signed Authority presentation without moving money.
+      description: >-
+        A verifier checks signature, audience, challenge, freshness, lifecycle,
+        Authority binding and presentation replay. This endpoint has no execution capability.
+      responses:
+        "200": { description: Verification verdict }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /oauth/token
+          scopes:
+            authority:read: Read Authority projections.
+            action:request: Request bounded financial actions.
+            verify:read: Verify Authority or Proof material.
+  schemas:
+    Money:
+      type: object
+      additionalProperties: false
+      required: [currency, minor]
+      properties:
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        minor: { type: integer, minimum: 0 }
+    Merchant:
+      type: object
+      additionalProperties: false
+      required: [id, displayName]
+      properties:
+        id: { type: string, minLength: 1 }
+        displayName: { type: string, minLength: 1 }
+    ActionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - mandateId
+        - agentId
+        - amount
+        - merchant
+        - category
+        - condition
+        - requestedCapability
+        - proposedAt
+        - nonce
+      properties:
+        requestId: { type: string }
+        mandateId: { type: string }
+        agentId: { type: string }
+        amount: { $ref: "#/components/schemas/Money" }
+        quantity: { type: integer, minimum: 1, maximum: 1000 }
+        merchant: { $ref: "#/components/schemas/Merchant" }
+        category: { type: string }
+        condition: { type: string, enum: [NEW, REFURBISHED, USED] }
+        requestedCapability:
+          type: string
+          enum:
+            [
+              SEARCH_PRODUCTS,
+              EVALUATE_PRODUCTS,
+              CREATE_ORDER,
+              CAPTURE_PAYMENT,
+              REQUEST_REFUND,
+              CREATE_SUBSCRIPTION,
+              OPEN_DISPUTE,
+            ]
+        proposedAt: { type: string, format: date-time }
+        nonce: { type: string, minLength: 16 }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [requestId, error]
+      properties:
+        requestId: { type: string }
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+    AuthorityEnvelope:
+      type: object
+      required: [requestId, authority]
+      properties:
+        requestId: { type: string }
+        authority:
+          type: object
+          required: [id, principalId, authorizedAgentId, status, fingerprint]
+          properties:
+            id: { type: string }
+            principalId: { type: string }
+            authorizedAgentId: { type: string }
+            status:
+              { type: string, enum: [ACTIVE, EXPIRED, SUSPENDED, REVOKED] }
+            fingerprint: { type: string, pattern: "^[a-f0-9]{64}$" }
+    ActionResult:
+      type: object
+      required: [requestId, decision]
+      properties:
+        requestId: { type: string }
+        decision:
+          type: object
+          required: [decision, reasonCodes]
+          properties:
+            decision: { type: string, enum: [ALLOW, DENY, ESCALATE] }
+            reasonCodes: { type: array, items: { type: string } }
+        executionCapability:
+          type: object
+          description: Short-lived, one-time, action-bound capability. Never a payment credential.
+          required: [grantId, expiresAt, proposalDigest]
+          properties:
+            grantId: { type: string }
+            expiresAt: { type: string, format: date-time }
+            proposalDigest: { type: string }
+  responses:
+    Malformed:
+      description: Malformed request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Denied:
+      description: Authentication, scope, authority binding or lifecycle denied
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

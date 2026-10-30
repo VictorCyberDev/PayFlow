@@ -7,47 +7,96 @@ import { ActivityRow } from "../ui/activity";
 import { AuthorityFrame } from "../ui/frame";
 import { useConsole } from "../ui/provider";
 import { Empty, Loading, Unavailable } from "./common";
+import { BRAND } from "../../lib/brand";
 
 function Welcome() {
   return (
     <>
       <section className="hero" aria-labelledby="hero-title">
-        <p className="label">Verifiable financial authority for AI agents</p>
+        <p className="label">Financial authority for autonomous systems</p>
         <h1 id="hero-title" className="h1 h1--hero">
           Permission to spend.
           <br />
-          <span className="h1__quiet">Not control of your money.</span>
+          <span className="h1__quiet">Not unrestricted financial power.</span>
         </h1>
         <p className="lead">
-          You set the boundaries. Your Agent works inside them. PayFlow checks
-          every purchase against your rules, and shows you what happened to your
-          money.
+          Give an agent financial capability without giving it unrestricted
+          financial power. {BRAND.name} binds exact actions to explicit
+          Authority, revalidates at the execution boundary, and preserves
+          verifiable financial truth afterward.
+        </p>
+        <p className="outcome-line">
+          Any agent. Any rail. One authority truth.
         </p>
       </section>
-      <ol className="how" aria-label="How PayFlow works">
+      <ol
+        className="gate-sequence"
+        aria-label={`${BRAND.name} authority sequence`}
+      >
         <li>
-          <span className="label">1 · Frame</span>
-          <strong>You say what&apos;s allowed</strong>
-          <span>How much, what, where, until when.</span>
+          <strong>Bound</strong>
+          <span>Intent becomes explicit constraints.</span>
         </li>
         <li>
-          <span className="label">2 · Gate</span>
-          <strong>PayFlow checks every purchase</strong>
-          <span>Anything outside your rules stops before money moves.</span>
+          <strong>Gate</strong>
+          <span>The exact action reaches the execution boundary.</span>
         </li>
         <li>
-          <span className="label">3 · Trace</span>
-          <strong>You see what happened</strong>
-          <span>
-            &quot;$0 moved&quot; or &quot;$84 paid once&quot;, with proof behind
-            it.
-          </span>
+          <strong>Commit</strong>
+          <span>Only a valid bounded action may cross.</span>
+        </li>
+        <li>
+          <strong>Verify</strong>
+          <span>Completion appears only after durable truth.</span>
         </li>
       </ol>
-      <AccessGate lead="Open the demo to create and review Authorities." />
+      <AccessGate lead="Open the sandbox demo to create and review Authorities." />
+      <section className="block" aria-labelledby="surfaces">
+        <h2 className="label" id="surfaces">
+          Built for the whole authority boundary
+        </h2>
+        <div className="surface-grid">
+          <article className="surface-card">
+            <h3 className="h3">Developer</h3>
+            <p>Gateway, SDKs, MCP, A2A, sandbox, Proof and reconciliation.</p>
+            <Link className="text-link" href="/developer/">
+              Open developer surface
+            </Link>
+          </article>
+          <article className="surface-card">
+            <h3 className="h3">Enterprise</h3>
+            <p>
+              Organizations, agents, delegation, controls, integrations and
+              audit.
+            </p>
+            <Link className="text-link" href="/enterprise/">
+              Open enterprise surface
+            </Link>
+          </article>
+          <article className="surface-card">
+            <h3 className="h3">Verifier / Merchant</h3>
+            <p>
+              Read-only Authority, freshness, revocation and Proof verification.
+            </p>
+            <Link className="text-link" href="/verify/">
+              Open Verify
+            </Link>
+          </article>
+          <article className="surface-card">
+            <h3 className="h3">Proof</h3>
+            <p>
+              What was authorized, what crossed the Gate, and what actually
+              happened.
+            </p>
+            <Link className="text-link" href="/proof/">
+              Inspect Proof product
+            </Link>
+          </article>
+        </div>
+      </section>
       <p className="note">
         <Link className="text-link" href="/about/">
-          About this demo
+          About this sandbox
         </Link>
       </p>
     </>
@@ -162,6 +211,12 @@ export default function HomeView() {
           <p className="actions">
             <Link className="btn" href="/new/">
               New Authority
+            </Link>
+            <Link className="btn btn--quiet" href="/agents/">
+              Agents
+            </Link>
+            <Link className="btn btn--quiet" href="/proof/">
+              Proof
             </Link>
           </p>
         </>

@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
-export const metadata: Metadata = { title: "About this demo · PayFlow" };
+import { BRAND } from "../../lib/brand";
+export const metadata: Metadata = { title: `About this demo · ${BRAND.name}` };
 
 export default function Page() {
   return (
     <>
       <h1 className="h1">About this demo</h1>
       <p className="lead">
-        PayFlow gives AI agents permission to spend — not control of your money.
-        This page is the one place that explains what is real here.
+        {BRAND.name} gives AI agents permission to spend — not control of your
+        money. This page is the one place that explains what is real here.
       </p>
       <section className="block" aria-labelledby="real">
         <h2 id="real" className="label">
@@ -16,7 +17,7 @@ export default function Page() {
         <ul className="plain">
           <li>
             Authorities you create are saved in a real database and checked by
-            PayFlow&apos;s server.
+            {BRAND.name}&apos;s server.
           </li>
           <li>
             Revoking an Authority is recorded and enforced; completed payments
@@ -47,7 +48,8 @@ export default function Page() {
           </li>
           <li>Creating an Authority never makes a purchase.</li>
           <li>
-            &quot;Try your Agent&quot; is a simulation. It runs the real PayFlow
+            &quot;Try your Agent&quot; is a simulation. It runs the real{" "}
+            {BRAND.name}
             checks on a fixed demo catalog. A payment is attempted only when a
             PayPal Sandbox account is connected; if not, only the blocked case
             can run.

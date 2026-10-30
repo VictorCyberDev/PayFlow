@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import NewAuthorityView from "../views/new";
-export const metadata: Metadata = { title: "New Authority · PayFlow" };
+import { BRAND } from "../../lib/brand";
+export const metadata: Metadata = { title: `New Authority · ${BRAND.name}` };
 export default function Page() {
   return <NewAuthorityView />;
 }

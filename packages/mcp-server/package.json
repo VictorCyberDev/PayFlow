@@ -1,0 +1,10 @@
+{
+  "name": "@payflow/mcp-server",
+  "version": "0.1.0-preview.0",
+  "description": "Sandbox MCP server for PayFlow financial authority (stdio). Not published.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "payflow-mcp": "./src/stdio.ts"
+  }
+}

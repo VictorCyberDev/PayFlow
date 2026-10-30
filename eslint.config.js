@@ -19,6 +19,11 @@ export default tseslint.config(
     },
   },
   {
+    // Test doubles implement async port interfaces without awaiting anything.
+    files: ["tests/**/*.ts"],
+    rules: { "@typescript-eslint/require-await": "off" },
+  },
+  {
     ...tseslint.configs.disableTypeChecked,
     files: ["public/**/*.js"],
     languageOptions: {
@@ -33,5 +38,14 @@ export default tseslint.config(
       },
     },
   },
-  { ignores: ["dist/**", "coverage/**", "apps/console/**", "docs/brand/**"] },
+  {
+    ignores: [
+      "scripts/**",
+      "public/_next/**",
+      "dist/**",
+      "coverage/**",
+      "apps/console/**",
+      "docs/brand/**",
+    ],
+  },
 );

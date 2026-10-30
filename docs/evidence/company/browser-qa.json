@@ -1,0 +1,153 @@
+{
+  "environment": "local static production export; no provider contacted",
+  "results": [
+    {
+      "route": "/",
+      "width": 320,
+      "status": 200,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "route": "/",
+      "width": 375,
+      "status": 200,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "route": "/",
+      "width": 430,
+      "status": 200,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "route": "/",
+      "width": 768,
+      "status": 200,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "route": "/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "route": "/",
+      "width": 1440,
+      "status": 200,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "route": "/",
+      "width": 1920,
+      "status": 200,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "route": "/product/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/solutions/agent-builders/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/docs/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/docs/quickstart/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/security/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/pricing/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/contact/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/evidence/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/status/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/research/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/research/zero-moved/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/privacy/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/app/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    },
+    {
+      "route": "/proof/",
+      "width": 1280,
+      "status": 200,
+      "overflow": false,
+      "h1": 1
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,8209 @@
+{
+  "version": "break-authority/v1",
+  "scenarioCount": 1000,
+  "unauthorizedAllows": 0,
+  "providerEffectsExercised": false,
+  "controlDecision": "ALLOW",
+  "results": [
+    {
+      "id": "amount_widening-000",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-000",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-000",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-000",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-000",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-000",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-000",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-000",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-000",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-000",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-001",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-001",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-001",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-001",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-001",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-001",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-001",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-001",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-001",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-001",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-002",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-002",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-002",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-002",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-002",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-002",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-002",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-002",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-002",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-002",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-003",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-003",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-003",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-003",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-003",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-003",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-003",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-003",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-003",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-003",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-004",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-004",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-004",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-004",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-004",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-004",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-004",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-004",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-004",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-004",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-005",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-005",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-005",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-005",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-005",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-005",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-005",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-005",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-005",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-005",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-006",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-006",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-006",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-006",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-006",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-006",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-006",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-006",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-006",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-006",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-007",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-007",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-007",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-007",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-007",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-007",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-007",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-007",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-007",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-007",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-008",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-008",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-008",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-008",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-008",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-008",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-008",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-008",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-008",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-008",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-009",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-009",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-009",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-009",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-009",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-009",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-009",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-009",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-009",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-009",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-010",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-010",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-010",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-010",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-010",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-010",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-010",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-010",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-010",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-010",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-011",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-011",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-011",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-011",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-011",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-011",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-011",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-011",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-011",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-011",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-012",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-012",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-012",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-012",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-012",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-012",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-012",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-012",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-012",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-012",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-013",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-013",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-013",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-013",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-013",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-013",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-013",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-013",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-013",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-013",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-014",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-014",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-014",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-014",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-014",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-014",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-014",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-014",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-014",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-014",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-015",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-015",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-015",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-015",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-015",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-015",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-015",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-015",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-015",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-015",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-016",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-016",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-016",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-016",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-016",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-016",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-016",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-016",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-016",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-016",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-017",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-017",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-017",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-017",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-017",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-017",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-017",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-017",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-017",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-017",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-018",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-018",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-018",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-018",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-018",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-018",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-018",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-018",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-018",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-018",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-019",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-019",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-019",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-019",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-019",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-019",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-019",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-019",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-019",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-019",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-020",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-020",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-020",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-020",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-020",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-020",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-020",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-020",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-020",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-020",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-021",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-021",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-021",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-021",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-021",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-021",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-021",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-021",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-021",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-021",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-022",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-022",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-022",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-022",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-022",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-022",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-022",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-022",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-022",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-022",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-023",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-023",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-023",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-023",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-023",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-023",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-023",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-023",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-023",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-023",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-024",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-024",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-024",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-024",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-024",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-024",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-024",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-024",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-024",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-024",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-025",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-025",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-025",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-025",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-025",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-025",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-025",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-025",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-025",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-025",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-026",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-026",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-026",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-026",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-026",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-026",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-026",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-026",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-026",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-026",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-027",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-027",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-027",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-027",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-027",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-027",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-027",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-027",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-027",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-027",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-028",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-028",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-028",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-028",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-028",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-028",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-028",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-028",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-028",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-028",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-029",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-029",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-029",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-029",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-029",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-029",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-029",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-029",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-029",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-029",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-030",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-030",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-030",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-030",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-030",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-030",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-030",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-030",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-030",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-030",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-031",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-031",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-031",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-031",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-031",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-031",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-031",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-031",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-031",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-031",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-032",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-032",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-032",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-032",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-032",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-032",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-032",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-032",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-032",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-032",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-033",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-033",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-033",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-033",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-033",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-033",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-033",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-033",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-033",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-033",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-034",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-034",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-034",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-034",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-034",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-034",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-034",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-034",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-034",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-034",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-035",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-035",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-035",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-035",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-035",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-035",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-035",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-035",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-035",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-035",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-036",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-036",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-036",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-036",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-036",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-036",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-036",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-036",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-036",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-036",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-037",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-037",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-037",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-037",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-037",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-037",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-037",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-037",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-037",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-037",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-038",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-038",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-038",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-038",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-038",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-038",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-038",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-038",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-038",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-038",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-039",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-039",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-039",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-039",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-039",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-039",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-039",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-039",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-039",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-039",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-040",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-040",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-040",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-040",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-040",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-040",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-040",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-040",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-040",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-040",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-041",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-041",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-041",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-041",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-041",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-041",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-041",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-041",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-041",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-041",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-042",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-042",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-042",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-042",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-042",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-042",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-042",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-042",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-042",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-042",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-043",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-043",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-043",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-043",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-043",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-043",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-043",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-043",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-043",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-043",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-044",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-044",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-044",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-044",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-044",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-044",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-044",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-044",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-044",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-044",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-045",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-045",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-045",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-045",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-045",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-045",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-045",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-045",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-045",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-045",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-046",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-046",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-046",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-046",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-046",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-046",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-046",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-046",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-046",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-046",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-047",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-047",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-047",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-047",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-047",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-047",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-047",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-047",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-047",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-047",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-048",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-048",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-048",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-048",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-048",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-048",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-048",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-048",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-048",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-048",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-049",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-049",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-049",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-049",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-049",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-049",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-049",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-049",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-049",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-049",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-050",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-050",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-050",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-050",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-050",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-050",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-050",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-050",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-050",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-050",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-051",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-051",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-051",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-051",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-051",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-051",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-051",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-051",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-051",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-051",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-052",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-052",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-052",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-052",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-052",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-052",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-052",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-052",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-052",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-052",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-053",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-053",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-053",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-053",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-053",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-053",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-053",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-053",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-053",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-053",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-054",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-054",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-054",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-054",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-054",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-054",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-054",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-054",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-054",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-054",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-055",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-055",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-055",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-055",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-055",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-055",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-055",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-055",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-055",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-055",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-056",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-056",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-056",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-056",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-056",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-056",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-056",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-056",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-056",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-056",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-057",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-057",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-057",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-057",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-057",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-057",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-057",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-057",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-057",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-057",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-058",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-058",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-058",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-058",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-058",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-058",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-058",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-058",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-058",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-058",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-059",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-059",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-059",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-059",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-059",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-059",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-059",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-059",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-059",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-059",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-060",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-060",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-060",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-060",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-060",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-060",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-060",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-060",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-060",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-060",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-061",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-061",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-061",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-061",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-061",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-061",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-061",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-061",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-061",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-061",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-062",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-062",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-062",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-062",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-062",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-062",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-062",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-062",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-062",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-062",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-063",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-063",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-063",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-063",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-063",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-063",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-063",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-063",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-063",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-063",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-064",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-064",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-064",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-064",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-064",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-064",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-064",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-064",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-064",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-064",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-065",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-065",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-065",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-065",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-065",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-065",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-065",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-065",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-065",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-065",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-066",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-066",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-066",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-066",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-066",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-066",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-066",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-066",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-066",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-066",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-067",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-067",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-067",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-067",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-067",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-067",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-067",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-067",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-067",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-067",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-068",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-068",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-068",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-068",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-068",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-068",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-068",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-068",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-068",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-068",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-069",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-069",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-069",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-069",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-069",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-069",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-069",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-069",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-069",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-069",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-070",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-070",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-070",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-070",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-070",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-070",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-070",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-070",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-070",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-070",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-071",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-071",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-071",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-071",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-071",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-071",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-071",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-071",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-071",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-071",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-072",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-072",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-072",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-072",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-072",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-072",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-072",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-072",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-072",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-072",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-073",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-073",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-073",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-073",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-073",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-073",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-073",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-073",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-073",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-073",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-074",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-074",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-074",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-074",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-074",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-074",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-074",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-074",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-074",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-074",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-075",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-075",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-075",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-075",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-075",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-075",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-075",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-075",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-075",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-075",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-076",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-076",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-076",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-076",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-076",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-076",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-076",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-076",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-076",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-076",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-077",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-077",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-077",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-077",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-077",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-077",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-077",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-077",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-077",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-077",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-078",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-078",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-078",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-078",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-078",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-078",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-078",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-078",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-078",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-078",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-079",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-079",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-079",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-079",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-079",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-079",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-079",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-079",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-079",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-079",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-080",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-080",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-080",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-080",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-080",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-080",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-080",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-080",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-080",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-080",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-081",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-081",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-081",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-081",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-081",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-081",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-081",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-081",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-081",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-081",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-082",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-082",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-082",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-082",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-082",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-082",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-082",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-082",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-082",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-082",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-083",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-083",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-083",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-083",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-083",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-083",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-083",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-083",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-083",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-083",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-084",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-084",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-084",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-084",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-084",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-084",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-084",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-084",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-084",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-084",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-085",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-085",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-085",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-085",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-085",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-085",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-085",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-085",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-085",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-085",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-086",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-086",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-086",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-086",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-086",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-086",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-086",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-086",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-086",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-086",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-087",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-087",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-087",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-087",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-087",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-087",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-087",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-087",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-087",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-087",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-088",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-088",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-088",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-088",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-088",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-088",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-088",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-088",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-088",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-088",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-089",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-089",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-089",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-089",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-089",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-089",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-089",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-089",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-089",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-089",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-090",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-090",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-090",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-090",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-090",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-090",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-090",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-090",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-090",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-090",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-091",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-091",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-091",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-091",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-091",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-091",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-091",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-091",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-091",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-091",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-092",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-092",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-092",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-092",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-092",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-092",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-092",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-092",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-092",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-092",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-093",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-093",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-093",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-093",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-093",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-093",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-093",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-093",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-093",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-093",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-094",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-094",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-094",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-094",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-094",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-094",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-094",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-094",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-094",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-094",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-095",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-095",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-095",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-095",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-095",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-095",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-095",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-095",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-095",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-095",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-096",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-096",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-096",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-096",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-096",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-096",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-096",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-096",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-096",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-096",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-097",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-097",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-097",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-097",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-097",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-097",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-097",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-097",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-097",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-097",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-098",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-098",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-098",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-098",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-098",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-098",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-098",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-098",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-098",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-098",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    },
+    {
+      "id": "amount_widening-099",
+      "family": "AMOUNT_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AMOUNT_EXCEEDS_LIMIT",
+        "HUMAN_APPROVAL_LIMIT_EXCEEDED"
+      ]
+    },
+    {
+      "id": "merchant_substitution-099",
+      "family": "MERCHANT_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_NOT_ALLOWED"
+      ]
+    },
+    {
+      "id": "currency_substitution-099",
+      "family": "CURRENCY_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CURRENCY_MISMATCH"
+      ]
+    },
+    {
+      "id": "capability_escalation-099",
+      "family": "CAPABILITY_ESCALATION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CAPABILITY_DENIED"
+      ]
+    },
+    {
+      "id": "condition_substitution-099",
+      "family": "CONDITION_SUBSTITUTION",
+      "decision": "DENY",
+      "reasonCodes": [
+        "CONDITION_DENIED"
+      ]
+    },
+    {
+      "id": "replay-099",
+      "family": "REPLAY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "REPLAY_DETECTED"
+      ]
+    },
+    {
+      "id": "wrong_agent-099",
+      "family": "WRONG_AGENT",
+      "decision": "DENY",
+      "reasonCodes": [
+        "AGENT_UNAUTHORIZED"
+      ]
+    },
+    {
+      "id": "expired_authority-099",
+      "family": "EXPIRED_AUTHORITY",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MANDATE_EXPIRED",
+        "AGENT_EXPIRED"
+      ]
+    },
+    {
+      "id": "quantity_widening-099",
+      "family": "QUANTITY_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "QUANTITY_EXHAUSTED"
+      ]
+    },
+    {
+      "id": "merchant_risk_widening-099",
+      "family": "MERCHANT_RISK_WIDENING",
+      "decision": "DENY",
+      "reasonCodes": [
+        "MERCHANT_RISK_TOO_HIGH"
+      ]
+    }
+  ]
+}

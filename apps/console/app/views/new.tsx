@@ -10,6 +10,7 @@ import { AccessGate } from "../ui/access";
 import { AuthorityFrame } from "../ui/frame";
 import { useConsole } from "../ui/provider";
 import { Loading } from "./common";
+import { BRAND } from "../../lib/brand";
 
 type Term = { label: string; value: string };
 const initial: ClientReviewState = {
@@ -226,7 +227,7 @@ export default function NewAuthorityView() {
       {step === 2 && review.review && (
         <section aria-labelledby="n2">
           <h1 id="n2" className="h1">
-            Here&apos;s what PayFlow understood
+            Here&apos;s what {BRAND.name} understood
           </h1>
           <p className="lead">Not yet authorized. These are proposed limits.</p>
           <blockquote>{review.source}</blockquote>
@@ -239,10 +240,10 @@ export default function NewAuthorityView() {
             </>
           )}
           <details className="more">
-            <summary>How PayFlow checked this</summary>
+            <summary>How {BRAND.name} checked this</summary>
             <p>
-              The AI&apos;s reading is untrusted. PayFlow compared it with its
-              own demo limits.
+              The AI&apos;s reading is untrusted. {BRAND.name} compared it with
+              its own demo limits.
             </p>
             <p className="mono">
               status {review.review.status}
@@ -354,7 +355,7 @@ export default function NewAuthorityView() {
             >
               View Authority
             </Link>
-            <Link className="btn btn--quiet" href="/">
+            <Link className="btn btn--quiet" href="/app/">
               Done
             </Link>
           </p>

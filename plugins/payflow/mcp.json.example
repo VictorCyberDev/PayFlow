@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "payflow": {
+      "type": "streamable-http",
+      "url": "https://replace-before-submission.invalid/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": {
+              "mode": "cimd"
+            },
+            "baseScopes": ["authority:read", "verify:read", "proof:read"]
+          }
+        }
+      }
+    }
+  }
+}
