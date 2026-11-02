@@ -6,7 +6,7 @@ import { agentCan, authorityKind } from "../../lib/language";
 import { ActivityRow } from "../ui/activity";
 import { AuthorityFrame } from "../ui/frame";
 import { AuthorityProof } from "../ui/proof";
-import { DemoAgentPanel } from "../ui/demo-agent";
+import { DemoAgentPanel, SandboxWalletPanel } from "../ui/demo-agent";
 import { useConsole } from "../ui/provider";
 import { Empty, NeedsSession, PageHead, errorCopy } from "./common";
 
@@ -170,6 +170,7 @@ export function AuthoritiesBody({ params }: { params: URLSearchParams }) {
             title="Authorities"
             lead="What your Agents can do with your money."
           />
+          <SandboxWalletPanel />
           {management.authorities.length ? (
             <div className="stack">
               {management.authorities.map((a) => (
