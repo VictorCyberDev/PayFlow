@@ -21,6 +21,14 @@ import { PostgresNetworkStore } from "../src/network/postgres-adapters.js";
 import { PayFlowClient } from "../packages/sdk-typescript/src/index.js";
 import { VerticalProvider } from "./m4-vertical-fixture.js";
 
+/**
+ * A token guaranteed to differ from the real one. The final base64url character of a 32-byte secret
+ * carries 4 bits, so it is "A" about 1 time in 16: replacing it with a fixed "A" sometimes yields
+ * the SAME token (an earlier flaky failure). Flip it to something else, always.
+ */
+const corrupt = (token: string): string =>
+  token.slice(0, -1) + (token.endsWith("A") ? "B" : "A");
+
 const url = process.env.TEST_DATABASE_URL;
 const bootstrap = "m7-host-private-bootstrap-".repeat(3);
 const adminToken = "m7-gateway-admin-secret-".repeat(3);
@@ -203,7 +211,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       const s = await sandbox();
       const bad = new PayFlowClient({
         baseUrl: origin,
-        accessToken: s.token.replace(/.$/, "A"),
+        accessToken: corrupt(s.token),
       });
       expect(await bad.actions.execute(purchase(s.authority))).toMatchObject({
         status: "REJECTED",
@@ -283,7 +291,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
         await s.client.actions.execute(once); // replay
         const bad = new PayFlowClient({
           baseUrl: origin,
-          accessToken: s.token.replace(/.$/, "A"),
+          accessToken: corrupt(s.token),
         });
         await bad.actions.execute(purchase(s.authority));
         await fetch(origin + "/v1/actions/execute", {
