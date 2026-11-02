@@ -370,5 +370,22 @@ const body = (over: Record<string, unknown> = {}) => ({
         await expectZeroEffect();
       });
     });
+
+    it("kernel refusals map to specific, actionable machine and human messages", async () => {
+      await provision({
+        cumulativeLimitMinor: 10000,
+        quantityLimit: 5,
+      });
+      const first = await gw.requestPurchase(access, body());
+      expect(first.status).toBe("COMPLETED");
+      const second = await gw.requestPurchase(access, body());
+      expect(second).toMatchObject({
+        status: "DENIED",
+        effectCount: 0,
+        reason: "CUMULATIVE_LIMIT_EXCEEDED",
+        nextAction: "ASK_OWNER_FOR_MORE_BUDGET",
+      });
+      expect(second.humanSummary).toContain("budget");
+    });
   },
 );

@@ -1,0 +1,223 @@
+{
+  "kind": "payflow.m7-live-sandbox-acceptance.v1",
+  "note": "Real hosted preview, real PayPal Sandbox. Not the fake provider. Identifiers only; no credentials.",
+  "sourceCommit": "540f10f4b4c12ea77ad634b16a9937d9ae217e4a",
+  "ci": {
+    "pr": "VictorCyberDev/PayFlow#19",
+    "verifyOnPostgres17": "success",
+    "console": "success",
+    "consoleE2E": "success"
+  },
+  "deployment": {
+    "project": "payflow-m6-acceptance",
+    "id": "dpl_AVaxP54y9TZq5S8vZ27uo3wXJ8eJ",
+    "url": "payflow-m6-acceptance-7tw79pykz-start-up16.vercel.app",
+    "target": "preview",
+    "readyState": "READY"
+  },
+  "database": {
+    "neonProject": "super-cloud-02637785",
+    "snapshotBranchBeforeMigration": "br-super-field-b8baqoz2",
+    "migrationsApplied": "013-020 (52 additive CREATE statements, one transaction)",
+    "m6EvidenceUnchanged": {
+      "capturedBefore": 1,
+      "evidenceEventsBefore": 79,
+      "mandatesBefore": 14
+    }
+  },
+  "client": "@payflow/authority-sdk (TypeScript) over HTTPS, PayFlow bearer credential (digest-only in DB)",
+  "scenarios": {
+    "deny_amount_drift": {
+      "status": "DENIED",
+      "decision": "DENY",
+      "effectCount": 0,
+      "reason": "CLAIMED_TERMS_DO_NOT_MATCH_TRUSTED_PRICE",
+      "recoverable": true,
+      "nextAction": "REFRESH_QUOTE_AND_RETRY_WITH_NEW_NONCE",
+      "humanSummary": "The amount or merchant in the request does not match the trusted price.",
+      "proof": {
+        "proposalId": null
+      }
+    },
+    "deny_merchant_drift": {
+      "status": "DENIED",
+      "decision": "DENY",
+      "effectCount": 0,
+      "reason": "CLAIMED_TERMS_DO_NOT_MATCH_TRUSTED_PRICE",
+      "recoverable": true,
+      "nextAction": "REFRESH_QUOTE_AND_RETRY_WITH_NEW_NONCE",
+      "humanSummary": "The amount or merchant in the request does not match the trusted price.",
+      "proof": {
+        "proposalId": null
+      }
+    },
+    "deny_wrong_agent": {
+      "status": "REJECTED",
+      "decision": "DENY",
+      "effectCount": 0,
+      "reason": "ACCESS_AGENT_MISMATCH",
+      "recoverable": false,
+      "nextAction": "USE_THE_AGENT_CREDENTIAL_FOR_THIS_AUTHORITY",
+      "humanSummary": "This credential does not match that Authority. $0 moved.",
+      "httpStatus": 403
+    },
+    "deny_bad_credential": {
+      "status": "REJECTED",
+      "decision": "DENY",
+      "effectCount": 0,
+      "reason": "ACCESS_INACTIVE",
+      "recoverable": false,
+      "nextAction": "USE_A_VALID_CREDENTIAL",
+      "humanSummary": "This credential cannot make this request. $0 moved.",
+      "httpStatus": 401
+    },
+    "allow": {
+      "status": "COMPLETED",
+      "decision": "ALLOW",
+      "effectCount": 1,
+      "recoverable": false,
+      "nextAction": "INSPECT_PROOF",
+      "humanSummary": "Paid once inside your Authority.",
+      "proof": {
+        "proposalId": "984df79e-2f94-4304-acee-81dc388fa6e8",
+        "receiptId": "fce15d25-7ff3-4b72-a76b-c7e3d94dc4a6",
+        "executionId": "9M2050175R8521521",
+        "href": "/v1/proofs/984df79e-2f94-4304-acee-81dc388fa6e8"
+      }
+    },
+    "replay": {
+      "status": "DENIED",
+      "decision": "DENY",
+      "effectCount": 0,
+      "reason": "REPLAY_DETECTED",
+      "recoverable": true,
+      "nextAction": "USE_NEW_NONCE_FOR_A_NEW_REQUEST",
+      "humanSummary": "This request was already received. $0 moved again."
+    },
+    "concurrent_overrun": [
+      {
+        "status": "DENIED",
+        "decision": "DENY",
+        "effectCount": 0,
+        "reason": "CUMULATIVE_LIMIT_EXCEEDED",
+        "recoverable": false,
+        "nextAction": "STOP_AND_REPORT_TO_OWNER",
+        "humanSummary": "The current Authority does not allow this request. $0 moved.",
+        "proof": {
+          "proposalId": "fdce1096-6fbe-4099-a2c0-ed49806b0a82",
+          "receiptId": "8d65e76b-e1a5-42cb-b04e-d55832209a98",
+          "href": "/v1/proofs/fdce1096-6fbe-4099-a2c0-ed49806b0a82"
+        }
+      },
+      {
+        "status": "DENIED",
+        "decision": "DENY",
+        "effectCount": 0,
+        "reason": "CUMULATIVE_LIMIT_EXCEEDED",
+        "recoverable": false,
+        "nextAction": "STOP_AND_REPORT_TO_OWNER",
+        "humanSummary": "The current Authority does not allow this request. $0 moved.",
+        "proof": {
+          "proposalId": "887a8b38-dfd1-4527-9dd8-0950117caafd",
+          "receiptId": "ac860b77-59b4-4290-9ab3-9a288678c7aa",
+          "href": "/v1/proofs/887a8b38-dfd1-4527-9dd8-0950117caafd"
+        }
+      },
+      {
+        "status": "DENIED",
+        "decision": "DENY",
+        "effectCount": 0,
+        "reason": "DELEGATED_REQUEST_REFUSED",
+        "recoverable": false,
+        "nextAction": "STOP_AND_REPORT_TO_OWNER",
+        "humanSummary": "The current Authority does not allow this request. $0 moved.",
+        "proof": {
+          "proposalId": null
+        }
+      }
+    ],
+    "proof": {
+      "status": "VERIFIED",
+      "financialOutcome": "CAPTURED",
+      "refs": [
+        "principalId",
+        "mandateId",
+        "agentId",
+        "selectionId",
+        "requestId",
+        "candidateId",
+        "mappingId",
+        "quoteId",
+        "manifestId",
+        "proposalId",
+        "receiptId",
+        "reservationId",
+        "grantId",
+        "paymentAttemptId",
+        "providerOrderId",
+        "providerCaptureId"
+      ],
+      "stages": [
+        "EVIDENCE:VERIFIED",
+        "DISCOVERY:VERIFIED",
+        "PROMOTION:VERIFIED",
+        "RANKER_SELECTION:VERIFIED",
+        "DISCOVERY_QUOTE_LINK:VERIFIED",
+        "SELECTED_QUOTE:VERIFIED",
+        "QUOTE:VERIFIED",
+        "MANIFEST:VERIFIED",
+        "MERCHANT_BINDING:VERIFIED",
+        "PROPOSAL:VERIFIED",
+        "IDENTITY:VERIFIED",
+        "PRINCIPAL:VERIFIED",
+        "MANDATE:VERIFIED",
+        "AGENT_PASSPORT:VERIFIED",
+        "RECEIPT:VERIFIED",
+        "AUTHORITY_CONSERVATION:VERIFIED",
+        "HUMAN_APPROVAL:NOT_APPLICABLE",
+        "RESERVATION:VERIFIED",
+        "GRANT_SIGNATURE:VERIFIED",
+        "ATTEMPT:VERIFIED",
+        "PROVIDER_STATUS:VERIFIED",
+        "PROVIDER_OBSERVATION:VERIFIED",
+        "PROVIDER_ORDER_ID:VERIFIED",
+        "PROVIDER_COMMERCE:VERIFIED",
+        "CAPTURE:VERIFIED",
+        "DISPATCH_FRESHNESS:VERIFIED",
+        "DISPATCH_REVOCATION_ORDERING:VERIFIED",
+        "RESUME_BINDING:NOT_APPLICABLE",
+        "FINANCIAL_FINALIZATION:VERIFIED"
+      ],
+      "providerOrderId": "1V278420WL3044215",
+      "providerCaptureId": "9M2050175R8521521"
+    },
+    "revoked_credential": {
+      "status": "REJECTED",
+      "decision": "DENY",
+      "effectCount": 0,
+      "reason": "ACCESS_INACTIVE",
+      "httpStatus": 401,
+      "nextAction": "USE_A_VALID_CREDENTIAL"
+    },
+    "revoked_authority": {
+      "status": "DENIED",
+      "decision": "DENY",
+      "effectCount": 0,
+      "reason": "AUTHORITY_REVOKED",
+      "nextAction": "ASK_OWNER_FOR_NEW_AUTHORITY"
+    }
+  },
+  "databaseCountsAfter": {
+    "paymentAttempts": 2,
+    "captured": 2,
+    "executionGrants": 2,
+    "reservations": 2,
+    "reservationStatus": "COMMITTED",
+    "newCapturesFromThisRun": 1
+  },
+  "notExercisedLive": [
+    "UNKNOWN (not manufactured; covered by PostgreSQL tests)",
+    "hosted admin credential issuance (credential rows were created by the same code and inserted digest-only)",
+    "suspended Authority (covered by PostgreSQL tests)"
+  ]
+}

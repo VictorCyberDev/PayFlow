@@ -124,3 +124,43 @@ Gate A, B and C: **not closed.**
    create/revoke flow so the quickstart works end to end.
 3. Decide the fate of PR #18 (supersede with this branch) and stale PR #5.
 4. External: a design partner or sandbox integrator for M12/M25, and counsel for legal drafts.
+
+## 6. M7 live Sandbox acceptance (2026-11-02)
+
+Evidence file: `docs/evidence/live/m7-sandbox-acceptance-2026-11-02.json`. Real hosted preview and
+real PayPal Sandbox; not the fake provider.
+
+| Item                  | Value                                                                                                                                                                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source                | `540f10f4b4c12ea77ad634b16a9937d9ae217e4a` on PR #19                                                                                                                                                                                                      |
+| CI on that exact head | `verify` (PostgreSQL 17), `console`, `console-e2e` all success                                                                                                                                                                                            |
+| Deployment            | `dpl_AVaxP54y9TZq5S8vZ27uo3wXJ8eJ`, project `payflow-m6-acceptance`, target **preview** (not promoted), READY                                                                                                                                             |
+| Database              | Existing M6 acceptance Neon database. Snapshot branch `br-super-field-b8baqoz2` taken first. Migrations 013–020 applied as one transaction (additive `CREATE` only). M6 evidence unchanged (1 captured, 79 events, 14 mandates, 1 vaulted wallet before). |
+| Access                | Digest-only credentials created by the same code, inserted by SQL. No new Vercel secret was created and no existing secret was read. Preview is behind Vercel Authentication; a 23-hour share link was used.                                              |
+
+| Scenario                      | Result                                                                                                                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Amount drift / merchant drift | `DENIED`, `effectCount 0`, no new attempt, grant or reservation (verified in the database)                                                                                     |
+| Wrong agent / bad credential  | `REJECTED` 403 / 401, `effectCount 0`                                                                                                                                          |
+| **ALLOW $84**                 | `COMPLETED`, `effectCount 1`, PayPal Sandbox capture `9M2050175R8521521`, reservation `COMMITTED`; exactly one new payment (attempts, captures, grants and reservations 1 → 2) |
+| Replay of that nonce          | `DENIED REPLAY_DETECTED`, no second capture                                                                                                                                    |
+| 3 concurrent further requests | all `DENIED` (`CUMULATIVE_LIMIT_EXCEEDED` ×2, one refused as ineligible), no further capture                                                                                   |
+| Proof                         | `VERIFIED`, financial outcome `CAPTURED`, 29 stages, references from principal through provider capture                                                                        |
+| Revoked credential            | `REJECTED` 401, `effectCount 0`, counts unchanged                                                                                                                              |
+| Revoked Authority             | `DENIED AUTHORITY_REVOKED`, `effectCount 0`                                                                                                                                    |
+
+Not exercised live: UNKNOWN (not manufactured), suspended Authority, hosted admin issuance. Those are
+covered by the PostgreSQL tests only.
+
+Defect found by the live run and fixed afterwards in source (not redeployed): kernel codes
+`CUMULATIVE_LIMIT_EXCEEDED`, `QUANTITY_EXHAUSTED`, `MERCHANT_NOT_ALLOWED`, `MANDATE_EXPIRED`,
+`AGENT_SUSPENDED` and an internal `DELEGATED_REQUEST_REFUSED` produced a generic message.
+
+## 7. M8 audit findings (in progress)
+
+- Verify checks signature, audience, challenge, expiry, lifecycle, binding and replay.
+- The portable proof verifier (`payflow-proof/v1`) exists, but **nothing issues a signed portable
+  proof from an executed Gateway operation**. A separate client therefore cannot yet verify a
+  Gateway outcome without the operation trace.
+- Both canonicalizers sort keys with `localeCompare`, which is locale-dependent. It should be a
+  code-point sort, with a test that proves existing signatures are unchanged.

@@ -142,6 +142,50 @@ function mapRefusal(code: string, limit: string): Mapped {
           "This Authority isn't available right now: it may be suspended, stopped or expired. $0 moved.",
         nextAction: "ASK_OWNER_TO_REVIEW_AUTHORITY",
       };
+    case "CUMULATIVE_LIMIT_EXCEEDED":
+      return {
+        reason: "CUMULATIVE_LIMIT_EXCEEDED",
+        recoverable: false,
+        humanSummary: "This Authority's total budget is used up. $0 moved.",
+        nextAction: "ASK_OWNER_FOR_MORE_BUDGET",
+      };
+    case "QUANTITY_EXHAUSTED":
+      return {
+        reason: "QUANTITY_EXHAUSTED",
+        recoverable: false,
+        humanSummary:
+          "This Authority has already been used for the quantity it allows. $0 moved.",
+        nextAction: "ASK_OWNER_FOR_NEW_AUTHORITY",
+      };
+    case "MERCHANT_NOT_ALLOWED":
+      return {
+        reason: "MERCHANT_NOT_ALLOWED",
+        recoverable: true,
+        humanSummary: "This merchant isn't included in the current Authority.",
+        nextAction: "SELECT_APPROVED_MERCHANT",
+      };
+    case "MANDATE_EXPIRED":
+      return {
+        reason: "AUTHORITY_EXPIRED",
+        recoverable: false,
+        humanSummary: "This Authority expired. $0 moved.",
+        nextAction: "ASK_OWNER_FOR_NEW_AUTHORITY",
+      };
+    case "AGENT_SUSPENDED":
+      return {
+        reason: "AGENT_SUSPENDED",
+        recoverable: false,
+        humanSummary: "This agent was suspended. $0 moved.",
+        nextAction: "ASK_OWNER_TO_REVIEW_AGENT",
+      };
+    case "DELEGATED_REQUEST_REFUSED":
+      return {
+        reason: "REQUEST_NOT_ELIGIBLE",
+        recoverable: false,
+        humanSummary:
+          "Another request is already using this Authority. $0 moved.",
+        nextAction: "WAIT_AND_CHECK_PROOF_BEFORE_TRYING_AGAIN",
+      };
     case "MANDATE_REVOKED":
     case "PRINCIPAL_INACTIVE":
       return {
