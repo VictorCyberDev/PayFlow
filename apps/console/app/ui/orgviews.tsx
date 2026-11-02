@@ -1,4 +1,4 @@
-import { usd } from "./procurement";
+import { usd } from "../../lib/money";
 
 export interface AgentRowView {
   agent: string;

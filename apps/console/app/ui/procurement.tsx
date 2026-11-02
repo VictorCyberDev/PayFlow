@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { usd } from "../../lib/money";
 
-export const usd = (minor: number): string =>
-  `$${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: minor % 100 === 0 ? 0 : 2 })}`;
+export { usd };
 
 /** The shape the org finance projection returns for one Authority (src/network/org-views.ts). */
 export interface AuthorityExposureView {
