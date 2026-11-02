@@ -1,4 +1,5 @@
 import { createPrivateKey, createPublicKey } from "node:crypto";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import postgres, { type Sql } from "postgres";
 import { z } from "zod";
 import {
@@ -24,6 +25,7 @@ import {
 import { PostgresTrustRepository } from "./persistence.js";
 import { ConsoleDemoAgent } from "./console-demo-agent.js";
 import { DemoShoppingAgent } from "./delegated-demo.js";
+import { createHostedGatewayHandler } from "./network/hosted-gateway.js";
 import { PayPalOAuthClient, type PaymentProvider } from "./paypal.js";
 import {
   PayPalVaultStore,
@@ -59,6 +61,8 @@ const DemoAgentSchema = z.object({
     .default("DEMOACCOUNT01"),
 });
 export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
+  /** Optional Sandbox admin secret for credential issue/revoke and sample Authority. Never logged. */
+  gatewayAdminToken?: string;
   demoAgent?: z.infer<typeof DemoAgentSchema>;
   /** Raw PayPal settings; consumed only by the isolated M6 composition. Never logged. */
   paypalEnv?: Record<string, string | undefined>;
@@ -90,8 +94,12 @@ export function parseHostedConfig(
       : {}),
     PAYFLOW_M5_ORIGIN: env.PAYFLOW_M5_ORIGIN,
   });
+  const adminToken = env.PAYFLOW_GATEWAY_ADMIN_TOKEN;
+  if (adminToken !== undefined && adminToken.length < 32)
+    throw new Error("PAYFLOW_GATEWAY_ADMIN_TOKEN_TOO_SHORT");
   return {
     ...base,
+    ...(adminToken ? { gatewayAdminToken: adminToken } : {}),
     ...(demoAgent
       ? {
           demoAgent,
@@ -232,8 +240,27 @@ export function createHostedConsole(
     review: new IntentReviewService(provider, demoReviewBounds, clock),
     ...(demo ? { demoAgent: new ConsoleDemoAgent(repo, sessions, demo) } : {}),
   });
+  const gateway = demo
+    ? createHostedGatewayHandler({
+        sql: ownedSql,
+        repo,
+        demo,
+        principalId: config.PAYFLOW_M5_PRINCIPAL_ID,
+        agentId: config.PAYFLOW_M5_AGENT_ID,
+        organizationId: "payflow-sandbox",
+        ...(config.gatewayAdminToken
+          ? { adminToken: config.gatewayAdminToken }
+          : {}),
+        clock,
+      })
+    : undefined;
   return {
-    handler,
+    handler: gateway
+      ? async (req: IncomingMessage, res: ServerResponse) => {
+          if (await gateway(req, res)) return;
+          await handler(req, res);
+        }
+      : handler,
     close: async () => {
       if (!deps.sql) await ownedSql.end();
     },

@@ -87,7 +87,7 @@ export interface GatewayEvent {
 
 export interface ExecutingGatewayDependencies {
   readonly repo: PostgresTrustRepository;
-  readonly delegated: DelegatedCommerceService;
+  readonly delegated: Pick<DelegatedCommerceService, "attempt">;
   readonly ranker: CommerceRanker;
   readonly now: () => string;
   readonly onEvent?: (event: GatewayEvent) => void;

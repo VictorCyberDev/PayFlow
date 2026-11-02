@@ -15,6 +15,10 @@
       "destination": "/api/vault?action=:action"
     },
     {
+      "source": "/v1/(.*)",
+      "destination": "/api/host"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/host"
     }

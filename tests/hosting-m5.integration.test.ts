@@ -50,7 +50,8 @@ const provision = (databaseUrl: string) =>
       for (const name of created)
         await admin.sql.unsafe(`drop database if exists ${name} with (force)`);
       await admin.close();
-    });
+      // Forced database drops wait for lingering sessions; allow for a loaded runner.
+    }, 60_000);
 
     it("provisions an empty database once, idempotently: every forward-only migration, one principal, one passport, one policy", async () => {
       const target = await freshDatabase();

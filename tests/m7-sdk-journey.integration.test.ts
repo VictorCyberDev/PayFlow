@@ -624,7 +624,7 @@ const heroMandate = (over: Partial<Mandate> = {}): Mandate => ({
             repo,
             delegated: {
               attempt: () => Promise.reject(new Error("boom")),
-            } as never,
+            },
             ranker: new FakeCommerceRanker(),
             now: () => s.time,
           }),
