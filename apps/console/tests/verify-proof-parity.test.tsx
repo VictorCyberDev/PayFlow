@@ -87,6 +87,39 @@ test("browser verifier and Node verifier agree on every case", async () => {
   }
 });
 
+test("a proof whose subject carries the rail verifies, and says SIMULATED in plain words", async () => {
+  const sim = base({ subject: { ...subject, rail: "SIMULATED" } });
+  const r = await verifyProof(sim.proof, sim.jwk, NOW);
+  assert.equal(r.valid, true);
+  const node = verifyPortableProof(
+    sim.proof,
+    sim.jwk as never,
+    NOW.toISOString(),
+    null,
+  );
+  assert.equal(node.valid, true);
+  assert.ok(
+    present(r).facts.some(
+      (f) => f.label === "Rail" && /Simulated \(no real money\)/.test(f.value),
+    ),
+  );
+  const forged = await verifyProof(
+    {
+      ...(sim.proof as object),
+      subject: { ...subject, rail: "PAYPAL_SANDBOX" },
+    },
+    sim.jwk,
+    NOW,
+  );
+  assert.equal(forged.valid, false);
+  const unknownRail = await verifyProof(
+    { ...(sim.proof as object), subject: { ...subject, rail: "PRODUCTION" } },
+    sim.jwk,
+    NOW,
+  );
+  assert.equal(unknownRail.reason, "MALFORMED_PROOF");
+});
+
 test("a private key is never accepted as a verification key", async () => {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const { signature: _s, ...rest } = base().proof as Record<string, unknown>;

@@ -7,7 +7,20 @@
 You will: get a sandbox credential, install the SDK, send an allowed purchase, break the
 Authority on purpose to see a `$0 moved` refusal, and inspect the Proof.
 
-## 1. Get a sandbox credential
+## 0. Fastest path: the self-serve sandbox (simulated rail)
+
+On a host that sets `PAYFLOW_PUBLIC_SANDBOX=true`, no account or admin is needed:
+
+```bash
+curl -sS -X POST "$PAYFLOW_URL/v1/sandbox/start"
+```
+
+You receive a one-hour `token`, an `authority` ($100, one keyboard), your `agentId`, and `rail: "SIMULATED"`.
+Skip to step 4. **No money moves and no payment provider is contacted**; responses and Proofs say
+`SIMULATED`. Limited to 5 per address per hour. **No public host is live yet.** Steps 1-3 below describe the
+real PayPal Sandbox rail, which needs an administrator-issued credential.
+
+## 1. Get a sandbox credential (real PayPal Sandbox rail)
 
 An administrator of your sandbox tenant issues a scoped, expiring credential for one agent.
 The secret is shown **once**; PayFlow stores only a digest.

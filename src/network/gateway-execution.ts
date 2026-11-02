@@ -53,6 +53,8 @@ export type GatewayStatus =
 
 export interface GatewayExecutionResponse {
   readonly requestId: string;
+  /** Which rail executes this Authority. Absent when not known. Never implies production. */
+  readonly rail?: "SIMULATED" | "PAYPAL_SANDBOX";
   readonly decision: GatewayDecision;
   readonly status: GatewayStatus;
   /** Provider effects PayFlow is certain about. `null` means UNKNOWN, never "zero". */
@@ -103,6 +105,10 @@ export interface ExecutingGatewayDependencies {
   readonly onEvent?: (event: GatewayEvent) => void | Promise<void>;
   /** Returns the pause scope that blocks new economic requests for this client, or null. */
   readonly pauseCheck?: (clientId: string) => Promise<string | null>;
+  /** Labels the response with the rail behind this Authority. */
+  readonly railFor?: (
+    mandateId: string,
+  ) => Promise<"SIMULATED" | "PAYPAL_SANDBOX">;
 }
 
 const usd = (minor: number, currency: string): string =>
@@ -313,15 +319,19 @@ export class ExecutingGateway {
       },
     });
     const presented = this.present(requestId, outcome, limit);
-    const response: GatewayExecutionResponse = presented.proof?.proposalId
+    const rail = await this.deps.railFor?.(mandate.id);
+    const labelled: GatewayExecutionResponse = rail
+      ? Object.freeze({ ...presented, rail })
+      : presented;
+    const response: GatewayExecutionResponse = labelled.proof?.proposalId
       ? Object.freeze({
-          ...presented,
+          ...labelled,
           proof: Object.freeze({
-            ...presented.proof,
-            href: `/v1/proofs/${encodeURIComponent(presented.proof.proposalId)}`,
+            ...labelled.proof,
+            href: `/v1/proofs/${encodeURIComponent(labelled.proof.proposalId)}`,
           }),
         })
-      : presented;
+      : labelled;
     await emit("gateway.evaluated", {
       key: createHash("sha256")
         .update(`${mandate.id}\u0000${request.agentId}\u0000${request.nonce}`)

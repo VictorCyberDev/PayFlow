@@ -11,6 +11,7 @@ export interface ProofSubject {
   amountMinor: number;
   currency: string;
   merchantId: string;
+  rail?: "SIMULATED" | "PAYPAL_SANDBOX";
 }
 export interface PortableProof {
   version: "payflow-proof/v1";
@@ -59,6 +60,7 @@ const SUBJECT_KEYS = [
   "amountMinor",
   "currency",
   "merchantId",
+  "rail",
 ];
 const isObj = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
@@ -94,6 +96,12 @@ export function parseProof(raw: unknown): PortableProof | null {
     for (const k of ["principalId", "agentId", "capability", "merchantId"])
       if (!str(s[k])) return null;
     if (!Number.isSafeInteger(s.amountMinor) || (s.amountMinor as number) < 0)
+      return null;
+    if (
+      s.rail !== undefined &&
+      s.rail !== "SIMULATED" &&
+      s.rail !== "PAYPAL_SANDBOX"
+    )
       return null;
     if (typeof s.currency !== "string" || !/^[A-Z]{3}$/.test(s.currency))
       return null;
@@ -233,6 +241,17 @@ export function present(result: VerifyResult): Presentation {
         value: money(p.subject.amountMinor, p.subject.currency),
       },
       { label: "Merchant", value: p.subject.merchantId },
+      ...(p.subject.rail
+        ? [
+            {
+              label: "Rail",
+              value:
+                p.subject.rail === "SIMULATED"
+                  ? "Simulated (no real money)"
+                  : "PayPal Sandbox",
+            },
+          ]
+        : []),
     );
   }
   facts.push(

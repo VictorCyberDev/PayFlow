@@ -10,6 +10,7 @@ import {
   type PortableProofPayload,
 } from "../../packages/verifier/src/index.js";
 import type { PostgresTrustRepository } from "../persistence.js";
+import { isSimulatedOrder } from "../simulated-rail.js";
 import type { ProofReader } from "./proof-read.js";
 
 /**
@@ -71,6 +72,9 @@ export class PortableProofIssuer {
             amountMinor: proposal.amount.minor,
             currency: proposal.amount.currency,
             merchantId: proposal.merchant.id,
+            rail: isSimulatedOrder(trace.references.providerOrderId)
+              ? ("SIMULATED" as const)
+              : ("PAYPAL_SANDBOX" as const),
           }
         : undefined;
     const payload: PortableProofPayload = {

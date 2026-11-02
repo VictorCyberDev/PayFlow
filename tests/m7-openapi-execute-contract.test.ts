@@ -32,12 +32,17 @@ const concrete = (p: string) =>
     .replace("{credentialId}", "pfc_" + "a".repeat(24));
 
 describe("OpenAPI ↔ executing REST handlers do not drift", () => {
+  const hostedOnly = (ops: Record<string, unknown>) =>
+    Object.values(ops).some(
+      (o) => (o as { "x-hosted-only"?: boolean })["x-hosted-only"],
+    );
   const documented = Object.entries(spec.paths).filter(
-    ([p]) =>
-      p === "/v1/actions/execute" ||
-      p === "/v1/keys" ||
-      p.startsWith("/v1/proofs/") ||
-      p.startsWith("/v1/admin/"),
+    ([p, ops]) =>
+      !hostedOnly(ops) &&
+      (p === "/v1/actions/execute" ||
+        p === "/v1/keys" ||
+        p.startsWith("/v1/proofs/") ||
+        p.startsWith("/v1/admin/")),
   );
 
   it("documents the executing, credential, proof and key route families", () => {

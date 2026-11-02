@@ -209,6 +209,179 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PublicKeys" }
+  /v1/sandbox/start:
+    post:
+      operationId: startSandbox
+      summary: Start a self-serve developer sandbox on the SIMULATED rail. No account.
+      description: >-
+        Creates an isolated sandbox tenant with its own agent, a $100 one-keyboard Authority and a
+        one-hour credential. No payment provider is contacted and no money moves; every response
+        and Proof is labelled SIMULATED. Rate limited per address; disabled unless the host enables it.
+        The token is shown exactly once.
+      x-hosted-only: true
+      security: []
+      responses:
+        "201":
+          description: Sandbox created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SandboxStarted" }
+        "404": { description: Self-serve sandbox is not enabled on this host }
+        "429":
+          {
+            description: Too many sandboxes started from this address; see Retry-After,
+          }
+  /v1/admin/sandbox/authority:
+    post:
+      operationId: provisionSampleAuthority
+      summary: Operator-only. Provision a sample Authority for the real Sandbox rail.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "201": { description: Provisioned }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/agents:
+    get:
+      operationId: listOrgAgents
+      summary: "Agent inventory: sponsor, lifecycle, active Authorities, exposure."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/finance:
+    get:
+      operationId: orgFinanceHome
+      summary: "Finance home: reserved, in flight, settled, available. Obligations beyond a reservation are NOT_MODELLED."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/security:
+    get:
+      operationId: orgSecurityHome
+      summary: "Security home: per-agent blast radius, delegation and recent denials."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/authorities:
+    get:
+      operationId: listOrgAuthorities
+      summary: Per-Authority exposure.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/decisions:
+    get:
+      operationId: listPendingDecisions
+      summary: Escalations waiting for a human. The agent cannot reach this.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/unknown:
+    get:
+      operationId: listUnknownOperations
+      summary: Unresolved payments. Observation only; nothing is re-executed.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/audit:
+    get:
+      operationId: listAuditEvents
+      summary: Append-only audit trail. Identifiers and outcomes only.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/funnel:
+    get:
+      operationId: developerFunnel
+      summary: Privacy-safe developer funnel from durable records; names what is not measured.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/decisions/{receiptId}/approve:
+    post:
+      operationId: approveDecision
+      summary: Approve once. Reserves the Authority; does NOT pay.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: receiptId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Approved once }
+        "401": { description: Administrative authentication required }
+        "404":
+          {
+            description: No pending decision with that id (also for another tenant's),
+          }
+        "409": { description: The approval could not be recorded }
+  /v1/admin/decisions/{receiptId}/reject:
+    post:
+      operationId: rejectDecision
+      summary: Reject. Records an audit event; $0 moved.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: receiptId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Rejected }
+        "401": { description: Administrative authentication required }
+        "404": { description: No pending decision with that id }
   /v1/admin/credentials:
     post:
       operationId: issueCredential
@@ -390,6 +563,10 @@ components:
           proof,
         ]
       properties:
+        rail:
+          type: string
+          enum: [SIMULATED, PAYPAL_SANDBOX]
+          description: Which rail executes this Authority. SIMULATED moves no money. Never production.
         requestId: { type: string }
         decision: { type: string, const: ALLOW }
         status: { type: string, const: COMPLETED }
@@ -413,6 +590,10 @@ components:
           nextAction,
         ]
       properties:
+        rail:
+          type: string
+          enum: [SIMULATED, PAYPAL_SANDBOX]
+          description: Which rail executes this Authority. SIMULATED moves no money. Never production.
         requestId: { type: string }
         decision: { type: string, const: DENY }
         status: { type: string, const: DENIED }
@@ -438,6 +619,10 @@ components:
           proof,
         ]
       properties:
+        rail:
+          type: string
+          enum: [SIMULATED, PAYPAL_SANDBOX]
+          description: Which rail executes this Authority. SIMULATED moves no money. Never production.
         requestId: { type: string }
         decision: { type: string, const: ESCALATE }
         status: { type: string, const: NEEDS_APPROVAL }
@@ -463,6 +648,10 @@ components:
           proof,
         ]
       properties:
+        rail:
+          type: string
+          enum: [SIMULATED, PAYPAL_SANDBOX]
+          description: Which rail executes this Authority. SIMULATED moves no money. Never production.
         requestId: { type: string }
         decision: { type: string, const: ALLOW }
         status: { type: string, const: UNRESOLVED }
@@ -655,6 +844,47 @@ components:
             properties:
               keyId: { type: string }
               jwk: { type: object }
+    SandboxStarted:
+      type: object
+      additionalProperties: false
+      required: [requestId, sandbox, token, authority, next]
+      properties:
+        requestId: { type: string }
+        sandbox:
+          type: object
+          additionalProperties: false
+          required: [rail, notice, expiresAt]
+          properties:
+            rail: { type: string, const: SIMULATED }
+            notice: { type: string }
+            expiresAt: { type: string, format: date-time }
+        token: { type: string, description: Shown once. }
+        authority:
+          type: object
+          additionalProperties: false
+          required:
+            [
+              id,
+              agentId,
+              limitMinor,
+              currency,
+              merchant,
+              item,
+              priceMinor,
+              expiresAt,
+            ]
+          properties:
+            id: { type: string }
+            agentId: { type: string }
+            limitMinor: { type: integer }
+            currency: { type: string }
+            merchant: { type: string }
+            item: { type: string }
+            priceMinor: { type: integer }
+            expiresAt: { type: string, format: date-time }
+        next:
+          type: object
+          additionalProperties: { type: string }
     Error:
       type: object
       additionalProperties: false

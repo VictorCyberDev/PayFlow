@@ -486,7 +486,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       {
         title: "Against the hosted Sandbox",
         paragraphs: [
-          "Hosted execution runs on PayPal Sandbox through the same Trust Kernel as production design. It needs a PayFlow credential. Self-serve credentials are not available yet: request one through Contact and say which agent and use case you have in mind.",
+          "Where a host enables it, one request starts a sandbox: an isolated tenant with your own agent, a $100 one-keyboard Authority and a one-hour credential. No account. It runs on a simulated rail, so no money moves and no provider is contacted, and every response and Proof says SIMULATED. The Trust Kernel, reservation, one-time grant and Proof are the real ones. No public host is live yet; until one is, request a credential through Contact. Design partners can ask for the real PayPal Sandbox rail.",
         ],
       },
       {
@@ -606,7 +606,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       {
         title: "1. Get a credential",
         paragraphs: [
-          "Ask for a Sandbox credential through Contact. You receive a token that is bound to one agent, with scopes and an expiry. PayFlow stores only its digest; the secret is shown once.",
+          "On a host that enables the public sandbox, send POST /v1/sandbox/start. You get a one-hour token, an agent and a $100 Authority, all on a simulated rail (no money). Until a public host is live, request a credential through Contact. The token is bound to one agent, with scopes and an expiry. PayFlow stores only its digest; the secret is shown once.",
         ],
       },
       {

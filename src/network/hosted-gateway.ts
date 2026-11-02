@@ -39,6 +39,8 @@ export interface HostedGatewayOptions {
   readonly sql: Sql;
   readonly repo: PostgresTrustRepository;
   readonly demo: DemoShoppingAgent;
+  /** Simulated-rail agent for the public sandbox. When absent, /v1/sandbox/start is disabled. */
+  readonly simulated?: DemoShoppingAgent;
   /** The owner whose Sandbox wallet pays, and the agent that acts for them. */
   readonly principalId: string;
   readonly agentId: string;
@@ -97,7 +99,38 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   };
   const gateway = new ExecutingGateway({
     repo,
-    delegated: demo.gatewayPort(),
+    // Routing is by the Authority's organization and is fail-closed in both directions: a public
+    // sandbox organization (`sbx_`) can only ever reach the simulated rail, and every other
+    // organization can only ever reach the configured real rail.
+    delegated: {
+      attempt: async (input) => {
+        const o =
+          await sql`select organization_id from authority_ownership where mandate_id = ${input.mandateId}`;
+        const sandboxOrg = String(o[0]?.organization_id ?? "").startsWith(
+          "sbx_",
+        );
+        if (sandboxOrg) {
+          if (!options.simulated)
+            return Object.freeze({
+              status: "REFUSED",
+              code: "PAYMENT_RAIL_NOT_CONNECTED",
+              proposalId: null,
+              operationId: null,
+              askedHuman: false,
+              providerEffect: "NONE",
+            } as const);
+          return options.simulated.gatewayPort().attempt(input);
+        }
+        return demo.gatewayPort().attempt(input);
+      },
+    },
+    railFor: async (mandateId) => {
+      const o =
+        await sql`select organization_id from authority_ownership where mandate_id = ${mandateId}`;
+      return String(o[0]?.organization_id ?? "").startsWith("sbx_")
+        ? "SIMULATED"
+        : "PAYPAL_SANDBOX";
+    },
     ranker: new FakeCommerceRanker(),
     now: iso,
     // Operator pause: refuses NEW economic requests only; reads and Proof stay available.
@@ -172,6 +205,127 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       })
     : undefined;
 
+  /** The Sandbox "Keyboard Authority": $100, one new keyboard, the demo merchant, 24h. */
+  function sampleMandate(
+    principalId: string,
+    agentId: string,
+    now: Date,
+  ): Mandate {
+    return {
+      id: `sandbox-authority-${randomUUID()}`,
+      principalId,
+      authorizedAgentId: agentId,
+      purpose: "Sandbox sample: one new keyboard",
+      category: "KEYBOARD",
+      currency: "USD",
+      maxSingleTransactionMinor: 10000,
+      cumulativeLimitMinor: 10000,
+      quantityLimit: 1,
+      merchantScope: { mode: "ONLY", ids: [DEMO_MERCHANT_ID] },
+      allowedConditions: ["NEW"],
+      merchantRiskCeiling: "LOW",
+      autonomousPurchaseThresholdMinor: 10000,
+      humanApprovalThresholdMinor: 10000,
+      allowedCapabilities: ["CAPTURE_PAYMENT"],
+      version: 1,
+      nonce: randomBytes(16).toString("hex"),
+      createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 24 * 3600 * 1000).toISOString(),
+    };
+  }
+
+  /**
+   * Public, self-serve developer sandbox on the SIMULATED rail. Creates an isolated `sbx_` tenant
+   * with its own principal, agent, Authority and a one-hour credential. No payment provider is
+   * ever contacted. Enabled only when a simulated-rail agent is configured.
+   */
+  async function startSandbox(): Promise<RestResponse> {
+    const requestId = `req_${randomUUID()}`;
+    const headers = {
+      "content-type": "application/json",
+      "x-payflow-request-id": requestId,
+      "cache-control": "no-store",
+    };
+    const now = clock();
+    const rand = randomBytes(6).toString("hex");
+    const org = `sbx_${rand}`;
+    const principalId = `sbxp_${rand}`;
+    const agentId = `sbxa_${rand}`;
+    await repo.savePrincipal({
+      id: principalId,
+      displayName: "Sandbox visitor",
+    });
+    await repo.saveAgent({
+      id: agentId,
+      principalId,
+      displayName: "Your agent",
+      issuedAt: new Date(now.getTime() - 86_400_000).toISOString(),
+      expiresAt: new Date(now.getTime() + 2 * 86_400_000).toISOString(),
+      status: "ACTIVE",
+      capabilities: ["CREATE_ORDER", "CAPTURE_PAYMENT"],
+    });
+    await sql`insert into organizations (id, display_name) values (${org}, 'Public sandbox')`;
+    await sql`insert into organization_agents (organization_id, agent_id, environment, sponsor_principal_id)
+      values (${org}, ${agentId}, 'SANDBOX', ${principalId})`;
+    const mandate = sampleMandate(principalId, agentId, now);
+    await repo.saveMandate(mandate);
+    await sql`insert into authority_ownership (mandate_id, organization_id, environment, owner_principal_id)
+      values (${mandate.id}, ${org}, 'SANDBOX', ${principalId})`;
+    const { token, credential } = await store.issue(
+      {
+        organizationId: org,
+        environment: "SANDBOX",
+        agentId,
+        scopes: ["action:request", "proof:read"],
+        ttlSeconds: 3600,
+        label: "public-sandbox",
+      },
+      now.toISOString(),
+    );
+    await audit.append({
+      organizationId: org,
+      environment: SANDBOX,
+      actorKind: "SYSTEM",
+      actorId: "public-sandbox",
+      action: "SANDBOX_STARTED",
+      subjectKind: "CREDENTIAL",
+      subjectId: credential.credentialId,
+      detail: { rail: "SIMULATED" },
+      occurredAt: now.toISOString(),
+    });
+    return {
+      status: 201,
+      headers,
+      body: {
+        requestId,
+        sandbox: {
+          rail: "SIMULATED",
+          notice:
+            "Simulated sandbox. No real money moves and no payment provider is contacted. Everything you create here expires.",
+          expiresAt: credential.expiresAt,
+        },
+        // Shown exactly once.
+        token,
+        authority: {
+          id: mandate.id,
+          agentId,
+          limitMinor: mandate.maxSingleTransactionMinor,
+          currency: "USD",
+          merchant: DEMO_MERCHANT_ID,
+          item: "Quiet keyboard",
+          priceMinor: 8400,
+          expiresAt: mandate.expiresAt,
+        },
+        next: {
+          execute: "POST /v1/actions/execute",
+          tryToBreakIt: "Ask for a different amount and see $0 moved.",
+          proof:
+            "GET /v1/proofs/{proposalId}/portable, then verify it offline.",
+        },
+      },
+    };
+  }
+
   /** Operator-only. Creates a Sandbox "Keyboard Authority" ($100, one keyboard, demo merchant). */
   async function provisionSampleAuthority(
     request: RestRequest,
@@ -194,27 +348,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       throw error;
     }
     const now = clock();
-    const mandate: Mandate = {
-      id: `sandbox-authority-${randomUUID()}`,
-      principalId: options.principalId,
-      authorizedAgentId: options.agentId,
-      purpose: "Sandbox sample: one new keyboard",
-      category: "KEYBOARD",
-      currency: "USD",
-      maxSingleTransactionMinor: 10000,
-      cumulativeLimitMinor: 10000,
-      quantityLimit: 1,
-      merchantScope: { mode: "ONLY", ids: [DEMO_MERCHANT_ID] },
-      allowedConditions: ["NEW"],
-      merchantRiskCeiling: "LOW",
-      autonomousPurchaseThresholdMinor: 10000,
-      humanApprovalThresholdMinor: 10000,
-      allowedCapabilities: ["CAPTURE_PAYMENT"],
-      version: 1,
-      nonce: randomBytes(16).toString("hex"),
-      createdAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 24 * 3600 * 1000).toISOString(),
-    };
+    const mandate = sampleMandate(options.principalId, options.agentId, now);
     await repo.saveMandate(mandate);
     await sql`insert into organizations (id, display_name) values (${options.organizationId}, 'PayFlow Sandbox') on conflict (id) do nothing`;
     await sql`insert into organization_agents (organization_id, agent_id, environment, sponsor_principal_id)
@@ -487,6 +621,63 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         );
         return true;
       }
+    }
+    if (method === "POST" && path === "/v1/sandbox/start") {
+      if (!options.simulated) {
+        send(res, {
+          status: 404,
+          headers: { "content-type": "application/json" },
+          body: {
+            reason: "SANDBOX_NOT_ENABLED",
+            humanSummary: "Self-serve sandbox is not enabled on this host.",
+          },
+        });
+        return true;
+      }
+      const ip =
+        String(req.headers["x-forwarded-for"] ?? "")
+          .split(",")[0]
+          ?.trim() || "unknown";
+      let blocked = false;
+      try {
+        const perIp = await enforceRateLimit(limiter, {
+          bucket: "sandbox-start",
+          subject: ip,
+          limit: 5,
+          windowSeconds: 3600,
+          now: iso(),
+        });
+        const global = await enforceRateLimit(limiter, {
+          bucket: "sandbox-start-all",
+          subject: "all",
+          limit: 200,
+          windowSeconds: 3600,
+          now: iso(),
+        });
+        blocked = !perIp.allowed || !global.allowed;
+      } catch {
+        blocked = true; // fail closed: never mint tenants without a working limiter
+      }
+      if (blocked) {
+        res.writeHead(429, {
+          "content-type": "application/json",
+          "retry-after": "3600",
+          "cache-control": "no-store",
+        });
+        res.end(
+          JSON.stringify({
+            reason: "SANDBOX_RATE_LIMITED",
+            recoverable: true,
+            humanSummary:
+              "Too many sandboxes were started from here. Try again later.",
+            nextAction: "WAIT_AND_RETRY",
+            retryAfterSeconds: 3600,
+          }),
+        );
+        return true;
+      }
+      send(res, await startSandbox());
+      return true;
     }
     if (path.startsWith("/v1/admin/")) {
       if (!admin) {

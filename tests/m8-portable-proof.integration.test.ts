@@ -388,7 +388,11 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
             ["node:crypto", "node:fs/promises", "zod", "./index.js"],
             `${f} imports ${i}`,
           ).toContain(i);
-        expect(code).not.toMatch(/\bfetch\(|XMLHttpRequest|paypal|postgres/i);
+        // Data labels such as the rail name "PayPal Sandbox" are allowed. Payment capability is not:
+        // no fetch, no provider types, no order/capture calls, no payment or database imports.
+        expect(code).not.toMatch(
+          /\bfetch\(|XMLHttpRequest|from\s+"[^"]*(paypal|postgres)|PayPalExecutionRail|PaymentProvider|createOrder|captureOrder|issuer\.issue/i,
+        );
       }
     });
   },

@@ -247,8 +247,10 @@ describe("M8 read-only boundary", () => {
           ["node:crypto", "node:fs/promises", "zod", "./index.js"],
           `${f}: ${i}`,
         ).toContain(i);
+      // Data labels such as the rail name "PayPal Sandbox" are allowed. Payment capability is not:
+      // no fetch, no provider types, no order/capture calls, no payment or database imports.
       expect(code).not.toMatch(
-        /\bfetch\(|XMLHttpRequest|paypal|postgres|issuer\.issue|createOrder|captureOrder/i,
+        /\bfetch\(|XMLHttpRequest|from\s+"[^"]*(paypal|postgres)|PayPalExecutionRail|PaymentProvider|createOrder|captureOrder|issuer\.issue/i,
       );
     }
   });

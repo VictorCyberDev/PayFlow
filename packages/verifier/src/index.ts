@@ -19,6 +19,8 @@ const SubjectSchema = z
     amountMinor: z.number().int().safe().nonnegative(),
     currency: z.string().regex(/^[A-Z]{3}$/),
     merchantId: z.string().min(1),
+    /** Which rail executed it. SIMULATED moves no money. Absent on older proofs. */
+    rail: z.enum(["SIMULATED", "PAYPAL_SANDBOX"]).optional(),
   })
   .strict();
 export type PortableProofSubject = Readonly<z.infer<typeof SubjectSchema>>;
@@ -184,6 +186,11 @@ export function explainProof(result: {
       `Action: ${p.subject.capability === "CAPTURE_PAYMENT" ? "Purchase" : p.subject.capability}`,
       `Amount: ${money(p.subject.amountMinor, p.subject.currency)}`,
       `Merchant: ${p.subject.merchantId}`,
+      ...(p.subject.rail
+        ? [
+            `Rail: ${p.subject.rail === "SIMULATED" ? "Simulated (no real money)" : "PayPal Sandbox"}`,
+          ]
+        : []),
     );
   } else {
     lines.push("Agent/amount/merchant: not recorded in this proof");
