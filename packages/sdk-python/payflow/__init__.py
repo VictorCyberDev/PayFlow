@@ -1,3 +1,3 @@
-from .client import PayFlowClient, PayFlowError
+from .client import ExecuteResult, PayFlowClient, PayFlowError
 
-__all__ = ["PayFlowClient", "PayFlowError"]
+__all__ = ["ExecuteResult", "PayFlowClient", "PayFlowError"]

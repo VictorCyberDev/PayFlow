@@ -5,6 +5,11 @@ import type { RestRequest, RestResponse } from "./rest.js";
 
 export interface ExecutingRestDependencies {
   authenticate(authorization: string | undefined): Promise<ExternalAgentAccess>;
+  /** Reads Proof for an operation owned by the caller; null when absent or not theirs. */
+  readProof?(
+    access: ExternalAgentAccess,
+    proposalId: string,
+  ): Promise<object | null>;
 }
 
 const json = (
@@ -32,6 +37,38 @@ export function createExecutingRestHandler(
 ) {
   return async (request: RestRequest): Promise<RestResponse> => {
     const requestId = `req_${crypto.randomUUID()}`;
+    const proofMatch = request.path.match(
+      /^\/v1\/proofs\/([A-Za-z0-9._:-]{1,128})$/u,
+    );
+    if (request.method === "GET" && proofMatch?.[1] && deps.readProof) {
+      try {
+        const access = await deps.authenticate(request.authorization);
+        const proof = await deps.readProof(access, proofMatch[1]);
+        return proof
+          ? json(200, requestId, { requestId, proof })
+          : json(404, requestId, {
+              requestId,
+              reason: "PROOF_NOT_FOUND",
+              recoverable: false,
+              humanSummary: "No Proof is available for that operation.",
+              nextAction: "CHECK_THE_OPERATION_ID",
+            });
+      } catch (error) {
+        if (error instanceof GatewayAccessError)
+          return json(
+            error.code === "ACCESS_SCOPE_DENIED" ? 403 : 401,
+            requestId,
+            {
+              requestId,
+              reason: error.code,
+              recoverable: false,
+              humanSummary: "This credential cannot read Proof.",
+              nextAction: "USE_A_VALID_CREDENTIAL",
+            },
+          );
+        return json(500, requestId, { requestId, reason: "INTERNAL_ERROR" });
+      }
+    }
     if (request.method !== "POST" || request.path !== "/v1/actions/execute")
       return json(404, requestId, {
         requestId,

@@ -61,8 +61,158 @@ paths:
         Authority binding and presentation replay. This endpoint has no execution capability.
       responses:
         "200": { description: Verification verdict }
+  /v1/actions/execute:
+    post:
+      operationId: executeBoundedPurchase
+      summary: Perform a bounded purchase through the one Authority path.
+      description: >-
+        Authenticated external-agent execution. The request is normalised into the same
+        path every protocol uses: trusted quote, claimed-terms check, Trust Kernel, durable
+        Reservation, one-time execution grant, Execution Boundary, payment rail,
+        reconciliation, Proof. `amount` and `merchant` are untrusted assertions that are
+        compared with the trusted price; they never grant anything.
+
+
+        **Idempotency.** `nonce` is the replay key and is scoped to the Authority and agent.
+        The first presentation wins. A repeat is answered with `REPLAY_DETECTED` and never
+        causes a second provider effect. To retry the same logical request after a
+        transport error, send the same `nonce` and read the Proof; to make a new request,
+        use a new `nonce`.
+
+
+        **Status semantics.** Policy outcomes (ALLOW, DENY, ESCALATE, UNRESOLVED) are
+        HTTP 200 with a structured body. 400/401/403/404 mean the request was refused at
+        the door and `effectCount` is 0. A 5xx means PayFlow cannot tell whether money
+        moved: `effectCount` is `null`, never 0, and `doNotRetry` is true.
+
+
+        **effectCount.** `1` = exactly one provider effect. `0` = PayFlow is certain no
+        provider effect occurred. `null` = unknown; the operation is being reconciled and
+        must not be retried.
+      security: [{ credentialAuth: [action:request] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecuteRequest" }
+      responses:
+        "200":
+          description: A deterministic outcome. Switch on `status`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteOutcome" }
+        "400":
+          description: Malformed request. Nothing was stored. $0 moved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "401":
+          description: Credential missing, unknown, expired or revoked. $0 moved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "403":
+          description: Credential lacks scope, or is not bound to this agent or principal. $0 moved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "404":
+          description: Authority not found for this credential. $0 moved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "500":
+          description: Unexpected failure after acceptance. Effect unknown.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteUnknownFailure" }
+  /v1/proofs/{proposalId}:
+    get:
+      operationId: readProof
+      summary: Read the durable Proof for an operation owned by the calling agent.
+      security: [{ credentialAuth: [proof:read] }]
+      parameters:
+        - in: path
+          name: proposalId
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        "200":
+          description: Read-only Proof projection verified from durable records
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProofEnvelope" }
+        "401":
+          description: Credential invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "403":
+          description: Credential lacks the `proof:read` scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "404":
+          description: No Proof for that id (also returned for another agent's operation)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+  /v1/admin/credentials:
+    post:
+      operationId: issueCredential
+      summary: Issue a scoped, expiring credential for an agent. The secret is shown once.
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CredentialIssueRequest" }
+      responses:
+        "201":
+          description: Issued. `token` is returned only in this response.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CredentialIssued" }
+        "400": { description: Malformed request or unknown agent }
+        "401": { description: Administrative authentication required }
+    get:
+      operationId: listCredentials
+      summary: List credentials for the administrator's tenant and environment. Never returns secrets.
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Credential metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CredentialList" }
+        "401": { description: Administrative authentication required }
+  /v1/admin/credentials/{credentialId}/revoke:
+    post:
+      operationId: revokeCredential
+      summary: Revoke a credential. Idempotent. Takes effect on the next request.
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: credentialId
+          required: true
+          schema: { type: string, pattern: "^pfc_[a-f0-9]{24}$" }
+      responses:
+        "200": { description: Revoked }
+        "401": { description: Administrative authentication required }
+        "404": { description: Not found in this tenant and environment }
 components:
   securitySchemes:
+    credentialAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        PayFlow developer-preview credential `pf_sbx_<id>.<secret>`, issued by
+        `issueCredential`. Bound to one tenant, environment, agent and principal, with
+        scopes, audience and expiry. OAuth/OIDC is the later production path.
+    adminAuth:
+      type: http
+      scheme: bearer
+      description: Administrative secret for one tenant and environment.
     bearerAuth:
       type: oauth2
       flows:
@@ -126,6 +276,280 @@ components:
         metadata:
           type: object
           additionalProperties: { type: string }
+    ExecuteRequest:
+      type: object
+      additionalProperties: false
+      required: [authority, agentId, action, query, amount, merchant, nonce]
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        authority:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 128,
+            description: Authority id.,
+          }
+        agentId:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 128,
+            description: Must equal the credential's agent.,
+          }
+        action: { type: string, const: purchase }
+        query:
+          type: object
+          additionalProperties: false
+          required: [text, quantity]
+          properties:
+            text: { type: string, minLength: 1, maxLength: 200 }
+            quantity: { type: integer, minimum: 1, maximum: 1000 }
+        amount:
+          description: Claimed total in minor units. Verified against the trusted price.
+          $ref: "#/components/schemas/Money"
+        merchant:
+          type: object
+          additionalProperties: false
+          required: [id]
+          properties:
+            id: { type: string, minLength: 1, maxLength: 128 }
+        nonce: { type: string, minLength: 16, maxLength: 128 }
+    ProofReference:
+      type: object
+      additionalProperties: false
+      required: [proposalId]
+      properties:
+        proposalId: { type: [string, "null"] }
+        href: { type: string, description: Path for readProof. }
+        receiptId: { type: string }
+        executionId: { type: string }
+    ExecuteCompleted:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          decision,
+          status,
+          effectCount,
+          recoverable,
+          humanSummary,
+          nextAction,
+          proof,
+        ]
+      properties:
+        requestId: { type: string }
+        decision: { type: string, const: ALLOW }
+        status: { type: string, const: COMPLETED }
+        effectCount: { type: integer, const: 1 }
+        recoverable: { type: boolean, const: false }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+        proof: { $ref: "#/components/schemas/ProofReference" }
+    ExecuteDenied:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          decision,
+          status,
+          effectCount,
+          reason,
+          recoverable,
+          humanSummary,
+          nextAction,
+        ]
+      properties:
+        requestId: { type: string }
+        decision: { type: string, const: DENY }
+        status: { type: string, const: DENIED }
+        effectCount: { type: integer, const: 0 }
+        reason: { type: string, pattern: "^[A-Z0-9_]+$" }
+        recoverable: { type: boolean }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+        proof: { $ref: "#/components/schemas/ProofReference" }
+    ExecuteNeedsApproval:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          decision,
+          status,
+          effectCount,
+          reason,
+          recoverable,
+          humanSummary,
+          nextAction,
+          proof,
+        ]
+      properties:
+        requestId: { type: string }
+        decision: { type: string, const: ESCALATE }
+        status: { type: string, const: NEEDS_APPROVAL }
+        effectCount: { type: integer, const: 0 }
+        reason: { type: string }
+        recoverable: { type: boolean }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+        proof: { $ref: "#/components/schemas/ProofReference" }
+    ExecuteUnresolved:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          decision,
+          status,
+          effectCount,
+          recoverable,
+          doNotRetry,
+          humanSummary,
+          nextAction,
+          proof,
+        ]
+      properties:
+        requestId: { type: string }
+        decision: { type: string, const: ALLOW }
+        status: { type: string, const: UNRESOLVED }
+        effectCount:
+          type: "null"
+          description: Unknown. NEVER zero. PayFlow is confirming with the provider.
+        reason: { type: string }
+        recoverable: { type: boolean, const: false }
+        doNotRetry: { type: boolean, const: true }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+        proof: { $ref: "#/components/schemas/ProofReference" }
+    ExecuteOutcome:
+      oneOf:
+        - $ref: "#/components/schemas/ExecuteCompleted"
+        - $ref: "#/components/schemas/ExecuteDenied"
+        - $ref: "#/components/schemas/ExecuteNeedsApproval"
+        - $ref: "#/components/schemas/ExecuteUnresolved"
+    ExecuteRejection:
+      type: object
+      additionalProperties: true
+      required: [requestId, reason]
+      properties:
+        requestId: { type: string }
+        decision: { type: string, const: DENY }
+        effectCount: { type: integer, const: 0 }
+        reason: { type: string }
+        recoverable: { type: boolean }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+    ExecuteUnknownFailure:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          decision,
+          effectCount,
+          reason,
+          recoverable,
+          doNotRetry,
+          humanSummary,
+          nextAction,
+        ]
+      properties:
+        requestId: { type: string }
+        decision: { type: string, const: DENY }
+        effectCount: { type: "null" }
+        reason: { type: string }
+        recoverable: { type: boolean, const: false }
+        doNotRetry: { type: boolean, const: true }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+    ProofEnvelope:
+      type: object
+      required: [requestId, proof]
+      properties:
+        requestId: { type: string }
+        proof:
+          {
+            type: object,
+            description: "Operation trace projection (payflow operation trace).",
+          }
+    CredentialIssueRequest:
+      type: object
+      additionalProperties: false
+      required: [agentId, scopes, ttlSeconds]
+      properties:
+        agentId: { type: string }
+        scopes:
+          type: array
+          minItems: 1
+          items:
+            {
+              type: string,
+              enum:
+                [
+                  authority:read,
+                  action:request,
+                  verify:read,
+                  proof:read,
+                  reconcile:request,
+                ],
+            }
+        ttlSeconds: { type: integer, minimum: 60, maximum: 7776000 }
+        label: { type: string, maxLength: 128 }
+        audience: { type: string }
+    Credential:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          credentialId,
+          organizationId,
+          environment,
+          agentId,
+          principalId,
+          audience,
+          scopes,
+          label,
+          status,
+          issuedAt,
+          expiresAt,
+          revokedAt,
+          lastUsedAt,
+        ]
+      properties:
+        credentialId: { type: string, pattern: "^pfc_[a-f0-9]{24}$" }
+        organizationId: { type: string }
+        environment: { type: string, enum: [SANDBOX, PRODUCTION] }
+        agentId: { type: string }
+        principalId: { type: string }
+        audience: { type: string }
+        scopes: { type: array, items: { type: string } }
+        label: { type: string }
+        status: { type: string, enum: [ACTIVE, REVOKED] }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: [string, "null"] }
+        lastUsedAt: { type: [string, "null"] }
+    CredentialIssued:
+      type: object
+      additionalProperties: false
+      required: [requestId, credential, token, notice]
+      properties:
+        requestId: { type: string }
+        credential: { $ref: "#/components/schemas/Credential" }
+        token:
+          { type: string, description: Shown once. Never retrievable again. }
+        notice: { type: string }
+    CredentialList:
+      type: object
+      additionalProperties: false
+      required: [requestId, credentials]
+      properties:
+        requestId: { type: string }
+        credentials:
+          type: array
+          items: { $ref: "#/components/schemas/Credential" }
     Error:
       type: object
       additionalProperties: false

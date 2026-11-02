@@ -64,6 +64,8 @@ export interface GatewayExecutionResponse {
   /** Opaque references for the Proof surface. Contains no credentials or provider secrets. */
   readonly proof?: Readonly<{
     proposalId: string | null;
+    /** Path to read the durable Proof (scope `proof:read`). Absent when no proposal exists. */
+    href?: string;
     receiptId?: string;
     executionId?: string;
   }>;
@@ -130,6 +132,15 @@ function mapRefusal(code: string, limit: string): Mapped {
         recoverable: true,
         humanSummary: `Nothing available fits inside this Authority (limit ${limit}). $0 moved.`,
         nextAction: "CHANGE_REQUEST_OR_REQUEST_APPROVAL",
+      };
+    case "DISCOVERY_AUTHORITY_UNAVAILABLE":
+    case "AUTHORITY_UNAVAILABLE":
+      return {
+        reason: "AUTHORITY_UNAVAILABLE",
+        recoverable: false,
+        humanSummary:
+          "This Authority isn't available right now: it may be suspended, stopped or expired. $0 moved.",
+        nextAction: "ASK_OWNER_TO_REVIEW_AUTHORITY",
       };
     case "MANDATE_REVOKED":
     case "PRINCIPAL_INACTIVE":
@@ -224,7 +235,16 @@ export class ExecutingGateway {
         merchantId: request.merchant.id,
       },
     });
-    const response = this.present(requestId, outcome, limit);
+    const presented = this.present(requestId, outcome, limit);
+    const response: GatewayExecutionResponse = presented.proof?.proposalId
+      ? Object.freeze({
+          ...presented,
+          proof: Object.freeze({
+            ...presented.proof,
+            href: `/v1/proofs/${encodeURIComponent(presented.proof.proposalId)}`,
+          }),
+        })
+      : presented;
     emit(
       response.status === "COMPLETED"
         ? "gateway.executed"

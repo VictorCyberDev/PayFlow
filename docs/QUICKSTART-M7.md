@@ -1,0 +1,115 @@
+# Quickstart — your first safe action
+
+> **Status: developer preview, PayPal Sandbox only. No real money moves.**
+> The "under five minutes" target is a goal. It has **not been measured**; do not quote it
+> until a timed run with a developer who did not build PayFlow is recorded here.
+
+You will: get a sandbox credential, install the SDK, send an allowed purchase, break the
+Authority on purpose to see a `$0 moved` refusal, and inspect the Proof.
+
+## 1. Get a sandbox credential
+
+An administrator of your sandbox tenant issues a scoped, expiring credential for one agent.
+The secret is shown **once**; PayFlow stores only a digest.
+
+```bash
+curl -sS -X POST "$PAYFLOW_URL/v1/admin/credentials" \
+  -H "authorization: Bearer $PAYFLOW_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"agentId":"<agent id>","scopes":["action:request","proof:read"],"ttlSeconds":3600,"label":"quickstart"}'
+```
+
+Keep the returned `token` (`pf_sbx_…`) in `PAYFLOW_TOKEN`. Revoke it any time with
+`POST /v1/admin/credentials/<credentialId>/revoke`; the next request fails closed.
+
+## 2. Install the SDK
+
+```bash
+# TypeScript: build from packages/sdk-typescript (not yet published to npm)
+pip install ./packages/sdk-python   # Python
+```
+
+## 3. Use an Authority
+
+An Authority is the boundary a person set for your agent. The sandbox sample is the
+**Keyboard Authority**: one new keyboard, approved merchant only, up to **$100**. Its id and the
+agent id are shown in the sandbox console. You need its Authority id, agent id and the owner's
+connected sandbox wallet (the owner connects it once).
+
+## 4. Send an allowed action
+
+```ts
+import { PayFlowClient } from "@payflow/authority-sdk";
+
+const payflow = new PayFlowClient({
+  baseUrl: process.env.PAYFLOW_URL!,
+  accessToken: process.env.PAYFLOW_TOKEN!,
+});
+
+const result = await payflow.actions.execute({
+  authority: "<authority id>",
+  agent: "<agent id>",
+  item: "Quiet keyboard",
+  amount: 8400, // $84.00, in cents. Checked against the trusted price, never trusted.
+  currency: "USD",
+  merchant: "payflow.demo.merchant",
+  nonce: "order-0001-attempt-1", // idempotency key, min 16 chars
+});
+```
+
+```python
+from payflow import PayFlowClient
+payflow = PayFlowClient(PAYFLOW_URL, PAYFLOW_TOKEN)
+result = payflow.actions.execute(authority="…", agent="…", item="Quiet keyboard",
+                                 amount=8400, currency="USD",
+                                 merchant="payflow.demo.merchant", nonce="order-0001-attempt-1")
+```
+
+## 5. Read the outcome
+
+Switch on `result.status`:
+
+| status           | meaning                                | `effectCount` |
+| ---------------- | -------------------------------------- | ------------- |
+| `COMPLETED`      | **$84 paid once**                      | `1`           |
+| `DENIED`         | refused, **$0 moved**; read `reason`   | `0`           |
+| `NEEDS_APPROVAL` | above what the agent may do alone      | `0`           |
+| `UNRESOLVED`     | we're confirming whether money moved   | `null`        |
+| `REJECTED`       | bad credential, scope or shape         | `0`           |
+| `INDETERMINATE`  | transport/server failure after sending | `null`        |
+
+`effectCount: null` means **unknown, not zero**. Do not retry; read the Proof later. Reusing
+a `nonce` is always safe: a repeat is denied with `REPLAY_DETECTED` and never pays twice.
+
+## 6. Break the Authority on purpose
+
+Ask for more than the trusted price or a merchant the Authority does not include:
+
+```ts
+const blocked = await payflow.actions.execute({
+  /* …same… */ amount: 18400,
+  nonce: "order-0002-attempt-1",
+});
+// { status: "DENIED", effectCount: 0, reason: "CLAIMED_TERMS_DO_NOT_MATCH_TRUSTED_PRICE",
+//   recoverable: true, nextAction: "REFRESH_QUOTE_AND_RETRY_WITH_NEW_NONCE",
+//   humanSummary: "The amount or merchant in the request does not match the trusted price." }
+```
+
+Nothing was reserved, no grant was issued and PayPal was never called. `recoverable` and
+`nextAction` tell an agent how to recover; they never let it widen its own Authority.
+
+## 7. Inspect the Proof
+
+```ts
+const proof = await payflow.proofs.get(result.proof!.proposalId!);
+```
+
+The Proof is the durable operation trace: Principal → Agent → Authority → quote → manifest →
+decision → Reservation → one-time grant → payment attempt → provider capture → outcome.
+It contains no credentials.
+
+## What is real and what is not
+
+- Execution runs through PayFlow's Trust Kernel and the PayPal **Sandbox** rail.
+- Credentials are PayFlow bearer tokens (preview). OAuth/OIDC is a later production path.
+- The catalog and merchant are a controlled demo merchant.
