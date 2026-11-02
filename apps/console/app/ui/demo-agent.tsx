@@ -21,13 +21,96 @@ const result: Record<DemoOutcome["status"], string> = {
   UNRESOLVED: "Checking what happened — don't retry yet.",
 };
 
+function safeDiagnostic(error: unknown) {
+  const code = error instanceof Error ? error.message : "UNAVAILABLE";
+  return /^[A-Z0-9_]{3,96}$/.test(code) ? code : "UNAVAILABLE";
+}
+
+/** Owner-scoped Sandbox wallet control. It is independent of any Authority. */
+export function SandboxWalletPanel() {
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [diagnostic, setDiagnostic] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void fetchPayPalVaultStatus().then((v) => live && setConnected(v));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    if (u.searchParams.get("paypal") !== "approved") return;
+    const state = u.searchParams.get("state");
+    void Promise.resolve()
+      .then(() => {
+        setBusy(true);
+        setDiagnostic(null);
+        return state ? completePayPalVaultConnection(state) : false;
+      })
+      .then((ok) => {
+        setConnected(ok);
+        if (!ok) setDiagnostic("PAYPAL_VAULT_COMPLETE_FAILED");
+        u.searchParams.delete("paypal");
+        u.searchParams.delete("state");
+        window.history.replaceState({}, "", u.pathname + u.search + u.hash);
+      })
+      .catch((error) => setDiagnostic(safeDiagnostic(error)))
+      .finally(() => setBusy(false));
+  }, []);
+
+  async function connect() {
+    setBusy(true);
+    setDiagnostic(null);
+    try {
+      await startPayPalVaultConnection();
+    } catch (error) {
+      setBusy(false);
+      setDiagnostic(safeDiagnostic(error));
+    }
+  }
+
+  return (
+    <section className="block" aria-labelledby="sandbox-wallet">
+      <h2 id="sandbox-wallet" className="label">
+        Sandbox payment wallet
+      </h2>
+      <p>
+        Connect one PayPal Sandbox buyer to this demo owner. The wallet stays
+        available across Authorities; creating, revoking, or replacing an
+        Authority does not require reconnecting it.
+      </p>
+      {connected === true ? (
+        <p className="body-lg">PayPal Sandbox connected.</p>
+      ) : (
+        <button
+          type="button"
+          className="btn btn--quiet"
+          disabled={busy}
+          onClick={() => void connect()}
+        >
+          {busy ? "Connecting…" : "Connect Sandbox PayPal"}
+        </button>
+      )}
+      {diagnostic && (
+        <p className="banner" role="status">
+          Sandbox wallet setup did not complete. No money moved. Diagnostic: {diagnostic}
+        </p>
+      )}
+    </section>
+  );
+}
+
 /** Demonstration only: simulates an Agent shopping. It never widens or replaces the Authority. */
 export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
   const { retry } = useConsole();
   const [offer, setOffer] = useState<{ payment: string } | null>(null);
   const [vaultConnected, setVaultConnected] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<DemoOutcome | "ERROR" | null>(null);
+  const [outcome, setOutcome] = useState<DemoOutcome | null>(null);
+  const [diagnostic, setDiagnostic] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -50,11 +133,12 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
     void Promise.resolve()
       .then(() => {
         setBusy(true);
+        setDiagnostic(null);
         return state ? completePayPalVaultConnection(state) : false;
       })
       .then(async (ok) => {
         setVaultConnected(ok);
-        setOutcome(ok ? null : "ERROR");
+        if (!ok) setDiagnostic("PAYPAL_VAULT_COMPLETE_FAILED");
         if (ok) {
           const agent = await fetchDemoAgentStatus();
           if (agent) setOffer(agent);
@@ -63,7 +147,7 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
         u.searchParams.delete("state");
         window.history.replaceState({}, "", u.pathname + u.search + u.hash);
       })
-      .catch(() => setOutcome("ERROR"))
+      .catch((error) => setDiagnostic(safeDiagnostic(error)))
       .finally(() => setBusy(false));
   }, []);
 
@@ -73,21 +157,23 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
   async function connectWallet() {
     setBusy(true);
     setOutcome(null);
+    setDiagnostic(null);
     try {
       await startPayPalVaultConnection(mandateId);
-    } catch {
+    } catch (error) {
       setBusy(false);
-      setOutcome("ERROR");
+      setDiagnostic(safeDiagnostic(error));
     }
   }
 
   async function run(scenario: DemoScenario) {
     setBusy(true);
     setOutcome(null);
+    setDiagnostic(null);
     try {
       setOutcome(await runDemoScenario(mandateId, scenario));
-    } catch {
-      setOutcome("ERROR");
+    } catch (error) {
+      setDiagnostic(safeDiagnostic(error));
     } finally {
       setBusy(false);
       retry();
@@ -107,9 +193,9 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
       {vaultConnected === false && (
         <div className="banner">
           <p>
-            Connect one Sandbox PayPal buyer once. This only saves the
-            buyer&apos;s Sandbox wallet for delegated testing; it does not make
-            a purchase.
+            The owner has not connected a Sandbox PayPal wallet yet. You can
+            connect it here or from the Authorities page; the connection is not
+            tied to this Authority.
           </p>
           <button
             type="button"
@@ -124,8 +210,8 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
 
       {vaultConnected === true && !paymentRailConnected && (
         <p className="note">
-          Sandbox wallet approved and stored securely. The payment rail is still
-          disabled until final M6 acceptance wiring is enabled.
+          Sandbox wallet approved and stored securely. Payment readiness is
+          still being verified; do not retry a purchase until it reports ready.
         </p>
       )}
 
@@ -149,18 +235,23 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
       </p>
       {!paymentRailConnected && vaultConnected !== true && (
         <p className="note">
-          Payments aren&apos;t connected in this demo, so only the blocked case
-          can run.
+          Payments aren't connected in this demo, so only the blocked case can
+          run.
         </p>
       )}
       <div role="status" aria-live="polite" aria-busy={busy}>
         {busy && <p className="note">Working…</p>}
-        {outcome === "ERROR" && (
-          <p className="banner">That didn&apos;t run. Nothing changed.</p>
+        {diagnostic && (
+          <p className="banner">
+            The agent did not execute. No money moved. Diagnostic: {diagnostic}
+          </p>
         )}
-        {outcome && outcome !== "ERROR" && (
+        {outcome && (
           <p className="body-lg">
             {result[outcome.status]}{" "}
+            {outcome.code && outcome.status !== "COMPLETED" && (
+              <span className="note">Diagnostic: {outcome.code}. </span>
+            )}
             {outcome.operationId && (
               <Link
                 className="text-link"
