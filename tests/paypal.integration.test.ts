@@ -2171,10 +2171,11 @@ run("Milestone 2D durable PayPal execution", () => {
           (result) => result,
         );
       let blocked = false;
-      for (let probe = 0; probe < 100 && !blocked; probe++) {
+      for (let probe = 0; probe < 200 && !blocked; probe++) {
         const rows =
           await repo.sql`select pid from pg_stat_activity where query like ${"%2e_revocation_race%"} and wait_event_type='Lock'`;
         blocked = rows.length === 1;
+        if (!blocked) await new Promise((r) => setTimeout(r, 25));
       }
       expect(blocked).toBe(true);
       release();
@@ -2344,10 +2345,11 @@ run("Milestone 2D durable PayPal execution", () => {
         // Attach the handler immediately: the intentional denial is not an unhandled rejection.
         const outcome = execution.catch((error: unknown) => error);
         let blocked = false;
-        for (let probe = 0; probe < 100 && !blocked; probe++) {
+        for (let probe = 0; probe < 200 && !blocked; probe++) {
           const rows =
             await repo.sql`select pid from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))`;
           blocked = rows.length > 0;
+          if (!blocked) await new Promise((r) => setTimeout(r, 25));
         }
         expect(blocked).toBe(true);
         if (change === "expiration") clock = "2026-10-09T12:03:00.000Z";
@@ -2417,10 +2419,11 @@ run("Milestone 2D durable PayPal execution", () => {
             (rows) => rows,
           );
         let blocked = false;
-        for (let probe = 0; probe < 100 && !blocked; probe++) {
+        for (let probe = 0; probe < 200 && !blocked; probe++) {
           const rows =
             await repo.sql`select pid from pg_stat_activity where query like ${"%closure_dispatch_wins%"} and wait_event_type='Lock'`;
           blocked = rows.length === 1;
+          if (!blocked) await new Promise((r) => setTimeout(r, 25));
         }
         expect(blocked).toBe(true);
         release();
