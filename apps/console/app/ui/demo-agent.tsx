@@ -21,6 +21,12 @@ const result: Record<DemoOutcome["status"], string> = {
   UNRESOLVED: "Checking what happened — don't retry yet.",
 };
 
+const narrowControl = {
+  maxWidth: "100%",
+  whiteSpace: "normal" as const,
+  overflowWrap: "anywhere" as const,
+};
+
 function safeDiagnostic(error: unknown) {
   const code = error instanceof Error ? error.message : "UNAVAILABLE";
   return /^[A-Z0-9_]{3,96}$/.test(code) ? code : "UNAVAILABLE";
@@ -73,7 +79,11 @@ export function SandboxWalletPanel() {
   }
 
   return (
-    <section className="block" aria-labelledby="sandbox-wallet">
+    <section
+      className="block"
+      aria-labelledby="sandbox-wallet"
+      style={{ minWidth: 0, maxWidth: "100%" }}
+    >
       <h2 id="sandbox-wallet" className="label">
         Sandbox payment wallet
       </h2>
@@ -88,6 +98,7 @@ export function SandboxWalletPanel() {
         <button
           type="button"
           className="btn btn--quiet"
+          style={narrowControl}
           disabled={busy}
           onClick={() => void connect()}
         >
@@ -95,7 +106,11 @@ export function SandboxWalletPanel() {
         </button>
       )}
       {diagnostic && (
-        <p className="banner" role="status">
+        <p
+          className="banner"
+          role="status"
+          style={{ minWidth: 0, overflowWrap: "anywhere" }}
+        >
           Sandbox wallet setup did not complete. No money moved. Diagnostic:{" "}
           {diagnostic}
         </p>
@@ -182,7 +197,11 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
   }
 
   return (
-    <section className="block demo-agent" aria-labelledby="try-agent">
+    <section
+      className="block demo-agent"
+      aria-labelledby="try-agent"
+      style={{ minWidth: 0, maxWidth: "100%" }}
+    >
       <h2 id="try-agent" className="label">
         Demo · Try your Agent
       </h2>
@@ -192,7 +211,7 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
       </p>
 
       {vaultConnected === false && (
-        <div className="banner">
+        <div className="banner" style={{ minWidth: 0, overflowWrap: "anywhere" }}>
           <p>
             The owner has not connected a Sandbox PayPal wallet yet. You can
             connect it here or from the Authorities page; the connection is not
@@ -201,6 +220,7 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
           <button
             type="button"
             className="btn btn--quiet"
+            style={narrowControl}
             disabled={busy}
             onClick={() => void connectWallet()}
           >
@@ -220,6 +240,7 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
         <button
           type="button"
           className="btn btn--quiet"
+          style={narrowControl}
           disabled={busy || !paymentRailConnected}
           onClick={() => void run("VALID_PURCHASE")}
         >
@@ -228,6 +249,7 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
         <button
           type="button"
           className="btn btn--quiet"
+          style={narrowControl}
           disabled={busy}
           onClick={() => void run("PRICE_DRIFT")}
         >
@@ -243,7 +265,7 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
       <div role="status" aria-live="polite" aria-busy={busy}>
         {busy && <p className="note">Working…</p>}
         {diagnostic && (
-          <p className="banner">
+          <p className="banner" style={{ minWidth: 0, overflowWrap: "anywhere" }}>
             The agent did not execute. No money moved. Diagnostic: {diagnostic}
           </p>
         )}
