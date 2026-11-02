@@ -622,3 +622,79 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Break Authority research page */
+.break-authority .ba-outcome {
+  font-family: var(--font-display, inherit);
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  line-height: 1.1;
+  margin: 0.5rem 0;
+}
+.break-authority .ba-scope {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.875rem;
+  border-left: 3px solid currentColor;
+  padding-left: 0.75rem;
+  max-width: 60ch;
+}
+.break-authority .ba-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.break-authority .ba-table caption {
+  text-align: left;
+  padding-bottom: 0.5rem;
+}
+.break-authority .ba-table th,
+.break-authority .ba-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-bottom: 1px solid rgb(127 127 127 / 0.3);
+}
+.break-authority .ba-digests div {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0 0 0.75rem;
+}
+.break-authority .ba-digests div,
+.break-authority .ba-digests dd {
+  min-width: 0;
+}
+.break-authority .ba-digests dd {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+.break-authority .ba-digests code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.break-authority .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .break-authority .ba-table {
+    font-size: 0.8125rem;
+    table-layout: fixed;
+  }
+  .break-authority .ba-table thead th {
+    font-size: 0.6875rem;
+    overflow-wrap: normal;
+    hyphens: none;
+  }
+  .break-authority .ba-table th:first-child {
+    width: 32%;
+  }
+  .break-authority .ba-table th,
+  .break-authority .ba-table td {
+    padding-right: 0.4rem;
+    overflow-wrap: anywhere;
+    hyphens: auto;
+  }
+}
