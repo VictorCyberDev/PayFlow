@@ -1,4 +1,4 @@
-import type { KeyObject } from "node:crypto";
+import type { JsonWebKey, KeyObject } from "node:crypto";
 import { z } from "zod";
 import { DurableCheckoutService } from "./checkout.js";
 import {
@@ -69,6 +69,20 @@ export class DemoShoppingAgent {
     this.keys = new StaticPublicKeyRing(
       new Map([[deps.signing.kid, deps.signing.publicKey]]),
     );
+  }
+  /** Public verification material for the grant/proof signing key. Never the private key. */
+  verificationKey(): { keyId: string; jwk: JsonWebKey } {
+    return {
+      keyId: this.deps.signing.kid,
+      jwk: this.deps.signing.publicKey.export({ format: "jwk" }),
+    };
+  }
+  /** Signing handle for the portable Proof issuer. Server-side only. */
+  signingForProofs(): { keyId: string; privateKey: KeyObject } {
+    return {
+      keyId: this.deps.signing.kid,
+      privateKey: this.deps.signing.privateKey,
+    };
   }
   /** Backwards-compatible configuration signal. Hosted status uses paymentAvailable(). */
   get paymentConnected(): boolean {

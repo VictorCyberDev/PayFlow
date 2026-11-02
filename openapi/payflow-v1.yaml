@@ -157,6 +157,58 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ExecuteRejection" }
+  /v1/proofs/{proposalId}/portable:
+    get:
+      operationId: readPortableProof
+      summary: A signed, portable Proof that a separate party can verify offline.
+      description: >-
+        Signs a `payflow-proof/v1` from the already-verified operation trace. `outcome` is
+        SUCCEEDED (`effectCount` 1), FAILED (0) or UNKNOWN (`null`, never 0). Verify it with the
+        public key from `listPublicKeys` and `payflow-verify`; no PayFlow session is needed.
+        Returns 409 until the outcome is verified.
+      security: [{ credentialAuth: [proof:read] }]
+      parameters:
+        - in: path
+          name: proposalId
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        "200":
+          description: Signed portable Proof
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortableProofEnvelope" }
+        "401":
+          description: Credential invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "403":
+          description: Credential lacks the `proof:read` scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "404":
+          description: No Proof for that id (also returned for another agent's operation)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "409":
+          description: The outcome is not verified yet; no portable Proof can be signed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+  /v1/keys:
+    get:
+      operationId: listPublicKeys
+      summary: Public verification keys. Unauthenticated; they can verify, never sign.
+      security: []
+      responses:
+        "200":
+          description: Issuer and public JWKs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicKeys" }
   /v1/admin/credentials:
     post:
       operationId: issueCredential
@@ -550,6 +602,59 @@ components:
         credentials:
           type: array
           items: { $ref: "#/components/schemas/Credential" }
+    PortableProof:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          version,
+          issuer,
+          keyId,
+          authorityId,
+          actionId,
+          outcome,
+          effectCount,
+          observedAt,
+          evidenceDigest,
+          signature,
+        ]
+      properties:
+        version: { type: string, const: payflow-proof/v1 }
+        issuer: { type: string }
+        keyId: { type: string }
+        authorityId: { type: string }
+        actionId: { type: string }
+        outcome: { type: string, enum: [SUCCEEDED, FAILED, UNKNOWN] }
+        effectCount:
+          description: 1 for SUCCEEDED, 0 for FAILED, null for UNKNOWN (never 0).
+          type: [integer, "null"]
+          enum: [0, 1, null]
+        observedAt: { type: string, format: date-time }
+        evidenceDigest: { type: string, pattern: "^[a-f0-9]{64}$" }
+        signature: { type: string }
+    PortableProofEnvelope:
+      type: object
+      additionalProperties: false
+      required: [requestId, proof]
+      properties:
+        requestId: { type: string }
+        proof: { $ref: "#/components/schemas/PortableProof" }
+    PublicKeys:
+      type: object
+      additionalProperties: false
+      required: [requestId, issuer, keys]
+      properties:
+        requestId: { type: string }
+        issuer: { type: string }
+        keys:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [keyId, jwk]
+            properties:
+              keyId: { type: string }
+              jwk: { type: object }
     Error:
       type: object
       additionalProperties: false

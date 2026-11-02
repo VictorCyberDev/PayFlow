@@ -6,6 +6,13 @@ import type { RestRequest, RestResponse } from "./rest.js";
 export interface ExecutingRestDependencies {
   authenticate(authorization: string | undefined): Promise<ExternalAgentAccess>;
   /** Reads Proof for an operation owned by the caller; null when absent or not theirs. */
+  /** Signed portable Proof; "NOT_ISSUABLE" when the trace cannot yet support one. */
+  issuePortableProof?(
+    access: ExternalAgentAccess,
+    proposalId: string,
+  ): Promise<object | "NOT_ISSUABLE" | null>;
+  /** Public verification keys. Public by design: they verify, they cannot sign. */
+  publicKeys?(): object;
   readProof?(
     access: ExternalAgentAccess,
     proposalId: string,
@@ -37,6 +44,60 @@ export function createExecutingRestHandler(
 ) {
   return async (request: RestRequest): Promise<RestResponse> => {
     const requestId = `req_${crypto.randomUUID()}`;
+    if (
+      request.method === "GET" &&
+      request.path === "/v1/keys" &&
+      deps.publicKeys
+    )
+      return json(200, requestId, { requestId, ...deps.publicKeys() });
+    const portableMatch = request.path.match(
+      /^\/v1\/proofs\/([A-Za-z0-9._:-]{1,128})\/portable$/u,
+    );
+    if (
+      request.method === "GET" &&
+      portableMatch?.[1] &&
+      deps.issuePortableProof
+    ) {
+      try {
+        const access = await deps.authenticate(request.authorization);
+        const portable = await deps.issuePortableProof(
+          access,
+          portableMatch[1],
+        );
+        if (portable === "NOT_ISSUABLE")
+          return json(409, requestId, {
+            requestId,
+            reason: "PROOF_NOT_ISSUABLE",
+            recoverable: true,
+            humanSummary:
+              "The outcome isn't verified yet, so no portable Proof can be signed. Try again after reconciliation.",
+            nextAction: "READ_PROOF_AND_RETRY_LATER",
+          });
+        return portable
+          ? json(200, requestId, { requestId, proof: portable })
+          : json(404, requestId, {
+              requestId,
+              reason: "PROOF_NOT_FOUND",
+              recoverable: false,
+              humanSummary: "No Proof is available for that operation.",
+              nextAction: "CHECK_THE_OPERATION_ID",
+            });
+      } catch (error) {
+        if (error instanceof GatewayAccessError)
+          return json(
+            error.code === "ACCESS_SCOPE_DENIED" ? 403 : 401,
+            requestId,
+            {
+              requestId,
+              reason: error.code,
+              recoverable: false,
+              humanSummary: "This credential cannot read Proof.",
+              nextAction: "USE_A_VALID_CREDENTIAL",
+            },
+          );
+        return json(500, requestId, { requestId, reason: "INTERNAL_ERROR" });
+      }
+    }
     const proofMatch = request.path.match(
       /^\/v1\/proofs\/([A-Za-z0-9._:-]{1,128})$/u,
     );

@@ -28,7 +28,7 @@ function canonicalize(value: unknown): unknown {
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
-        .sort(([a], [b]) => a.localeCompare(b))
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([key, child]) => [key, canonicalize(child)]),
     );
   }
@@ -41,22 +41,29 @@ export function portableProofPayloadBytes(
   return Buffer.from(JSON.stringify(canonicalize(payload)), "utf8");
 }
 
+/**
+ * `maxAgeSeconds` is a freshness window for live presentations (default 24h). Pass `null` to
+ * verify historical evidence by authenticity only: a proof of a past payment stays valid forever,
+ * but a proof dated in the future is always refused.
+ */
 export function verifyPortableProof(
   raw: unknown,
   publicJwk: JsonWebKey,
   now: string,
-  maxAgeSeconds = 86400,
+  maxAgeSeconds: number | null = 86400,
 ): { valid: boolean; reason: string; proof?: PortableProof } {
   const parsed = PortableProofSchema.safeParse(raw);
   if (!parsed.success) return { valid: false, reason: "MALFORMED_PROOF" };
   const proof = parsed.data;
   const observed = Date.parse(proof.observedAt);
   const at = Date.parse(now);
-  if (
-    !Number.isFinite(observed) ||
-    !Number.isFinite(at) ||
-    Math.abs(at - observed) > maxAgeSeconds * 1000
-  ) {
+  if (!Number.isFinite(observed) || !Number.isFinite(at)) {
+    return { valid: false, reason: "STALE_PROOF" };
+  }
+  if (maxAgeSeconds === null) {
+    if (observed - at > 5 * 60 * 1000)
+      return { valid: false, reason: "PROOF_FROM_FUTURE" };
+  } else if (Math.abs(at - observed) > maxAgeSeconds * 1000) {
     return { valid: false, reason: "STALE_PROOF" };
   }
   let key;

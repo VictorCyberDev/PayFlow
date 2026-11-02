@@ -108,6 +108,18 @@ The Proof is the durable operation trace: Principal → Agent → Authority → 
 decision → Reservation → one-time grant → payment attempt → provider capture → outcome.
 It contains no credentials.
 
+## 8. Verify it independently (optional)
+
+A merchant or auditor can check the outcome without your session or any PayFlow server access:
+
+```bash
+curl -H "authorization: Bearer $PAYFLOW_TOKEN" "$PAYFLOW_URL/v1/proofs/<proposalId>/portable" > proof.json
+curl "$PAYFLOW_URL/v1/keys"      # public keys only
+payflow-verify proof.json public-jwk.json   # exit 0 = authentic; add --max-age 3600 to require freshness
+```
+
+An `UNKNOWN` outcome is signed as `UNKNOWN` with `effectCount: null`; it can never verify as a success.
+
 ## What is real and what is not
 
 - Execution runs through PayFlow's Trust Kernel and the PayPal **Sandbox** rail.

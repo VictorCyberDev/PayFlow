@@ -13,6 +13,7 @@ import {
 } from "./admin-rest.js";
 import { CredentialStore } from "./credentials.js";
 import { ExecutingGateway } from "./gateway-execution.js";
+import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
 import { createExecutingRestHandler } from "./rest-execution.js";
 import type { RestRequest, RestResponse } from "./rest.js";
@@ -69,7 +70,18 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     now: iso,
   });
   const proofs = new ProofReader(repo, demo.keys);
+  const key = demo.verificationKey();
+  const portable = new PortableProofIssuer(proofs, {
+    issuer: options.organizationId,
+    keyId: key.keyId,
+    privateKey: demo.signingForProofs().privateKey,
+  });
   const executing = createExecutingRestHandler(gateway, {
+    issuePortableProof: (access, id) => portable.issue(access, id, iso()),
+    publicKeys: () => ({
+      issuer: options.organizationId,
+      keys: [{ keyId: key.keyId, jwk: key.jwk }],
+    }),
     authenticate: (authorization) => store.authenticate(authorization, iso()),
     readProof: (access, id) => proofs.read(access, id, iso()),
   });

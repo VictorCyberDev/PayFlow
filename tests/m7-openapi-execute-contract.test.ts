@@ -17,6 +17,8 @@ const spec = parse(readFileSync("openapi/payflow-v1.yaml", "utf8")) as {
 const exec = createExecutingRestHandler({} as ExecutingGateway, {
   authenticate: () => Promise.reject(new GatewayAccessError("ACCESS_INACTIVE")),
   readProof: () => Promise.resolve(null),
+  issuePortableProof: () => Promise.resolve("NOT_ISSUABLE"),
+  publicKeys: () => ({ issuer: "i", keys: [] }),
 });
 const admin = createCredentialAdminHandler({} as CredentialStore, {
   authenticateAdmin: () => {
@@ -33,16 +35,19 @@ describe("OpenAPI ↔ executing REST handlers do not drift", () => {
   const documented = Object.entries(spec.paths).filter(
     ([p]) =>
       p === "/v1/actions/execute" ||
+      p === "/v1/keys" ||
       p.startsWith("/v1/proofs/") ||
       p.startsWith("/v1/admin/"),
   );
 
-  it("documents the four executing/credential/proof route families", () => {
+  it("documents the executing, credential, proof and key route families", () => {
     expect(documented.map(([p]) => p).sort()).toEqual([
       "/v1/actions/execute",
       "/v1/admin/credentials",
       "/v1/admin/credentials/{credentialId}/revoke",
+      "/v1/keys",
       "/v1/proofs/{proposalId}",
+      "/v1/proofs/{proposalId}/portable",
     ]);
   });
 

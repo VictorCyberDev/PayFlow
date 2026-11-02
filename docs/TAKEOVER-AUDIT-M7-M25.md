@@ -156,11 +156,29 @@ Defect found by the live run and fixed afterwards in source (not redeployed): ke
 `CUMULATIVE_LIMIT_EXCEEDED`, `QUANTITY_EXHAUSTED`, `MERCHANT_NOT_ALLOWED`, `MANDATE_EXPIRED`,
 `AGENT_SUSPENDED` and an internal `DELEGATED_REQUEST_REFUSED` produced a generic message.
 
-## 7. M8 audit findings (in progress)
+## 7. M8 independent Verify — audit and work (source-level; not yet deployed)
 
-- Verify checks signature, audience, challenge, expiry, lifecycle, binding and replay.
-- The portable proof verifier (`payflow-proof/v1`) exists, but **nothing issues a signed portable
-  proof from an executed Gateway operation**. A separate client therefore cannot yet verify a
-  Gateway outcome without the operation trace.
-- Both canonicalizers sort keys with `localeCompare`, which is locale-dependent. It should be a
-  code-point sort, with a test that proves existing signatures are unchanged.
+Fresh line-by-line audit of `src/network/verify.ts`, `packages/verifier`, `packages/merchant-sdk`:
+
+| M8 requirement                                                                    | Finding                                                                                                                     | Action                                                                                                                                          |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Verify signature, challenge, audience, issuer, expiry, revocation, tamper, replay | Present in `verifyAuthorityPresentation` (Ed25519; verdicts VALID/INVALID/EXPIRED/REVOKED/WRONG_AUDIENCE/TAMPERED/REPLAYED) | Preserved                                                                                                                                       |
+| Read-only security                                                                | Verifier package imports only `node:crypto`, `zod`, `node:fs/promises`                                                      | Now enforced by a test that fails on any payment, database or network import                                                                    |
+| Evidence a separate client can verify                                             | **Gap.** `payflow-proof/v1` existed but nothing issued one from an executed Gateway operation                               | `PortableProofIssuer` signs it from the existing verified trace; `GET /v1/proofs/{id}/portable`, `GET /v1/keys`                                 |
+| CLI                                                                               | **Defect.** Rejected any proof older than 24 h as `STALE_PROOF`, so last week's payment looked invalid                      | Historical evidence verifies by authenticity; freshness is opt-in `--max-age`; future-dated proofs always refused                               |
+| Canonical bytes                                                                   | **Hazard.** Key sort used locale-dependent `localeCompare`                                                                  | Portable proof and presentation moved to code-point order; a test pins identical order for their exact key sets so no existing signature breaks |
+| UNKNOWN                                                                           | —                                                                                                                           | Signed as `UNKNOWN` with `effectCount: null`; rewriting it to success fails verification                                                        |
+
+Deliberately **not** changed: the `localeCompare` canonicalizers in `execution-grant.ts`, `evidence.ts`,
+`canonical.ts`, `persistence.ts`, `trust-trace.ts` and others. They protect historical signed and
+hash-chained M6 evidence. They are listed as a known cross-implementation hazard (ASCII keys make
+them deterministic in practice).
+
+Evidence: `tests/m8-portable-proof.integration.test.ts` runs the CLI in a **separate process with no
+database and no PayFlow environment** against a proof fetched over real HTTP from the hosted
+composition: valid, four tamper cases, wrong key, historical vs `--max-age`, UNKNOWN, scope and
+ownership, public-key endpoint exposes no private material.
+
+Remaining for M8: merchant-facing simple result is in `packages/merchant-sdk` (not re-audited here
+beyond import hygiene); a **public** hosted verify endpoint and abuse controls (M21) are not built;
+the new routes are not yet deployed.
