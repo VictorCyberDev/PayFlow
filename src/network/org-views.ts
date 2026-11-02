@@ -158,7 +158,9 @@ export async function agentInventory(
     join authority_ownership o on o.mandate_id = d.mandate_id
     where o.organization_id = ${organizationId} and o.environment = ${environment}
     group by p.agent_id`;
-  const lastBy = new Map(last.map((r) => [String(r.agent_id), r.last_at]));
+  const lastBy = new Map<string, string | Date>(
+    last.map((r) => [String(r.agent_id), r.last_at as string | Date]),
+  );
   return agents.map((a) => {
     const mine = exposures.filter((e) => e.agentId === a.agent_id);
     const at = lastBy.get(String(a.agent_id));
@@ -172,7 +174,7 @@ export async function agentInventory(
       exposureMinor: mine
         .filter((e) => e.status === "ACTIVE")
         .reduce((s, e) => s + e.reservedMinor + e.pendingMinor, 0),
-      lastDecisionAt: at ? new Date(at as string).toISOString() : null,
+      lastDecisionAt: at ? new Date(at).toISOString() : null,
     };
   });
 }
