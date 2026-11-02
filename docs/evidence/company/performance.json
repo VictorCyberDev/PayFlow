@@ -1,0 +1,63 @@
+{
+  "profile": "local static production export; file weights, not a Lighthouse score",
+  "homeHtmlBytes": 17619,
+  "initialScriptBytes": 600824,
+  "initialScriptGzipBytes": 185102,
+  "scripts": [
+    {
+      "path": "/_next/static/chunks/0cz1d0mv5g_q7.js",
+      "bytes": 112594,
+      "gzipBytes": 39373
+    },
+    {
+      "path": "/_next/static/chunks/0umf92h1sb77c.js",
+      "bytes": 13822,
+      "gzipBytes": 3530
+    },
+    {
+      "path": "/_next/static/chunks/1kb4dcqdypxx7.js",
+      "bytes": 168891,
+      "gzipBytes": 46442
+    },
+    {
+      "path": "/_next/static/chunks/1x6obpmlu1_c2.js",
+      "bytes": 5361,
+      "gzipBytes": 1961
+    },
+    {
+      "path": "/_next/static/chunks/20onsurhspi-2.js",
+      "bytes": 31567,
+      "gzipBytes": 10460
+    },
+    {
+      "path": "/_next/static/chunks/2khxl0v1q4i6n.js",
+      "bytes": 229820,
+      "gzipBytes": 71777
+    },
+    {
+      "path": "/_next/static/chunks/2r4s4h5xul1n-.js",
+      "bytes": 28739,
+      "gzipBytes": 7613
+    },
+    {
+      "path": "/_next/static/chunks/turbopack-3-ry682tkyiqk.js",
+      "bytes": 10030,
+      "gzipBytes": 3946
+    }
+  ],
+  "fonts": [
+    {
+      "path": "_next/static/media/bricolage-grotesque-latin-wght-normal.1iqnhac4m3hwo.woff2",
+      "bytes": 41344
+    },
+    {
+      "path": "_next/static/media/ibm-plex-mono-latin-400-normal.3xdfs0-p_zi4c.woff2",
+      "bytes": 14708
+    },
+    {
+      "path": "_next/static/media/instrument-sans-latin-wght-normal.3h2wr6o8p949u.woff2",
+      "bytes": 30092
+    }
+  ],
+  "exportBytes": 2807808
+}

@@ -69,7 +69,7 @@ async function open(viewport = { width: 1280, height: 900 }, opts = {}) {
     if (m.type() === "error" && !/Failed to load resource/.test(m.text()))
       problems.push("console: " + m.text());
   });
-  await page.goto(origin);
+  await page.goto(origin + "/app/");
   return { context, page, problems };
 }
 const shot = (page, name) =>
@@ -240,7 +240,7 @@ test("full journey: describe, understand, confirm, created, view, reload, revoke
     "reloads append no evidence",
   );
   // Home reflects the Authority.
-  await nav(page, "Home");
+  await nav(page, "Overview");
   await page
     .getByRole("heading", {
       level: 1,
@@ -280,7 +280,7 @@ test("full journey: describe, understand, confirm, created, view, reload, revoke
     .locator(".state-tag", { hasText: /Revoked/i })
     .first()
     .waitFor();
-  await nav(page, "Home");
+  await nav(page, "Overview");
   await page
     .getByRole("heading", {
       level: 1,
@@ -479,7 +479,7 @@ test("no secret, database URL, bootstrap code or challenge reaches the client bu
   });
   await signIn(page);
   await createAuthority(page);
-  for (const n of ["Authorities", "Activity", "Home"]) await nav(page, n);
+  for (const n of ["Authorities", "Activity", "Overview"]) await nav(page, n);
   await page.goto(origin + "/about/");
   await page.waitForTimeout(300);
   const all = bodies.join("\n") + (await page.content());
@@ -564,7 +564,7 @@ for (const [label, viewport, opts] of [
     await shot(page, `${tag}05-revoke`);
     assert.deepEqual(await targets(), [], "sheet touch targets");
     await page.getByRole("button", { name: "Keep Authority" }).click();
-    for (const n of ["Activity", "Home"]) {
+    for (const n of ["Activity", "Overview"]) {
       await nav(page, n);
       assert.ok((await overflow()) <= 0, n + " overflow");
     }
@@ -826,6 +826,9 @@ test("M6 hero: the Agent is blocked at $184 ($0 moved) and completes $84 without
   assert.deepEqual(await provider(), { createCalls: 1, captureCalls: 1 });
   // Proof reveals the chain.
   await page.getByRole("link", { name: "View proof" }).click();
+  await page
+    .getByText("Raw Proof and technical references", { exact: true })
+    .click();
   await page.getByRole("heading", { name: "Stages" }).waitFor();
   const proof = await page.locator("main").innerText();
   assert.match(proof, /CAPTURE|VERTICAL-CAPTURE/);
@@ -913,7 +916,7 @@ test("M6 ambiguous provider outcome: 'Checking what happened — don't retry yet
   assert.doesNotMatch(text, /paid once|\$0 moved/);
   assert.equal(await page.locator(".trace__step--unconfirmed").count(), 1);
   await shot(page, "m6-06-unresolved");
-  await nav(page, "Home");
+  await nav(page, "Overview");
   await page
     .getByRole("heading", { level: 1, name: "1 payment needs attention." })
     .waitFor();
@@ -972,6 +975,9 @@ test("M6 mobile 375px: Authority with the demo Agent, blocked, paid and unresolv
   assert.deepEqual(await small(), []);
   await shot(page, "m6-m02-paid");
   await page.getByRole("link", { name: "View proof" }).click();
+  await page
+    .getByText("Raw Proof and technical references", { exact: true })
+    .click();
   await page.getByRole("heading", { name: "Stages" }).waitFor();
   assert.ok((await overflow()) <= 0, "proof overflow");
   await shot(page, "m6-m03-proof");

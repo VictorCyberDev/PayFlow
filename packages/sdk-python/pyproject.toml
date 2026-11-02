@@ -1,0 +1,6 @@
+[project]
+name = "payflow-authority-sdk"
+version = "0.1.0.dev0"
+description = "Developer-preview client for the PayFlow Financial Authority API"
+requires-python = ">=3.11"
+dependencies = []

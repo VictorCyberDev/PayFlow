@@ -29,6 +29,8 @@ jobs:
       TEST_DATABASE_URL: postgres://payflow:payflow_test@localhost:5432/payflow_test
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -37,6 +39,10 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run secret:scan
+      - run: npm run evidence:check
+      - name: Python SDK tests
+        run: python3 -m unittest discover -s packages/sdk-python/tests -v
       - run: npm test -- --reporter=default --reporter=json --outputFile=/tmp/payflow-tests.json
       - run: npm run test:integration -- --reporter=default --reporter=json --outputFile=/tmp/payflow-integration.json
       - run: npm run test:coverage
@@ -44,11 +50,12 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import { readFileSync, writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
           const counts = path => {
             const r = JSON.parse(readFileSync(path, 'utf8'));
             return { total: r.numTotalTests, passed: r.numPassedTests, failed: r.numFailedTests, skipped: r.numPendingTests };
           };
-          writeFileSync('coverage/review-results.json', JSON.stringify({ headSha: process.env.GITHUB_SHA, all: counts('/tmp/payflow-tests.json'), integration: counts('/tmp/payflow-integration.json') }));
+          writeFileSync('coverage/review-results.json', JSON.stringify({ headSha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), eventSha: process.env.GITHUB_SHA, all: counts('/tmp/payflow-tests.json'), integration: counts('/tmp/payflow-integration.json') }));
           JS
       - name: Preserve bounded coverage metrics for independent review
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -68,6 +75,8 @@ jobs:
         working-directory: apps/console
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -96,6 +105,8 @@ jobs:
       E2E_DATABASE_URL: postgres://payflow:payflow_test@localhost:5432/payflow_e2e
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -121,3 +132,7 @@ jobs:
           timeout 300 npx playwright-core install --with-deps chromium
       - run: npm run test:e2e
         working-directory: apps/console
+
+      - name: Company responsive and accessibility acceptance
+        run: node scripts/company-browser-qa.mjs
+        working-directory: .

@@ -20,15 +20,15 @@
 }
 
 :root {
-  --paper: #f2efe6;
-  --surface: #fbfaf6;
-  --ink: #12161b;
-  --ink-2: #3a4048;
-  --ink-3: #5b626b;
+  --paper: #f3f0e8;
+  --surface: #fffdf8;
+  --ink: #111418;
+  --ink-2: #424850;
+  --ink-3: #606873;
   --rule: rgba(18, 22, 27, 0.16);
-  --signal: #f5b301;
-  --signal-ink: #7a5600;
-  --signal-wash: #fbefc8;
+  --signal: #e8aa00;
+  --signal-ink: #6b5200;
+  --signal-wash: #f8edc6;
   --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
   --font-ui:
     "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",

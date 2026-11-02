@@ -1,5 +1,6 @@
 import type { ActivityView, ManagedAuthority } from "./management-client.mjs";
 import { formatMoney } from "./present";
+import { BRAND } from "./brand";
 
 /** Canonical customer-language map (BRAND-001 §7). Backend terms appear only in Proof. */
 export const glossary = Object.freeze({
@@ -195,7 +196,7 @@ export function traceSteps(x: ActivityView): TraceStep[] {
       authority,
       {
         id: "gate",
-        label: "PayFlow Gate",
+        label: `${BRAND.name} Gate`,
         state: "stopped",
         word: "Stopped here",
       },
@@ -204,13 +205,23 @@ export function traceSteps(x: ActivityView): TraceStep[] {
   if (o.kind === "paid")
     return [
       authority,
-      { id: "gate", label: "PayFlow Gate", state: "done", word: "Allowed" },
+      {
+        id: "gate",
+        label: `${BRAND.name} Gate`,
+        state: "done",
+        word: "Allowed",
+      },
       { id: "payment", label: "Payment", state: "done", word: "Paid" },
     ];
   if (o.kind === "blocked")
     return [
       authority,
-      { id: "gate", label: "PayFlow Gate", state: "done", word: "Allowed" },
+      {
+        id: "gate",
+        label: `${BRAND.name} Gate`,
+        state: "done",
+        word: "Allowed",
+      },
       {
         id: "payment",
         label: "Payment",
@@ -223,7 +234,7 @@ export function traceSteps(x: ActivityView): TraceStep[] {
       authority,
       {
         id: "gate",
-        label: "PayFlow Gate",
+        label: `${BRAND.name} Gate`,
         state: "waiting",
         word: "Waiting for you",
       },
@@ -232,7 +243,12 @@ export function traceSteps(x: ActivityView): TraceStep[] {
   if (x.status === "UNKNOWN_FINANCIAL_OUTCOME" || x.status === "PENDING")
     return [
       authority,
-      { id: "gate", label: "PayFlow Gate", state: "done", word: "Allowed" },
+      {
+        id: "gate",
+        label: `${BRAND.name} Gate`,
+        state: "done",
+        word: "Allowed",
+      },
       {
         id: "payment",
         label: "Payment",
@@ -244,7 +260,7 @@ export function traceSteps(x: ActivityView): TraceStep[] {
     authority,
     {
       id: "gate",
-      label: "PayFlow Gate",
+      label: `${BRAND.name} Gate`,
       state: x.decision === "ALLOW" ? "done" : "none",
       word: x.decision === "ALLOW" ? "Allowed" : "Not verified",
     },
@@ -254,4 +270,4 @@ export function traceSteps(x: ActivityView): TraceStep[] {
 
 /** Customer-facing merchant name. Unknown identifiers are shown as given. */
 export const merchantName = (id: string): string =>
-  id === "payflow.demo.merchant" ? "PayFlow Demo Merchant — Sandbox" : id;
+  id === "payflow.demo.merchant" ? `${BRAND.name} Demo Merchant — Sandbox` : id;
