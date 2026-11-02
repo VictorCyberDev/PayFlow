@@ -20,7 +20,7 @@ export function fetchPayPalVaultStatus(
   transport?: Transport,
 ): Promise<boolean | null>;
 export function startPayPalVaultConnection(
-  authorityId: string,
+  authorityId?: string | null,
   transport?: Transport,
 ): Promise<void>;
 export function completePayPalVaultConnection(

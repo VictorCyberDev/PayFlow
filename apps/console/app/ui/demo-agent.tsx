@@ -96,7 +96,8 @@ export function SandboxWalletPanel() {
       )}
       {diagnostic && (
         <p className="banner" role="status">
-          Sandbox wallet setup did not complete. No money moved. Diagnostic: {diagnostic}
+          Sandbox wallet setup did not complete. No money moved. Diagnostic:{" "}
+          {diagnostic}
         </p>
       )}
     </section>
@@ -235,8 +236,8 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
       </p>
       {!paymentRailConnected && vaultConnected !== true && (
         <p className="note">
-          Payments aren't connected in this demo, so only the blocked case can
-          run.
+          Payments aren&rsquo;t connected in this demo, so only the blocked case
+          can run.
         </p>
       )}
       <div role="status" aria-live="polite" aria-busy={busy}>
