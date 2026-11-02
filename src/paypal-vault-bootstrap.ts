@@ -231,7 +231,7 @@ export class ConsolePayPalVaultBootstrap {
   }
   async start(req: ConsoleRequest, raw: unknown) {
     const input = z
-      .object({ authorityId: z.string().uuid() })
+      .object({ authorityId: z.string().uuid().optional() })
       .strict()
       .parse(raw);
     const context = await this.sessions.mutation(req, true);
@@ -239,11 +239,13 @@ export class ConsolePayPalVaultBootstrap {
     const ownerSessionRef = this.sessions.ownerRef(context);
     const state = randomBytes(32).toString("base64url");
     const returnUrl = new URL("/authorities/", this.origin);
-    returnUrl.searchParams.set("id", input.authorityId);
+    const cancelUrl = new URL("/authorities/", this.origin);
+    if (input.authorityId) {
+      returnUrl.searchParams.set("id", input.authorityId);
+      cancelUrl.searchParams.set("id", input.authorityId);
+    }
     returnUrl.searchParams.set("paypal", "approved");
     returnUrl.searchParams.set("state", state);
-    const cancelUrl = new URL("/authorities/", this.origin);
-    cancelUrl.searchParams.set("id", input.authorityId);
     cancelUrl.searchParams.set("paypal", "cancelled");
     const access = await this.oauth.accessToken();
     const r = await this.fetcher(`${BASE}/v3/vault/setup-tokens`, {
