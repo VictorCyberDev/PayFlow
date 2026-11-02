@@ -211,7 +211,10 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
       </p>
 
       {vaultConnected === false && (
-        <div className="banner" style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+        <div
+          className="banner"
+          style={{ minWidth: 0, overflowWrap: "anywhere" }}
+        >
           <p>
             The owner has not connected a Sandbox PayPal wallet yet. You can
             connect it here or from the Authorities page; the connection is not
@@ -265,7 +268,10 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
       <div role="status" aria-live="polite" aria-busy={busy}>
         {busy && <p className="note">Working…</p>}
         {diagnostic && (
-          <p className="banner" style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+          <p
+            className="banner"
+            style={{ minWidth: 0, overflowWrap: "anywhere" }}
+          >
             The agent did not execute. No money moved. Diagnostic: {diagnostic}
           </p>
         )}
