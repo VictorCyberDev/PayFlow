@@ -129,6 +129,10 @@ export function activityOutcome(x: ActivityView): Outcome {
   };
 }
 
+/** Whether the Agent acted under an Authority that did not require asking the human again. */
+export const delegatedLine =
+  "Your Agent did this without asking you, within your Authority.";
+
 const verificationWord: Record<string, string> = {
   VERIFIED: "Verified from saved evidence",
   INCOMPLETE: "Checking what happened",
@@ -136,8 +140,10 @@ const verificationWord: Record<string, string> = {
   UNKNOWN_FINANCIAL_OUTCOME: "Checking what happened",
   LEGACY: "Older record, not fully verified",
 };
-export const verificationSummary = (v: string) =>
-  verificationWord[v] ?? "Not verified";
+export const verificationSummary = (v: string, moneyMoved?: string) =>
+  moneyMoved === "NO" && v === "INCOMPLETE"
+    ? "No payment was started."
+    : (verificationWord[v] ?? "Not verified");
 
 /** Human sentence for the Authority's approval behaviour. */
 export function approvalLine(a: ManagedAuthority): string {
@@ -245,3 +251,7 @@ export function traceSteps(x: ActivityView): TraceStep[] {
     { id: "payment", label: "Payment", state: "none", word: "Not started" },
   ];
 }
+
+/** Customer-facing merchant name. Unknown identifiers are shown as given. */
+export const merchantName = (id: string): string =>
+  id === "payflow.demo.merchant" ? "PayFlow Demo Merchant — Sandbox" : id;

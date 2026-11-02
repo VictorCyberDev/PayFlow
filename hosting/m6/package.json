@@ -1,0 +1,10 @@
+{
+  "name": "@payflow/m6-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated NON-PRODUCTION M6 delegated-commerce acceptance deployment. Dependencies are installed from the repository root, where the shared src/ modules live. M5 hosting remains separate and unchanged.",
+  "engines": {
+    "node": ">=20"
+  }
+}

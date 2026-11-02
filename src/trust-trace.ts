@@ -8,6 +8,7 @@ const eventSchema = z
     type: z.string().min(1).max(200),
     occurredAt: z.string().datetime(),
     data: z.record(
+      z.string(),
       z.union([
         z.string().max(65536),
         z.number().finite(),

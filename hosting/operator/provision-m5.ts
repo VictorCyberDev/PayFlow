@@ -87,7 +87,7 @@ try {
     maximumQuantity: 1,
     currencies: ["USD"],
     capabilities: ["CREATE_ORDER", "CAPTURE_PAYMENT"],
-    merchantIds: ["DemoMerchant"],
+    merchantIds: ["payflow.demo.merchant"],
     merchantRiskCeiling: "LOW",
     maximumLifetimeSeconds: 86400 * 30,
   });

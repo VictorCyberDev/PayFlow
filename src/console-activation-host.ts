@@ -9,6 +9,7 @@ import { z } from "zod";
 import { ConsoleSessions, type ConsoleRequest } from "./console-session.js";
 import { ConsoleControls } from "./console-controls.js";
 import { ConsoleActivity } from "./activity-postgres.js";
+import type { ConsoleDemoAgent } from "./console-demo-agent.js";
 import { StaticPublicKeyRing } from "./execution-grant.js";
 import { ConsoleActivation } from "./console-activation.js";
 import { createReviewDemoHost } from "./intent-review-demo-host.js";
@@ -35,6 +36,8 @@ export function activationHttpHandler(
     outputDirectory?: string;
     controls?: ConsoleControls;
     activity?: ConsoleActivity;
+    /** M6: owner-bound demonstration of an Agent shopping under an Authority. */
+    demoAgent?: ConsoleDemoAgent;
   },
 ) {
   const staticHost = options.outputDirectory
@@ -111,6 +114,10 @@ export function activationHttpHandler(
             ? json(res, 200, view)
             : json(res, 404, { status: "UNAVAILABLE" });
         }
+        if (url.pathname === "/api/demo-agent/status" && options.demoAgent) {
+          if (url.search) return json(res, 400, { status: "UNAVAILABLE" });
+          return json(res, 200, await options.demoAgent.status(meta));
+        }
         if (url.pathname === "/api/intent-review/sample")
           return json(res, 200, {
             mode: "NON_PRODUCTION_REVIEW",
@@ -128,8 +135,9 @@ export function activationHttpHandler(
         return json(res, 415, { status: "UNAVAILABLE" });
       // Authenticate mutations before reading/interpreting the request, except bootstrap.
       if (
-        url.pathname.startsWith("/api/activation/") &&
-        url.pathname !== "/api/activation/session"
+        (url.pathname.startsWith("/api/activation/") &&
+          url.pathname !== "/api/activation/session") ||
+        url.pathname.startsWith("/api/demo-agent/")
       )
         await app.sessions.mutation(meta, true);
       const chunks: Buffer[] = [];
@@ -150,6 +158,10 @@ export function activationHttpHandler(
         const cleared = await app.sessions.logout(meta);
         return json(res, 200, { authenticated: false }, cleared);
       }
+      if (url.pathname === "/api/demo-agent/reconcile" && options.demoAgent)
+        return json(res, 200, await options.demoAgent.reconcile(meta, body));
+      if (url.pathname === "/api/demo-agent/attempt" && options.demoAgent)
+        return json(res, 200, await options.demoAgent.run(meta, body));
       if (url.pathname === "/api/activation/revoke" && options.controls)
         return json(res, 200, await options.controls.revoke(meta, body));
       if (url.pathname === "/api/activation/reviews")

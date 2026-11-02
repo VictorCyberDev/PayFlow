@@ -7,7 +7,12 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
-      exclude: [...coverageConfigDefaults.exclude, "apps/console/**"],
+      exclude: [
+        ...coverageConfigDefaults.exclude,
+        "apps/console/**",
+        "hosting/operator/**",
+        "docs/**",
+      ],
     },
   },
 });

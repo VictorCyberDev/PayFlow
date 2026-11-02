@@ -86,5 +86,7 @@ export function FlowTrace({ x }: { x: ActivityView }) {
 }
 
 export function VerificationLine({ x }: { x: ActivityView }) {
-  return <p className="note">{verificationSummary(x.verification)}</p>;
+  return (
+    <p className="note">{verificationSummary(x.verification, x.moneyMoved)}</p>
+  );
 }

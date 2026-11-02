@@ -27,6 +27,8 @@ export type ActivityView = {
   merchant: string | null;
   item: string | null;
   moneyMoved: "YES" | "NO" | "UNKNOWN";
+  /** True only for a completed purchase that no human approved at payment time. */
+  delegated?: boolean;
   verification: string;
   stages: { stage: string; status: string; reasonCode: string }[];
   references: {

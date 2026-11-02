@@ -12,6 +12,9 @@ export const COMMERCE_LIMITS = Object.freeze({
 });
 export const DEMO_MERCHANT_ID = "payflow.demo.merchant";
 export const DEMO_MERCHANT_NAME = "PayFlow Demo Merchant — Sandbox";
+/** Customer-facing merchant name; unknown identifiers are shown as configured. */
+export const merchantDisplay = (id: string): string =>
+  id === DEMO_MERCHANT_ID ? DEMO_MERCHANT_NAME : id;
 export const DEMO_CHECKOUT_SOURCE_ID = "payflow.demo.checkout";
 export const DEMO_CATALOG_SOURCE_ID = "payflow.demo.catalog";
 
