@@ -57,3 +57,17 @@ Supporting pieces that do exist and work in isolation:
 ## Minimal path to a truthful meter (not implemented)
 
 Emit one `GOVERNED_ACTION` event, keyed by the replay-claim identity, from the Gateway at the point the decision is recorded, with organization and environment resolved from the Authority, and metadata recording the decision. Add a nightly distinct-count job for ACTIVE_AGENT. Decide the definitions in item 4 first. All of this is outside this workstream's write scope.
+
+## Update: gaps closed in source after this audit
+
+| Gap                                     | Status now                                                                                                                                                   |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1 No emission point                     | `GOVERNED_ACTION` is emitted by the hosted Gateway after every evaluated request                                                                             |
+| 2 No organization context               | Resolved from the credential's organization and environment at the emission point                                                                            |
+| 3 No idempotency key                    | Key is a SHA-256 of Authority + agent + nonce; a retried delivery cannot double count                                                                        |
+| 4 No definition of a governed action    | Defined: an authenticated, well-formed, non-replayed request PayFlow evaluated. Auth failures, malformed requests and replay-blocked repeats are not metered |
+| 6 ACTIVE_AGENT shape                    | Derived as a distinct count per period from GOVERNED_ACTION metadata                                                                                         |
+| 9 metadata dropped                      | Outcome metadata (agent, decision, status) is now written; no secrets or nonces                                                                              |
+| 17 No test ties the Gateway to metering | `tests/m7-hosted-gateway.integration.test.ts` (metering)                                                                                                     |
+
+Still open: 5, 7, 8, 10-16. Nothing here is deployed.

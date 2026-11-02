@@ -51,6 +51,19 @@ test("the page states its scope and limits plainly", () => {
   assert.match(text, /No independent party has reproduced it/);
 });
 
+test("the page names the product, scopes the claim and lists uncovered families", () => {
+  assert.match(text, /PayFlow Authority Conformance/);
+  assert.match(text, /Within the tested scope, none got through/);
+  assert.match(text, /Attack families we do not claim/);
+  for (const f of [
+    "Invoice manipulation",
+    "Beneficiary substitution",
+    "Approval-channel abuse",
+    "Prompt or tool manipulation",
+  ])
+    assert.ok(text.includes(f), f);
+});
+
 test("the page makes no unearned claim", () => {
   for (const word of [
     /unbreakable/i,

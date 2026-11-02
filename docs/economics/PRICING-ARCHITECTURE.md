@@ -24,7 +24,7 @@ The code recognises four meters: `GOVERNED_ACTION`, `VERIFY_CALL`, `ACTIVE_AGENT
 | ACTIVE_AGENT       | metered, free | hypothesis: not billed or minor | hypothesis: reported, maybe entitlement | n/a           |
 | ENTERPRISE_CONTROL | n/a           | n/a                             | hypothesis: entitlement flag            | n/a           |
 
-Important: as audited in [METERING-AUDIT.md](METERING-AUDIT.md), the live Gateway does not currently emit any of these meters. No usage-based price can be billed until it does.
+Update after the audit ([METERING-AUDIT.md](METERING-AUDIT.md)): the hosted Gateway now emits `GOVERNED_ACTION` in source (idempotent, with outcome metadata; a governed action is an authenticated, well-formed, non-replayed request PayFlow evaluated). `ACTIVE_AGENT` is derived as a distinct count. `VERIFY_CALL` and `ENTERPRISE_CONTROL` are still not emitted. This is not deployed, and no usage-based price can be billed yet.
 
 ## Design principles (stated, not validated)
 
@@ -47,10 +47,10 @@ The existing placeholder is 1 US cent (`governedActionMinor = 1`) per governed a
 
 ## Status
 
-| Item                        | Status                            |
-| --------------------------- | --------------------------------- |
-| Package structure           | Hypothesis                        |
-| Price points                | None validated; none proposed     |
-| Willingness to pay          | NOT VALIDATED; evidence log empty |
-| Metering wired to live path | No (see audit)                    |
-| Legal / regulatory review   | Not done                          |
+| Item                        | Status                                                   |
+| --------------------------- | -------------------------------------------------------- |
+| Package structure           | Hypothesis                                               |
+| Price points                | None validated; none proposed                            |
+| Willingness to pay          | NOT VALIDATED; evidence log empty                        |
+| Metering wired to live path | GOVERNED_ACTION in source; not deployed; other meters no |
+| Legal / regulatory review   | Not done                                                 |

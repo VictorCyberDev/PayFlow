@@ -127,48 +127,74 @@ export const companyDocuments: Record<string, CompanyDocument> = {
   ),
   security: make(
     "Trust is inspectable.",
-    "Developer preview. No independent audit, certification, standards membership or production uptime is claimed.",
+    "Developer preview. No independent audit, certification, standards membership or production uptime is claimed. Each control below says whether it is in source, tested or deployed.",
     [
       {
-        title: "Financial invariants",
+        title: "One decision path",
         paragraphs: [
-          "Models cannot authorize themselves. Credentials do not grant Authority. Execution requires an exact action, reservation and one-time grant. Revoked or expired Authority blocks fresh dispatch.",
-          "UNKNOWN is a first-class outcome. An API error does not establish $0 moved. Reconciliation looks up the original attempt without creating another effect.",
+          "Every protocol and client reaches the same Trust Kernel. A model cannot authorize its own spending, a credential does not grant Authority, and an agent cannot widen, extend or reactivate what it was given. Execution needs an exact reservation and a one-time grant, and the Execution Boundary re-checks Authority immediately before any provider call.",
         ],
       },
       {
-        title: "Authentication and isolation",
+        title: "Credentials",
         paragraphs: [
-          "Hosted console sessions bind principal identity server-side. Tenant-scoped adapters and integration tests exercise cross-tenant refusal. Protocol access must bind verified subject, audience and scopes to server-owned services.",
-          "OAuth JWT verification uses fixed issuer/JWKS/audience configuration. End-user OAuth and public protocol deployment remain pending. Local tokens are not a production login system.",
+          "Hosted access uses scoped, expiring tokens bound to one organization, environment, agent and principal. Only a SHA-256 digest is stored; the secret is shown once and can be revoked, after which the next request fails closed. Suspending an agent or an organization stops access at once. Tested in source; the hosted preview ran one revoked-credential check on 2026-11-02.",
         ],
       },
       {
-        title: "Encryption, secrets and Proof",
+        title: "Replay and concurrency",
         paragraphs: [
-          "M6 encrypts delegated instrument and bootstrap records using AES-256-GCM. Signing keys and provider credentials remain server-side. Protocol output filtering supplements explicit result projection; it is not a general data-loss prevention guarantee.",
-          "Signatures establish who signed a statement and whether it changed. Issuer trust, provider evidence and reconciliation remain necessary to establish financial meaning.",
+          "The first presentation of a request identity wins and every repeat is refused with no second effect. Concurrent requests cannot overspend an Authority. Both were exercised against PayPal Sandbox on 2026-11-02.",
         ],
       },
       {
-        title: "Retention and operations",
+        title: "UNKNOWN",
         paragraphs: [
-          "Privacy modules preserve immutable financial evidence through deletion workflows. Production schedules, legal basis and deletion processes need legal and operational review.",
-          "For an incident: restrict fresh dispatch, preserve evidence, reconcile outstanding attempts and state what is known. Dependency scans and adversarial tests do not replace an independent audit.",
+          "If a provider does not answer, the outcome is UNKNOWN, never failed, and the amount stays held. Nothing is retried automatically. Operators have an observe-only view of unresolved payments.",
         ],
       },
       {
-        title: "Responsible disclosure",
+        title: "Proof and independent verification",
         paragraphs: [
-          "Choose Security on the contact page to request a private channel. Do not post exploit details, personal data or secrets in public issues. No response-time SLA or bounty payment is promised.",
-          "Managed intake, incident rota, operational monitoring and an independent audit remain pending.",
+          "A signed portable Proof binds the Authority, agent, amount, currency, merchant and outcome. Anyone can verify it offline with a public key, so you do not have to trust the PayFlow session or database. In source and tested; not yet deployed.",
+        ],
+      },
+      {
+        title: "Operations (in source, not deployed)",
+        paragraphs: [
+          "Per-credential rate limits that hold across serverless instances, operator pauses for one organization, one environment or everything (no public endpoint can set them), an append-only audit trail enforced by the database, and organization isolation tests. Backup restore has not been rehearsed. There is one signing key and one database role.",
+        ],
+      },
+      {
+        title: "Adversarial evidence",
+        paragraphs: [
+          "1,000 scenarios from 16 attack families, with the exact limits stated, run against the production modules and a fake rail. No real model was run and no third party has reproduced it.",
+        ],
+      },
+      {
+        title: "Reporting a vulnerability",
+        paragraphs: [
+          "Use the Security category on the contact page and ask for a private channel. Please do not post exploit details or secrets publicly. No bounty and no response time is promised yet.",
+        ],
+      },
+      {
+        title: "Limits you should know",
+        paragraphs: [
+          "Encryption of the stored wallet uses AES-256-GCM; signing keys and provider credentials stay server-side. Output filtering is a supplement, not a data-loss guarantee. The hosted preview is protected and not public. OAuth/OIDC for end users is not built.",
         ],
       },
     ],
     [
-      ["Security inquiry", "/contact/"],
-      ["Evidence", "/evidence/"],
-      ["Data disclosure", "/subprocessors/"],
+      ["Break Authority evidence", "/research/break-authority/"],
+      [
+        "Threat model",
+        "https://github.com/VictorCyberDev/PayFlow/blob/claude/eloquent-einstein-dw0mxk/docs/security-ops/THREAT-MODEL-UPDATE.md",
+      ],
+      [
+        "Security policy",
+        "https://github.com/VictorCyberDev/PayFlow/blob/claude/eloquent-einstein-dw0mxk/SECURITY.md",
+      ],
+      ["Contact", "/contact/"],
     ],
   ),
   status: make(
@@ -217,36 +243,46 @@ export const companyDocuments: Record<string, CompanyDocument> = {
   ),
   pricing: make(
     "Start with a boundary.",
-    "Free Sandbox evaluation. Commercial prices are not validated; no paid checkout or automatic subscription is enabled.",
+    "Free to evaluate in the Sandbox. Commercial prices are a hypothesis: none is validated, none is offered, and there is no paid checkout.",
     [
       {
-        title: "Developer / Free Sandbox",
+        title: "Sandbox / Free",
         paragraphs: [
-          "Local fixtures, deterministic rails, SDKs, protocol tools and test evidence. No real money.",
+          "Evaluate the Authority, the Execution Boundary and Proof against PayPal Sandbox. No payment details. Hosted use needs a credential and is rate limited. No real money.",
         ],
       },
       {
-        title: "Platform / Subscription + governed actions",
+        title: "Platform / Usage-based (hypothesis)",
         paragraphs: [
-          "Intended commercial model. Rates, included usage and terms require a confirmed offer. Metering infrastructure is not revenue validation.",
+          "The intended model charges per governed action: an authenticated, well-formed, non-replayed request that PayFlow evaluated. Rates, included usage and minimums are not set, and willingness to pay has not been tested with anyone. The meter exists in source and is not billing anyone.",
         ],
       },
       {
-        title: "Enterprise / Custom",
+        title: "Enterprise / Negotiated (hypothesis)",
         paragraphs: [
-          "Discuss identity, procurement controls, integration support, retention and security evaluation. No certification or delivery SLA is implied.",
+          "A platform fee plus governance controls and support, scoped with you. Identity integration, audit, support level and retention are discussed case by case. No certification and no delivery commitment is implied.",
         ],
       },
       {
-        title: "Verify / Low-friction evaluation",
+        title: "Verify / Free or low-friction (hypothesis)",
         paragraphs: [
-          "Portable local verification is available in source. Hosted quotas and pricing follow commissioning.",
+          "Checking a Proof stays cheap or free where it strengthens trust: you can already verify a Proof offline with no account.",
+        ],
+      },
+      {
+        title: "What we have not decided",
+        paragraphs: [
+          "We do not price as a share of payment volume: that raises regulatory and incentive questions we have flagged for qualified counsel. No price will be published before real conversations and a legal review have happened.",
         ],
       },
     ],
     [
-      ["Discuss your use case", "/contact/"],
-      ["Start building", "/docs/quickstart/"],
+      ["Verify a Proof for free", "/verify/"],
+      ["Tell us what you would pay for", "/contact/"],
+      [
+        "How we reason about pricing",
+        "https://github.com/VictorCyberDev/PayFlow/blob/claude/eloquent-einstein-dw0mxk/docs/economics/PRICING-ARCHITECTURE.md",
+      ],
     ],
   ),
   company: make(

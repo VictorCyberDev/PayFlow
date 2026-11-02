@@ -780,3 +780,87 @@
     gap: 0;
   }
 }
+
+/* Procurement product surfaces */
+.finance-card,
+.decision-card,
+.unknown-card {
+  border: 2px solid currentColor;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+  max-width: 40rem;
+}
+.finance-card .fc-agent {
+  margin: 0.25rem 0 0.75rem;
+}
+.finance-card .fc-active {
+  font-weight: 700;
+}
+.finance-card .fc-stopped {
+  font-weight: 700;
+  text-decoration: line-through;
+}
+.finance-card .fc-grid div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid rgb(127 127 127 / 0.3);
+}
+.finance-card dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.finance-card dd small {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+.decision-card .dc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.decision-card .dc-actions .company-button {
+  min-height: 44px;
+  min-width: 44px;
+}
+.decision-card .dc-result {
+  font-weight: 600;
+}
+.fc-note {
+  font-size: 0.8125rem;
+  opacity: 0.85;
+}
+@media (max-width: 480px) {
+  .finance-card .fc-grid div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+.break-authority .ba-claim {
+  font-size: 1.125rem;
+  max-width: 60ch;
+}
+
+/* Organization views */
+.org-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  display: block;
+  overflow-x: auto;
+}
+.org-table caption {
+  text-align: left;
+  padding-bottom: 0.5rem;
+}
+.org-table th,
+.org-table td {
+  text-align: left;
+  padding: 0.4rem 0.6rem 0.4rem 0;
+  border-bottom: 1px solid rgb(127 127 127 / 0.3);
+  white-space: nowrap;
+}

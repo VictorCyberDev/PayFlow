@@ -101,6 +101,8 @@ export interface ExecutingGatewayDependencies {
   readonly ranker: CommerceRanker;
   readonly now: () => string;
   readonly onEvent?: (event: GatewayEvent) => void | Promise<void>;
+  /** Returns the pause scope that blocks new economic requests for this client, or null. */
+  readonly pauseCheck?: (clientId: string) => Promise<string | null>;
 }
 
 const usd = (minor: number, currency: string): string =>
@@ -273,6 +275,17 @@ export class ExecutingGateway {
     };
     await emit("gateway.request_received");
     const limit = usd(mandate.maxSingleTransactionMinor, mandate.currency);
+
+    // Operator pause: refuse NEW economic requests before anything is stored or reserved.
+    const paused = await this.deps.pauseCheck?.(access.clientId);
+    if (paused)
+      return deny(requestId, {
+        reason: "EXECUTION_PAUSED",
+        recoverable: true,
+        humanSummary:
+          "New payments are paused by the operator. Nothing was processed. $0 moved.",
+        nextAction: "WAIT_FOR_OPERATOR",
+      });
 
     // Atomic. The first presentation of a nonce wins; every replay is a zero-effect DENY.
     const first = await repo.claimReplay(

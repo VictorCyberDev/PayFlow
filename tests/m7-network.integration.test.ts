@@ -1,3 +1,4 @@
+import { truncateTenantData } from "./helpers/reset.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
@@ -101,7 +102,10 @@ run("M7–M15 durable Gateway and control-plane adapters (PostgreSQL)", () => {
   });
   afterAll(async () => repo.close());
   beforeEach(async () => {
-    await repo.sql`truncate usage_events,organization_agents,authority_ownership,organizations,verification_replay_keys,execution_grants,evidence_events,payment_attempts,authorization_reservations,approvals,decision_receipts,transaction_proposals,replay_keys,mandates,agent_passports,principals restart identity cascade`;
+    await truncateTenantData(
+      repo.sql,
+      "usage_events,organization_agents,authority_ownership,organizations,verification_replay_keys,execution_grants,evidence_events,payment_attempts,authorization_reservations,approvals,decision_receipts,transaction_proposals,replay_keys,mandates,agent_passports,principals",
+    );
     await repo.savePrincipal(principal);
     await repo.saveAgent(agent);
     await repo.saveMandate(mandate);

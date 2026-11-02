@@ -163,6 +163,11 @@ export class CredentialStore {
       throw new GatewayAccessError("ACCESS_INACTIVE");
     if (Date.parse(now) >= Date.parse(rec.expiresAt))
       throw new GatewayAccessError("ACCESS_EXPIRED");
+    // A suspended or closed organization loses all API access immediately.
+    const org = await this.sql`
+      select status from organizations where id = ${rec.organizationId}`;
+    if (!org[0] || org[0].status !== "ACTIVE")
+      throw new GatewayAccessError("ACCESS_INACTIVE");
     // A suspended or revoked agent loses API access immediately, even with a live credential.
     const life = await this.sql`
       select lifecycle from organization_agents

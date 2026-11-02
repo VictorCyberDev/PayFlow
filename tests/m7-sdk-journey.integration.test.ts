@@ -1,3 +1,4 @@
+import { truncateTenantData } from "./helpers/reset.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { readFile, readdir } from "node:fs/promises";
 import { parse } from "yaml";
@@ -201,7 +202,10 @@ const heroMandate = (over: Partial<Mandate> = {}): Mandate => ({
       });
     }
     beforeEach(async () => {
-      await repo.sql`truncate replay_keys,agent_credentials,organizations,organization_agents,principals,evidence_events,commerce_merchant_bindings restart identity cascade`;
+      await truncateTenantData(
+        repo.sql,
+        "replay_keys,agent_credentials,organizations,organization_agents,principals,evidence_events,commerce_merchant_bindings",
+      );
       s = new VerticalSession(repo);
       s.provider.payer = false;
       admin = createCredentialAdminHandler(store, {

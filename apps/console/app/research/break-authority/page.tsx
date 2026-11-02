@@ -34,6 +34,17 @@ export default function BreakAuthorityPage() {
           Scope: production authority modules, deterministic <em>fake</em> rail.
           No real money moved. No live model was run.
         </p>
+        <p className="ba-claim">
+          We tried to make PayFlow act outside an Authority across{" "}
+          {nf.format(i.scenarios)} adversarial scenarios. Within the tested
+          scope, none got through.
+        </p>
+        <p className="intro">
+          Break Authority is PayFlow&apos;s adversarial research campaign. The
+          broader product it feeds is PayFlow Authority Conformance: tests you
+          can run against an authority implementation. Neither is a
+          certification.
+        </p>
         <p className="intro">
           An agent can be wrong, manipulated or malicious. The question is
           whether being wrong gives it economic permission. Each scenario tries
@@ -110,6 +121,28 @@ export default function BreakAuthorityPage() {
             Tool selection: {b.toolSelection.passed} of {b.toolSelection.total}{" "}
             deterministic cases. A deterministic reference selector, not a
             language model.
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="gaps">
+        <h2 id="gaps">Attack families we do not claim</h2>
+        <p>
+          These appear on our own checklist but are <strong>not</strong> covered
+          by the {nf.format(i.scenarios)} scenarios, so no result is claimed for
+          them here:
+        </p>
+        <ul>
+          <li>Invoice manipulation.</li>
+          <li>Beneficiary substitution.</li>
+          <li>Approval-channel abuse.</li>
+          <li>
+            Prompt or tool manipulation of a real model. The suite has no model
+            in the loop.
+          </li>
+          <li>
+            Expired-credential and malformed-request fuzzing. These are tested
+            separately in the API test suite, not in this benchmark.
           </li>
         </ul>
       </section>

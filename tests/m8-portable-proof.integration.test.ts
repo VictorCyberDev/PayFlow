@@ -1,3 +1,4 @@
+import { truncateTenantData } from "./helpers/reset.js";
 import {
   afterAll,
   afterEach,
@@ -123,7 +124,10 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     });
     beforeEach(async () => {
-      await repo.sql`truncate replay_keys,agent_credentials,organizations,organization_agents,principals,evidence_events,commerce_merchant_bindings restart identity cascade`;
+      await truncateTenantData(
+        repo.sql,
+        "replay_keys,agent_credentials,organizations,organization_agents,principals,evidence_events,commerce_merchant_bindings",
+      );
       provider = new VerticalProvider();
       provider.payer = false;
       await repo.savePrincipal({ id: "p", displayName: "Human" });
