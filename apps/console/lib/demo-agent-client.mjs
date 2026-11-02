@@ -7,8 +7,15 @@ const transportDefault = async (path, options = {}) => {
     signal: AbortSignal.timeout(30000),
     ...options,
   });
-  if (!r.ok) throw new Error("unavailable");
-  return r.json();
+  const body = await r.json().catch(() => null);
+  if (!r.ok) {
+    const code =
+      typeof body?.code === "string" && /^[A-Z0-9_]{3,96}$/.test(body.code)
+        ? body.code
+        : "UNAVAILABLE";
+    throw new Error(code);
+  }
+  return body;
 };
 const STATUSES = [
   "COMPLETED",
@@ -23,7 +30,7 @@ export const SCENARIOS = ["VALID_PURCHASE", "PRICE_DRIFT"];
 async function mutation(path, body, transport = transportDefault) {
   const session = await transport("/api/activation/session");
   if (session?.authenticated !== true || typeof session.csrfToken !== "string")
-    throw new Error("session");
+    throw new Error("SESSION_UNAVAILABLE");
   return transport(path, {
     method: "POST",
     headers: {
@@ -64,23 +71,23 @@ export async function fetchPayPalVaultStatus(transport = transportDefault) {
   }
 }
 
-/** Starts the one-time payer-present bootstrap. The PayPal setup token remains server-side; the
- * browser receives only the provider approval URL. The Authority id is navigation-only so PayPal
- * can return to the same detail panel that completes the state-bound exchange. */
+/** Starts the one-time payer-present bootstrap. The wallet is owner-scoped, not Authority-scoped.
+ * Passing an Authority id only controls which detail page PayPal returns to. */
 export async function startPayPalVaultConnection(
-  authorityId,
+  authorityId = null,
   transport = transportDefault,
 ) {
   if (
-    typeof authorityId !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      authorityId,
-    )
+    authorityId !== null &&
+    (typeof authorityId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        authorityId,
+      ))
   )
-    throw new Error("invalid");
+    throw new Error("INVALID_AUTHORITY");
   const r = await mutation(
     "/api/paypal-vault/start",
-    { authorityId },
+    authorityId ? { authorityId } : {},
     transport,
   );
   if (
@@ -88,10 +95,10 @@ export async function startPayPalVaultConnection(
     typeof r.approvalUrl !== "string" ||
     "setupTokenId" in r
   )
-    throw new Error("invalid");
+    throw new Error("INVALID_RESPONSE");
   const u = new URL(r.approvalUrl);
   if (u.protocol !== "https:" || u.hostname !== "www.sandbox.paypal.com")
-    throw new Error("invalid");
+    throw new Error("INVALID_RESPONSE");
   window.location.assign(r.approvalUrl);
 }
 
@@ -115,7 +122,7 @@ export async function runDemoScenario(
   transport = transportDefault,
 ) {
   if (!SCENARIOS.includes(scenario) || typeof mandateId !== "string")
-    throw new Error("invalid");
+    throw new Error("INVALID_SCENARIO");
   const r = await mutation(
     "/api/demo-agent/attempt",
     { scenario, mandateId },
@@ -130,8 +137,12 @@ export async function runDemoScenario(
     (["DENIED", "REFUSED", "NEEDS_HUMAN"].includes(r.status) &&
       r.providerEffect !== "NONE")
   )
-    throw new Error("invalid");
-  return { status: r.status, operationId: r.operationId, code: r.code ?? null };
+    throw new Error("INVALID_RESPONSE");
+  return {
+    status: r.status,
+    operationId: r.operationId,
+    code: typeof r.code === "string" ? r.code : null,
+  };
 }
 
 /** Asks the system to resolve uncertain payments. Returns false on any failure; never throws. */
