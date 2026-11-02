@@ -27,6 +27,13 @@ import type { PostgresTrustRepository } from "./persistence.js";
 export const DemoScenarioSchema = z.enum(["VALID_PURCHASE", "PRICE_DRIFT"]);
 export type DemoScenario = z.infer<typeof DemoScenarioSchema>;
 
+/**
+ * The hosted M6 merchant recipient changed while hardening Sandbox acceptance. Never reinterpret
+ * an already-persisted binding revision with different trusted terms: advance the immutable binding
+ * revision instead. Historical revision 1 remains verifiable and the current demo provisions v2.
+ */
+const DEMO_MERCHANT_BINDING_REVISION = 2;
+
 /** Operator-provisioned grant signing key. Public keys are retained so Activity can verify history. */
 export interface DemoSigningKey {
   readonly kid: string;
@@ -76,7 +83,7 @@ export class DemoShoppingAgent {
       version: "payflow.merchant-binding.v1",
       logicalMerchantId: DEMO_MERCHANT_ID,
       checkoutSourceId: "payflow.demo.checkout",
-      bindingRevision: 1,
+      bindingRevision: DEMO_MERCHANT_BINDING_REVISION,
       environment: "sandbox",
       expectedPayPalMerchantId: this.deps.expectedPayPalMerchantId,
       active: true,
@@ -172,7 +179,22 @@ export class DemoShoppingAgent {
         providerEffect: "NONE",
       } as const);
     const normal = this.stack(demoCommerceCatalog());
-    await normal.checkout.registerMerchantBinding();
+    try {
+      await normal.checkout.registerMerchantBinding();
+    } catch (error) {
+      const code =
+        error instanceof Error && /^[A-Z0-9_]{3,96}$/.test(error.message)
+          ? error.message
+          : "MERCHANT_BINDING_UNAVAILABLE";
+      return Object.freeze({
+        status: "REFUSED",
+        code,
+        proposalId: null,
+        operationId: null,
+        askedHuman: false,
+        providerEffect: "NONE",
+      } as const);
+    }
     let discovery = normal.discovery;
     if (scenario === "PRICE_DRIFT") {
       const drifted = demoCommerceCatalog();
