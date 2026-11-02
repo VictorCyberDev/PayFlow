@@ -6,6 +6,23 @@ import {
 } from "node:crypto";
 import { z } from "zod";
 
+/**
+ * Optional signed facts about the economic action. Additive within payflow-proof/v1: proofs
+ * without it stay valid and verify exactly as before; when present it is covered by the signature,
+ * so any change to agent, amount, merchant or currency invalidates the proof.
+ */
+const SubjectSchema = z
+  .object({
+    principalId: z.string().min(1),
+    agentId: z.string().min(1),
+    capability: z.string().min(1),
+    amountMinor: z.number().int().safe().nonnegative(),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    merchantId: z.string().min(1),
+  })
+  .strict();
+export type PortableProofSubject = Readonly<z.infer<typeof SubjectSchema>>;
+
 const PortableProofSchema = z
   .object({
     version: z.literal("payflow-proof/v1"),
@@ -17,6 +34,7 @@ const PortableProofSchema = z
     effectCount: z.union([z.literal(0), z.literal(1), z.null()]),
     observedAt: z.string().datetime(),
     evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    subject: SubjectSchema.optional(),
     signature: z.string().min(32),
   })
   .strict();
@@ -96,4 +114,85 @@ export function proofDigest(raw: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify(canonicalize(raw)), "utf8")
     .digest("hex");
+}
+
+/** The proof's signed facts compared with what a relying party expects. Returns mismatches. */
+export function matchesExpected(
+  proof: PortableProof,
+  expected: {
+    issuer?: string;
+    agentId?: string;
+    authorityId?: string;
+    amountMinor?: number;
+    currency?: string;
+    merchantId?: string;
+  },
+): string[] {
+  const mismatches: string[] = [];
+  const need = (field: string, actual: unknown, wanted: unknown) => {
+    if (wanted !== undefined && actual !== wanted) mismatches.push(field);
+  };
+  need("issuer", proof.issuer, expected.issuer);
+  need("authorityId", proof.authorityId, expected.authorityId);
+  const bound = [
+    expected.agentId,
+    expected.amountMinor,
+    expected.currency,
+    expected.merchantId,
+  ].some((v) => v !== undefined);
+  if (bound && !proof.subject) return [...mismatches, "subject_not_in_proof"];
+  need("agentId", proof.subject?.agentId, expected.agentId);
+  need("amountMinor", proof.subject?.amountMinor, expected.amountMinor);
+  need("currency", proof.subject?.currency, expected.currency);
+  need("merchantId", proof.subject?.merchantId, expected.merchantId);
+  return mismatches;
+}
+
+/** A JWKS-style document, as returned by GET /v1/keys. */
+export function selectKey(document: unknown, keyId: string): JsonWebKey | null {
+  const doc = document as { keys?: { keyId?: string; jwk?: JsonWebKey }[] };
+  return doc.keys?.find((k) => k.keyId === keyId)?.jwk ?? null;
+}
+
+const money = (minor: number, currency: string): string =>
+  currency === "USD"
+    ? `$${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: minor % 100 === 0 ? 0 : 2 })}`
+    : `${(minor / 100).toFixed(2)} ${currency}`;
+
+/**
+ * Plain-language reading of a proof for a person: the verdict first, then the facts, never raw
+ * cryptographic fields. UNKNOWN is never described as success or as failure.
+ */
+export function explainProof(result: {
+  valid: boolean;
+  reason: string;
+  proof?: PortableProof;
+}): string[] {
+  if (!result.valid || !result.proof)
+    return ["PayFlow Proof", "Verified: NO", `Reason: ${result.reason}`];
+  const p = result.proof;
+  const outcome =
+    p.outcome === "SUCCEEDED"
+      ? "Paid once (one provider effect)"
+      : p.outcome === "FAILED"
+        ? "$0 moved"
+        : "We're confirming whether money moved. Do not retry.";
+  const lines = ["PayFlow Proof", "Verified: YES"];
+  if (p.subject) {
+    lines.push(
+      `Agent: ${p.subject.agentId}`,
+      `Action: ${p.subject.capability === "CAPTURE_PAYMENT" ? "Purchase" : p.subject.capability}`,
+      `Amount: ${money(p.subject.amountMinor, p.subject.currency)}`,
+      `Merchant: ${p.subject.merchantId}`,
+    );
+  } else {
+    lines.push("Agent/amount/merchant: not recorded in this proof");
+  }
+  lines.push(
+    `Authority: ${p.authorityId}`,
+    `Economic outcome: ${outcome}`,
+    `Issuer: ${p.issuer}`,
+    `Signed: ${p.observedAt}`,
+  );
+  return lines;
 }

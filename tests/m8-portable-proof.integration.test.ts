@@ -171,6 +171,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
           "packages/verifier/src/cli.ts",
           join(dir, "proof.json"),
           join(dir, "key.json"),
+          "--json",
           ...extra,
         ],
         {
@@ -212,11 +213,57 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
         (k) => k.keyId === portable.body.proof.keyId,
       )!.jwk;
       expect(JSON.stringify(jwk)).not.toContain('"d"'); // public key only
+      expect(portable.body.proof.subject).toMatchObject({
+        agentId: "a",
+        amountMinor: 8400,
+        currency: "USD",
+        merchantId: "payflow.demo.merchant",
+      });
+      // The signed subject cannot be edited: a different amount invalidates the proof.
+      expect(
+        verifyOffline(
+          {
+            ...portable.body.proof,
+            subject: {
+              ...(portable.body.proof.subject as object),
+              amountMinor: 1,
+            },
+          },
+          jwk,
+        ),
+      ).toMatchObject({
+        code: 1,
+        out: { valid: false, reason: "SIGNATURE_INVALID" },
+      });
       const ok = verifyOffline(portable.body.proof, jwk);
       expect(ok).toMatchObject({
         code: 0,
         out: { valid: true, reason: "PROOF_VALID" },
       });
+    }, 90_000);
+
+    it("the SDK verifies a real hosted proof and enforces merchant expectations", async () => {
+      const { s, portable } = await paidProof();
+      const verified = await s.client.proofs.verify(portable.body.proof, {
+        expect: {
+          amountMinor: 8400,
+          merchantId: "payflow.demo.merchant",
+          agentId: "a",
+        },
+      });
+      expect(verified).toMatchObject({ verified: true, reason: "PROOF_VALID" });
+      expect(verified.summary.slice(0, 2)).toEqual([
+        "PayFlow Proof",
+        "Verified: YES",
+      ]);
+      const wrong = await s.client.proofs.verify(portable.body.proof, {
+        expect: { amountMinor: 100 },
+      });
+      expect(wrong).toMatchObject({
+        verified: false,
+        mismatches: ["amountMinor"],
+      });
+      expect(wrong.summary[1]).toBe("Verified: NO");
     }, 90_000);
 
     it("tampering with any signed field, or using another key, is rejected", async () => {

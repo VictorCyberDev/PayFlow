@@ -1,3 +1,23 @@
+import {
+  explainProof,
+  matchesExpected,
+  selectKey,
+  verifyPortableProof,
+  type PortableProof,
+} from "../../verifier/src/index.js";
+
+export type { PortableProof };
+
+export interface VerifyOutcome {
+  /** True only if the signature is authentic AND every supplied expectation matched. */
+  readonly verified: boolean;
+  readonly reason: string;
+  readonly mismatches: readonly string[];
+  /** Plain-language lines, verdict first. Show these to people. */
+  readonly summary: readonly string[];
+  readonly proof?: PortableProof;
+}
+
 export interface PayFlowClientOptions {
   readonly baseUrl: string;
   readonly accessToken: string;
@@ -184,6 +204,65 @@ export class PayFlowClient {
   };
 
   readonly proofs = {
+    /**
+     * Verify a portable proof with no PayFlow session. Pass `keys` (the GET /v1/keys document or a
+     * single public JWK) to verify fully offline; otherwise the public keys are fetched once.
+     * Historical proofs verify by authenticity; set `maxAgeSeconds` to require freshness.
+     */
+    verify: async (
+      proof: unknown,
+      options: {
+        keys?: unknown;
+        maxAgeSeconds?: number;
+        expect?: Parameters<typeof matchesExpected>[1];
+      } = {},
+    ): Promise<VerifyOutcome> => {
+      const keyId = (proof as { keyId?: string } | null)?.keyId;
+      let keyDoc = options.keys;
+      if (keyDoc === undefined) {
+        try {
+          keyDoc = await (
+            await this.request(new URL("/v1/keys", this.options.baseUrl))
+          ).json();
+        } catch {
+          keyDoc = null;
+        }
+      }
+      const jwk = (
+        (keyDoc as { keys?: unknown } | null)?.keys
+          ? keyId
+            ? selectKey(keyDoc, keyId)
+            : null
+          : keyDoc
+      ) as Parameters<typeof verifyPortableProof>[1] | null;
+      const result = jwk
+        ? verifyPortableProof(
+            proof,
+            jwk,
+            new Date().toISOString(),
+            options.maxAgeSeconds ?? null,
+          )
+        : { valid: false, reason: "UNKNOWN_KEY" };
+      const proofValue = "proof" in result ? result.proof : undefined;
+      const mismatches =
+        result.valid && proofValue && options.expect
+          ? matchesExpected(proofValue, options.expect)
+          : [];
+      const lines = explainProof(result);
+      if (mismatches.length) {
+        lines[1] = "Verified: NO";
+        lines.push(
+          `Does not match what you expected: ${mismatches.join(", ")}`,
+        );
+      }
+      return {
+        verified: result.valid && mismatches.length === 0,
+        reason: result.reason,
+        mismatches,
+        summary: lines,
+        ...(proofValue ? { proof: proofValue } : {}),
+      };
+    },
     /** Read the durable Proof for an operation this credential's agent owns. */
     get: async (proposalId: string): Promise<unknown> =>
       this.json(`/v1/proofs/${encodeURIComponent(proposalId)}`, {

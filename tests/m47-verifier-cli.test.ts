@@ -8,7 +8,14 @@ import { signedProof } from "../src/network/live-fault-injector.js";
 function run(proofFile: string, jwkFile: string) {
   return spawnSync(
     process.execPath,
-    ["--import", "tsx", "packages/verifier/src/cli.ts", proofFile, jwkFile],
+    [
+      "--import",
+      "tsx",
+      "packages/verifier/src/cli.ts",
+      proofFile,
+      jwkFile,
+      "--json",
+    ],
     {
       encoding: "utf8",
     },

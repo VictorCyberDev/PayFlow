@@ -9,6 +9,7 @@ import {
   type PortableProof,
   type PortableProofPayload,
 } from "../../packages/verifier/src/index.js";
+import type { PostgresTrustRepository } from "../persistence.js";
 import type { ProofReader } from "./proof-read.js";
 
 /**
@@ -25,6 +26,7 @@ import type { ProofReader } from "./proof-read.js";
 export class PortableProofIssuer {
   constructor(
     private readonly proofs: ProofReader,
+    private readonly repo: PostgresTrustRepository,
     private readonly signing: {
       readonly issuer: string;
       readonly keyId: string;
@@ -55,6 +57,22 @@ export class PortableProofIssuer {
     }
     const mandateId = trace.references.mandateId;
     if (!mandateId) return "NOT_ISSUABLE";
+    // Bind the signed proof to the durable facts of the action: agent, amount, merchant, currency.
+    const proposal = await this.repo.getProposal(proposalId);
+    const mandate = proposal
+      ? await this.repo.getMandate(proposal.mandateId)
+      : null;
+    const subject =
+      proposal && mandate
+        ? {
+            principalId: mandate.principalId,
+            agentId: proposal.agentId,
+            capability: proposal.requestedCapability,
+            amountMinor: proposal.amount.minor,
+            currency: proposal.amount.currency,
+            merchantId: proposal.merchant.id,
+          }
+        : undefined;
     const payload: PortableProofPayload = {
       version: "payflow-proof/v1",
       issuer: this.signing.issuer,
@@ -65,6 +83,7 @@ export class PortableProofIssuer {
       effectCount,
       observedAt: now,
       evidenceDigest: proofDigest(trace),
+      ...(subject ? { subject } : {}),
     };
     const signature = cryptoSign(
       null,

@@ -71,7 +71,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   });
   const proofs = new ProofReader(repo, demo.keys);
   const key = demo.verificationKey();
-  const portable = new PortableProofIssuer(proofs, {
+  const portable = new PortableProofIssuer(proofs, repo, {
     issuer: options.organizationId,
     keyId: key.keyId,
     privateKey: demo.signingForProofs().privateKey,
