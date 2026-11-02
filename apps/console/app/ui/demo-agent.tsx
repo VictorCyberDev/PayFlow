@@ -52,7 +52,7 @@ export function SandboxWalletPanel() {
       })
       .then((ok) => {
         setConnected(ok);
-        if (!ok) setDiagnostic("PAYPAL_VAULT_COMPLETE_FAILED");
+        if (!ok) setDiagnostic("VAULT_COMPLETE_FAILED");
         u.searchParams.delete("paypal");
         u.searchParams.delete("state");
         window.history.replaceState({}, "", u.pathname + u.search + u.hash);
@@ -139,7 +139,7 @@ export function DemoAgentPanel({ mandateId }: { mandateId: string }) {
       })
       .then(async (ok) => {
         setVaultConnected(ok);
-        if (!ok) setDiagnostic("PAYPAL_VAULT_COMPLETE_FAILED");
+        if (!ok) setDiagnostic("VAULT_COMPLETE_FAILED");
         if (ok) {
           const agent = await fetchDemoAgentStatus();
           if (agent) setOffer(agent);
