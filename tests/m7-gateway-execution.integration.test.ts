@@ -120,7 +120,9 @@ const body = (over: Record<string, unknown> = {}) => ({
         }),
         ranker: new FakeCommerceRanker(),
         now: () => s.time,
-        onEvent: (e) => events.push(e),
+        onEvent: (e) => {
+          events.push(e);
+        },
       });
     });
 
@@ -138,6 +140,7 @@ const body = (over: Record<string, unknown> = {}) => ({
       expect((await counts()).grants).toBe(1);
       expect(events.map((e) => e.type)).toEqual([
         "gateway.request_received",
+        "gateway.evaluated",
         "gateway.executed",
       ]);
       // Events are identifiers and outcome only.

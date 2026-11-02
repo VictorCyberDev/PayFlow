@@ -57,6 +57,7 @@ export function CompanyShell({ children }: { children: React.ReactNode }) {
             ["Status", "/status/"],
             ["Changelog", "/changelog/"],
             ["Contact", "/contact/"],
+            ["Support", "/support/"],
             ["Privacy", "/privacy/"],
             ["Terms", "/terms/"],
             ["Acceptable use", "/acceptable-use/"],

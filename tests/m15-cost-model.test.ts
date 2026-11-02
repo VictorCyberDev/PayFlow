@@ -31,7 +31,7 @@ const est = (id: string, value: number): UnitCostInput => ({
 /** A tiny table with round numbers so arithmetic can be checked by hand. */
 function simpleTable(): UnitCostTable {
   const ids: Record<string, number> = {
-    "vercel.activeCpuUsdPerHour": 0.36, // $0.36/h => $0.0001 per CPU-second... 1000 ms = 0.0001
+    "vercel.activeCpuUsdPerHour": 0.36,
     "vercel.provisionedMemoryUsdPerGbHour": 0.036,
     "vercel.fastDataTransferUsdPerGb": 0.1,
     "vercel.observabilityUsdPerMillionEvents": 1,
@@ -73,8 +73,8 @@ describe("M15 cost model: arithmetic", () => {
     const byId = Object.fromEntries(
       result.lines.map((line) => [line.id, line.costUsd]),
     );
-    // 1000 * 10 ms = 10,000 ms = 1/360 h * $0.36 = $0.01
-    expect(byId["authority.cpu"]).toBeCloseTo(0.01, 12);
+    // 1000 * 10 ms = 10,000 ms = 1/360 h * $0.36 = $0.001
+    expect(byId["authority.cpu"]).toBeCloseTo(0.001, 12);
     // 1000 * 100 ms * 1 GB = 100,000 ms = 1/36 h * $0.036 = $0.001
     expect(byId["authority.memory"]).toBeCloseTo(0.001, 12);
     // 1000 invocations = 0.001 M * $0.5

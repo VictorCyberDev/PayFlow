@@ -16,6 +16,7 @@ import {
   createHostedConsole,
   parseHostedConfig,
 } from "../src/console-hosted.js";
+import { PostgresNetworkStore } from "../src/network/postgres-adapters.js";
 import { PayFlowClient } from "../packages/sdk-typescript/src/index.js";
 import { VerticalProvider } from "./m4-vertical-fixture.js";
 
@@ -244,6 +245,92 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       expect(() =>
         parseHostedConfig(env({ PAYFLOW_GATEWAY_ADMIN_TOKEN: "short" })),
       ).toThrow();
+    });
+
+    describe("metering (GOVERNED_ACTION)", () => {
+      const usage = () =>
+        repo.sql`select meter, quantity::int q, metadata from usage_events order by occurred_at, id`;
+
+      it("meters one governed action per evaluated request, with outcome metadata and no secrets", async () => {
+        const s = await sandbox();
+        const paid = await s.client.actions.execute(purchase(s.authority));
+        expect(paid.status).toBe("COMPLETED");
+        const denied = await s.client.actions.execute(
+          purchase(s.authority, { amount: 5000 }),
+        );
+        expect(denied.status).toBe("DENIED");
+        const rows = await usage();
+        expect(rows).toHaveLength(2);
+        expect(
+          rows.every((r) => r.meter === "GOVERNED_ACTION" && r.q === 1),
+        ).toBe(true);
+        expect(
+          rows.map((r) => (r.metadata as { status: string }).status).sort(),
+        ).toEqual(["COMPLETED", "DENIED"]);
+        const text = JSON.stringify(rows);
+        expect(text).not.toContain(s.token.split(".")[1]!);
+        expect(text).not.toMatch(/nonce|hosted-nonce/i);
+      });
+
+      it("a replayed request, a bad credential and a malformed request are not metered", async () => {
+        const s = await sandbox();
+        const once = purchase(s.authority);
+        await s.client.actions.execute(once);
+        await s.client.actions.execute(once); // replay
+        const bad = new PayFlowClient({
+          baseUrl: origin,
+          accessToken: s.token.replace(/.$/, "A"),
+        });
+        await bad.actions.execute(purchase(s.authority));
+        await fetch(origin + "/v1/actions/execute", {
+          method: "POST",
+          headers: { authorization: `Bearer ${s.token}` },
+          body: JSON.stringify({ nope: true }),
+        });
+        expect(await usage()).toHaveLength(1);
+      });
+
+      it("counts active agents as a distinct count, not a sum", async () => {
+        const s = await sandbox();
+        await s.client.actions.execute(purchase(s.authority, { amount: 5000 }));
+        await s.client.actions.execute(purchase(s.authority, { amount: 5001 }));
+        await s.client.actions.execute(purchase(s.authority, { amount: 5002 }));
+        const n = await new PostgresNetworkStore(repo.sql).activeAgentCount(
+          "payflow-sandbox",
+          "SANDBOX",
+          "2000-01-01T00:00:00Z",
+          "2100-01-01T00:00:00Z",
+        );
+        expect(n).toBe(1);
+        expect(await usage()).toHaveLength(3);
+      });
+
+      it("a metering failure never changes the financial result", async () => {
+        const s = await sandbox();
+        await repo.sql`drop table usage_events cascade`;
+        try {
+          const r = await s.client.actions.execute(purchase(s.authority));
+          expect(r).toMatchObject({ status: "COMPLETED", effectCount: 1 });
+          expect(provider.captureCalls).toBe(1);
+        } finally {
+          await repo.migrate(
+            (
+              await readFile(
+                "db/migrations/013_m7_m15_network_control_plane.sql",
+                "utf8",
+              )
+            )
+              .split(";")
+              .map((x) => x.replace(/--[^\n]*/g, "").trim())
+              .filter((x) =>
+                /create (table|index) (usage_events|usage_events_org_time)/i.test(
+                  x,
+                ),
+              )
+              .join(";\n") + ";",
+          );
+        }
+      });
     });
   },
 );

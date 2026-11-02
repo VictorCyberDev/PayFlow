@@ -698,3 +698,85 @@
     hyphens: auto;
   }
 }
+
+/* Proof verifier (browser, read-only) */
+.proof-verifier {
+  margin: 2rem 0;
+  max-width: 62rem;
+}
+.proof-verifier .pv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.proof-verifier label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.proof-verifier textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8125rem;
+  padding: 0.6rem;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+}
+.proof-verifier .pv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.proof-verifier .pv-actions button {
+  min-height: 44px;
+  min-width: 44px;
+}
+.proof-verifier .pv-note {
+  font-size: 0.875rem;
+  border-left: 3px solid currentColor;
+  padding-left: 0.6rem;
+}
+.proof-verifier .pv-result article {
+  border: 2px solid currentColor;
+  padding: 1rem 1.25rem;
+  margin-top: 1.25rem;
+}
+.proof-verifier .pv-result h3 {
+  font-size: 1.75rem;
+  margin: 0 0 0.25rem;
+}
+.proof-verifier .pv-outcome {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.proof-verifier .pv-facts div,
+.proof-verifier .pv-tech div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr);
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+.proof-verifier dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.proof-verifier summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+@media (max-width: 640px) {
+  .proof-verifier .pv-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .proof-verifier .pv-facts div,
+  .proof-verifier .pv-tech div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}

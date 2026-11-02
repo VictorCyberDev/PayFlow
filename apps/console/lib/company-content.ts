@@ -173,32 +173,46 @@ export const companyDocuments: Record<string, CompanyDocument> = {
   ),
   status: make(
     "Service status",
-    "Operational monitoring is not commissioned. These are declared states, not live health checks or measured uptime.",
+    "Measured facts only. No uptime monitoring exists yet, so availability and uptime are not stated.",
     [
       {
-        title: "API · Gateway · Verify",
+        title: "Hosted API (Gateway, Proof, Verify)",
         paragraphs: [
-          "M7–M60 local implementation. No company release deployed by this session. Availability is not asserted.",
+          "Deployed once as a protected preview for commissioning on 2026-11-02 (commit 540f10f). It is not publicly reachable and carries no availability claim.",
         ],
       },
       {
-        title: "Console · Sandbox",
+        title: "Last commissioning evidence (not uptime)",
         paragraphs: [
-          "Historical acceptance deployments exist independently. Public illustrations use local data and contact no provider.",
+          "On 2026-11-02 one PayPal Sandbox purchase went through the hosted Gateway and completed exactly once. A replay, three concurrent overruns, a revoked credential and a revoked Authority each moved $0. This shows the path worked on that day. It measures nothing about reliability.",
         ],
+      },
+      {
+        title: "Public site",
+        paragraphs: ["Static pages. No health probe is configured."],
       },
       {
         title: "External dependencies",
         paragraphs: [
-          "M6 PayPal delegated acceptance and OpenAI/Claude/Gemini commissioning remain pending. No external provider health is inferred.",
+          "PayPal Sandbox was exercised once on 2026-11-02. No provider health is inferred from that.",
         ],
       },
       {
         title: "Before operational launch",
         paragraphs: [
-          "Configure authenticated probes, component ownership, incident updates and an observation window. Publish uptime only after measurement.",
+          "Configure authenticated probes, component ownership and incident updates, then observe for a stated window. Publish uptime only after it has been measured.",
         ],
       },
+    ],
+    [
+      [
+        "Commissioning record",
+        "https://github.com/VictorCyberDev/PayFlow/blob/claude/eloquent-einstein-dw0mxk/docs/evidence/live/m7-sandbox-acceptance-2026-11-02.json",
+      ],
+      [
+        "Incident process",
+        "https://github.com/VictorCyberDev/PayFlow/blob/claude/eloquent-einstein-dw0mxk/docs/security-ops/INCIDENT-RUNBOOKS.md",
+      ],
     ],
   ),
   pricing: make(
@@ -295,27 +309,40 @@ export const companyDocuments: Record<string, CompanyDocument> = {
   ),
   changelog: make(
     "Changelog",
-    "Engineering history, not a commercial release timeline.",
+    "Each entry says how far a change has actually travelled: built, tested, deployed, commissioned or externally validated.",
     [
       {
-        title: "2026-10-28 / Integration candidate",
+        title: "2026-11-02 / M9 Break Authority research page",
         paragraphs: [
-          "Source head 6bcab82 includes Gateway, Verify, SDKs, enterprise modules, reconciliation, portable verification and local adversarial artifacts. External publication remains pending.",
+          "BUILT and TESTED in source. Not deployed. 1,000 scenarios from 16 attack families produce 38 distinct containment outcomes; the rail is a fake and no real model was run. COMMISSIONED: no. EXTERNALLY VALIDATED: no.",
+        ],
+      },
+      {
+        title: "2026-11-02 / M8 independent Verify",
+        paragraphs: [
+          "BUILT and TESTED in source. Not deployed. Signed portable proof that binds agent, amount, currency and merchant; offline CLI with a plain-language result; SDK verify; in-browser verifier. Tamper, wrong-key, unknown-key, historical, UNKNOWN and read-only-import cases pass. COMMISSIONED: no. EXTERNALLY VALIDATED: no.",
+        ],
+      },
+      {
+        title: "2026-11-02 / M7 external Gateway execution",
+        paragraphs: [
+          "BUILT and TESTED. DEPLOYED as a protected preview (commit 540f10f). COMMISSIONED: one PayPal Sandbox capture through the hosted Gateway, with replay, concurrent-overrun, revoked-credential and revoked-Authority checks. EXTERNALLY VALIDATED: no. Not publicly reachable; Sandbox only.",
         ],
       },
       {
         title: "2026-10-29 / Company work in progress",
         paragraphs: [
-          "Company/app separation, corrected milestone classifications and protocol transport/tool-use corrections. This describes source work, not production release.",
+          "Company and app separation, corrected milestone classifications and protocol transport corrections. Source work, not a release.",
+        ],
+      },
+      {
+        title: "2026-10-28 / Integration candidate",
+        paragraphs: [
+          "Gateway, Verify, SDKs, enterprise modules, reconciliation, portable verification and local adversarial artifacts. External publication was pending.",
         ],
       },
     ],
-    [
-      [
-        "Commit history",
-        "https://github.com/VictorCyberDev/PayFlow/commits/m7-m60-master-execution/",
-      ],
-    ],
+    [["Source history", "https://github.com/VictorCyberDev/PayFlow/pull/19"]],
   ),
   privacy: make(
     "Privacy Policy / Draft",
@@ -412,18 +439,37 @@ export const companyDocuments: Record<string, CompanyDocument> = {
   ),
   sandbox: make(
     "An exact boundary. A visible outcome.",
-    "Explore an interactive local illustration. It does not execute payments or contact a provider.",
+    "Explore the boundary in your browser with no account, then call the hosted Sandbox with a credential. Sandbox only: no real money moves.",
     [
       {
-        title: "Continue in the console",
+        title: "In your browser, no account",
         paragraphs: [
-          "The authenticated console needs a configured backend and access code. A signed-out preview is not a customer account. The quickstart reproduces a local governed path.",
+          "Use the interactive illustration below, and check a sample Proof on the Verify page. Both run locally and contact no provider.",
+        ],
+      },
+      {
+        title: "Against the hosted Sandbox",
+        paragraphs: [
+          "Hosted execution runs on PayPal Sandbox through the same Trust Kernel as production design. It needs a PayFlow credential. Self-serve credentials are not available yet: request one through Contact and say which agent and use case you have in mind.",
+        ],
+      },
+      {
+        title: "What you do with a credential",
+        paragraphs: [
+          "Send an allowed purchase and see it paid once. Change the amount or merchant and see $0 moved with a reason you can act on. Open the Proof, then verify it offline with no PayFlow session.",
+        ],
+      },
+      {
+        title: "Limits you should know",
+        paragraphs: [
+          "Preview only. One controlled demo merchant. No uptime commitment. Credentials expire and can be revoked.",
         ],
       },
     ],
     [
-      ["Console preview", "/app/"],
+      ["Verify a Proof", "/verify/"],
       ["Quickstart", "/docs/quickstart/"],
+      ["Request a credential", "/contact/"],
     ],
   ),
   contact: make(
@@ -436,6 +482,61 @@ export const companyDocuments: Record<string, CompanyDocument> = {
           "Choose developer, design-partner, enterprise or security. This form opens an email draft, not a delivery confirmation. Do not include credentials, payment data or confidential vulnerabilities. Request a private channel first.",
         ],
       },
+    ],
+  ),
+  support: make(
+    "Get help",
+    "Choose the category so it reaches the right person. This is a developer preview: there is no response-time commitment.",
+    [
+      {
+        title: "Integration",
+        paragraphs: [
+          "Credentials, SDK use, request shape, errors. Include the request id from the response. Never include a token.",
+        ],
+      },
+      {
+        title: "Authority and execution",
+        paragraphs: [
+          "An action was denied, or you expected it to be allowed. Include the reason and operation id.",
+        ],
+      },
+      {
+        title: "UNKNOWN or a payment question",
+        paragraphs: [
+          "If a result says we are confirming whether money moved, do not retry. Send the operation id and we will reconcile the original attempt. Nothing is re-executed.",
+        ],
+      },
+      {
+        title: "Verification",
+        paragraphs: [
+          "A Proof will not verify, or you need a key. Include the proof and the key id, never a private key.",
+        ],
+      },
+      {
+        title: "Security",
+        paragraphs: [
+          "Use the security category and ask for a private channel before sending details. Do not post exploit details publicly.",
+        ],
+      },
+      {
+        title: "Billing, account, partnership, general",
+        paragraphs: [
+          "Billing and account questions are limited while there is no paid plan. Partnership and design-partner interest goes in the partnership category.",
+        ],
+      },
+      {
+        title: "Ownership today",
+        paragraphs: [
+          "The founders read every request. No on-call rotation exists yet.",
+        ],
+      },
+    ],
+    [
+      ["Contact form", "/contact/"],
+      [
+        "Security policy",
+        "https://github.com/VictorCyberDev/PayFlow/blob/claude/eloquent-einstein-dw0mxk/SECURITY.md",
+      ],
     ],
   ),
   docs: make(
@@ -463,48 +564,93 @@ export const companyDocuments: Record<string, CompanyDocument> = {
     ],
   ),
   "docs/quickstart": make(
-    "Local quickstart",
-    "Reproduce the kernel and local Sandbox without deploying or making a paid model call.",
+    "First safe action",
+    "Send a bounded purchase, break the Authority on purpose, then verify the Proof. The under-five-minutes target has not been measured.",
     [
       {
-        title: "Install and verify",
+        title: "1. Get a credential",
         paragraphs: [
-          "Use Node 22+ and Python 3. PostgreSQL is required for durable integration suites. Live provider suites are opt-in.",
+          "Ask for a Sandbox credential through Contact. You receive a token that is bound to one agent, with scopes and an expiry. PayFlow stores only its digest; the secret is shown once.",
         ],
-        code: "git clone https://github.com/VictorCyberDev/PayFlow.git\ncd PayFlow\ngit checkout m7-m60-master-execution\nnpm ci\nnpm run typecheck\nnpm test\nnpm run evidence:check\npython3 -m unittest discover -s packages/sdk-python/tests -v",
       },
       {
-        title: "Examples and console",
+        title: "2. Send an allowed action",
         paragraphs: [
-          "The procurement example exercises local Authority. Vendor loops are in examples/model-tool-flow.ts. HTTP commissioning is in docs/PROTOCOL-COMMISSIONING.md. These are repository paths, not hosted APIs.",
+          "amount is in minor units (cents) and is only checked against the trusted price. nonce is your idempotency key: reuse it to retry the same request safely.",
         ],
-        code: "npx tsx examples/procurement-ap-agent.ts\nnpm run build\ncd apps/console\nnpm ci\nnpm run build",
+        code: 'import { PayFlowClient } from "@payflow/authority-sdk";\nconst payflow = new PayFlowClient({ baseUrl, accessToken });\nconst r = await payflow.actions.execute({\n  authority, agent, item: "Quiet keyboard",\n  amount: 8400, currency: "USD",\n  merchant: "payflow.demo.merchant", nonce: "order-0001",\n});\n// r.status === "COMPLETED"  ->  $84 paid once',
       },
+      {
+        title: "3. Break it on purpose",
+        paragraphs: [
+          "Ask for a different amount. Nothing is reserved and the provider is never called.",
+        ],
+        code: 'await payflow.actions.execute({ /* same */ amount: 18400, nonce: "order-0002" });\n// status "DENIED", effectCount 0, reason, recoverable, nextAction',
+      },
+      {
+        title: "4. Read the result honestly",
+        paragraphs: [
+          "effectCount 1 means paid once. 0 means PayFlow is certain nothing moved. null means unknown: do not retry, read the Proof later.",
+        ],
+      },
+      {
+        title: "5. Inspect and verify the Proof",
+        paragraphs: [
+          "Fetch the portable Proof and the public keys, then check them offline.",
+        ],
+        code: 'curl -H "authorization: Bearer $TOKEN" $URL/v1/proofs/$ID/portable > proof.json\ncurl $URL/v1/keys > keys.json\npayflow verify proof.json --key keys.json',
+      },
+      {
+        title: "Or reproduce the kernel locally",
+        paragraphs: ["No credential, hosted service or paid model is needed."],
+        code: "git clone https://github.com/VictorCyberDev/PayFlow.git\ncd PayFlow && git checkout claude/eloquent-einstein-dw0mxk\nnpm ci && npm test && npm run evidence:check",
+      },
+    ],
+    [
+      ["API & errors", "/docs/api/"],
+      ["Verify & Proof", "/docs/verify/"],
+      ["Credential help", "/support/"],
     ],
   ),
   "docs/api": make(
     "API & error reference",
-    "Canonical schema: openapi/payflow-v1.yaml. Implementation: src/network/rest.ts. No hosted endpoint is implied.",
+    "Schema: openapi/payflow-v1.yaml, checked against the running handlers by tests. Hosted use needs a credential.",
     [
       {
-        title: "Requests",
+        title: "Execute",
         paragraphs: [
-          "Send the exact action and stable nonce/replay identity. Bind agent, principal, audience and scopes from trusted authentication, never model arguments.",
-          "ALLOW is not captured. DENY blocks execution. ESCALATE requires approval. Provider timeouts remain UNKNOWN.",
+          "POST /v1/actions/execute takes an Authority, agent, item, claimed amount, currency, merchant and a nonce. Policy outcomes are HTTP 200 with a structured body: ALLOW (COMPLETED), DENY, ESCALATE (NEEDS_APPROVAL) or UNRESOLVED. Read reason, recoverable and nextAction.",
         ],
       },
       {
-        title: "Errors",
+        title: "effectCount",
         paragraphs: [
-          "ACCESS_MALFORMED, ACCESS_INACTIVE, ACCESS_EXPIRED, ACCESS_WRONG_AUDIENCE and ACCESS_SCOPE_DENIED fail closed. MCP_INVALID_ARGUMENTS and MCP_SCOPE_DENIED refuse invalid tool calls.",
-          "401: authenticate. 403: denied. 409: replay/conflict. 429: bounded backoff for safe reads. Never retry a financial write with a new identity after timeout.",
+          "1: exactly one provider effect. 0: PayFlow is certain none occurred. null: unknown, never zero. A 5xx or a transport failure after sending is unknown, not zero.",
+        ],
+      },
+      {
+        title: "Errors at the door",
+        paragraphs: [
+          "400 malformed, 401 credential missing, unknown, expired or revoked, 403 wrong scope or not bound to this agent, 404 unknown Authority. All carry effectCount 0 and a nextAction. Never retry a financial write with a new nonce after a timeout.",
+        ],
+      },
+      {
+        title: "Replay",
+        paragraphs: [
+          "The first presentation of a nonce wins. A repeat returns REPLAY_DETECTED and never pays twice.",
+        ],
+      },
+      {
+        title: "Other routes",
+        paragraphs: [
+          "GET /v1/proofs/{id}, GET /v1/proofs/{id}/portable, GET /v1/keys. Credential routes are administrative.",
         ],
       },
     ],
     [
       [
         "OpenAPI source",
-        "https://github.com/VictorCyberDev/PayFlow/blob/m7-m60-master-execution/openapi/payflow-v1.yaml",
+        "https://github.com/VictorCyberDev/PayFlow/blob/claude/eloquent-einstein-dw0mxk/openapi/payflow-v1.yaml",
       ],
     ],
   ),
@@ -529,7 +675,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
     [
       [
         "SDK source",
-        "https://github.com/VictorCyberDev/PayFlow/tree/m7-m60-master-execution/packages",
+        "https://github.com/VictorCyberDev/PayFlow/tree/claude/eloquent-einstein-dw0mxk/packages",
       ],
     ],
   ),
@@ -580,23 +726,41 @@ export const companyDocuments: Record<string, CompanyDocument> = {
     "Permission before execution and evidence afterward answer different questions.",
     [
       {
-        title: "Authority",
+        title: "Verify a Proof with nothing from PayFlow but a public key",
         paragraphs: [
-          "Check signature, trusted issuer, audience, challenge, expiry and revocation. Verification dependencies must expose no money-moving capability.",
+          "A portable Proof is signed with Ed25519 over a canonical form. It carries the Authority, action, outcome, effect count and, when present, the agent, amount, currency and merchant. Changing any of them breaks the signature.",
         ],
       },
       {
-        title: "Proof",
+        title: "Four ways",
         paragraphs: [
-          "Inspect Authority, agent, exact action, Gate, rail, outcome, reconciliation and validation. Headline outcomes follow provider evidence, never network exceptions.",
-          "Review identifiers before sharing. Safe public sharing and retention require deployment-specific review.",
+          "In your browser on the Verify page. With the CLI: payflow verify proof.json --key keys.json. With the SDK: payflow.proofs.verify(proof). Or with any Ed25519 library using the key from GET /v1/keys. Merchants can add --expect-amount, --expect-merchant and --expect-agent.",
+        ],
+      },
+      {
+        title: "Old proofs stay valid",
+        paragraphs: [
+          "Authenticity does not expire. Freshness is a separate, optional check (--max-age). A proof dated in the future is always refused.",
+        ],
+      },
+      {
+        title: "UNKNOWN",
+        paragraphs: [
+          "An unresolved outcome is signed as UNKNOWN with no effect count. It can never verify as a success.",
+        ],
+      },
+      {
+        title: "Authority at presentation time",
+        paragraphs: [
+          "Checking that an agent's Authority is current when it presents it to a merchant is a different check: signature, issuer, audience, challenge, expiry, revocation and replay, with no money-moving capability.",
         ],
       },
     ],
     [
+      ["Verify in the browser", "/verify/"],
       [
         "Verifier source",
-        "https://github.com/VictorCyberDev/PayFlow/tree/m7-m60-master-execution/packages/verifier",
+        "https://github.com/VictorCyberDev/PayFlow/blob/claude/eloquent-einstein-dw0mxk/packages/verifier",
       ],
     ],
   ),
@@ -624,20 +788,31 @@ export const companyDocuments: Record<string, CompanyDocument> = {
     "Transport access does not grant financial Authority.",
     [
       {
-        title: "Scopes",
+        title: "PayFlow credentials (preview)",
         paragraphs: [
-          "authority:read → check_financial_authority. action:request → request_authorized_action. verify:read → verify_authority. proof:read → verify_financial_proof. reconcile:request → reconcile_financial_action.",
-          "Bind subject, principal, audience, lifecycle and expiry server-side. Reject wrong issuer, audience, signature or scope. Arguments cannot authenticate the model.",
+          "A bearer token pf_sbx_<id>.<secret>. Bound to one tenant, environment, agent and principal, with scopes, an audience and an expiry. Only a SHA-256 digest is stored; the secret is shown once. Revoke it and the next request fails closed. A suspended agent loses access at once.",
         ],
       },
       {
-        title: "Deployment",
+        title: "Scopes",
         paragraphs: [
-          "Configure fixed trusted issuer/JWKS values. For end-user ChatGPT use authorization code + S256 PKCE and exact resource binding. Do not publish metadata pointing to an unconfigured issuer.",
-          "High-entropy local tokens are isolated commissioning credentials, not an end-user identity service.",
+          "authority:read, action:request, proof:read, verify:read, reconcile:request. The principal always comes from the agent record, never from the request.",
+        ],
+      },
+      {
+        title: "What a credential cannot do",
+        paragraphs: [
+          "It cannot widen an Authority, change a limit, pick a different principal, or skip the Trust Kernel. Unknown request fields are rejected.",
+        ],
+      },
+      {
+        title: "Production path",
+        paragraphs: [
+          "OAuth/OIDC with fixed issuer, audience and key set is the intended production path and is not built into the hosted preview.",
         ],
       },
     ],
+    [["Support", "/support/"]],
   ),
   "docs/events": make(
     "Events & webhooks",

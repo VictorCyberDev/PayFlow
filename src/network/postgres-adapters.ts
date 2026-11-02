@@ -128,11 +128,29 @@ export class PostgresNetworkStore {
   /** Idempotent by key: a retried delivery never double-counts usage. */
   async recordUsage(event: UsageEvent): Promise<"RECORDED" | "DUPLICATE"> {
     const rows = await this.sql`
-      insert into usage_events (id, organization_id, environment, meter, quantity, occurred_at, idempotency_key)
-      values (${event.id}, ${event.organizationId}, ${event.environment}, ${event.meter}, ${event.quantity}, ${event.occurredAt}, ${event.idempotencyKey})
+      insert into usage_events (id, organization_id, environment, meter, quantity, occurred_at, idempotency_key, metadata)
+      values (${event.id}, ${event.organizationId}, ${event.environment}, ${event.meter}, ${event.quantity}, ${event.occurredAt}, ${event.idempotencyKey}, ${this.sql.json(event.metadata ?? {})})
       on conflict (idempotency_key) do nothing
       returning id`;
     return rows.length === 1 ? "RECORDED" : "DUPLICATE";
+  }
+
+  /**
+   * ACTIVE_AGENT is a distinct count per period, not a sum: agents that had at least one governed
+   * action. Derived from GOVERNED_ACTION metadata so no per-day event can be double counted.
+   */
+  async activeAgentCount(
+    organizationId: string,
+    environment: ControlPlaneEnvironment,
+    from: string,
+    to: string,
+  ): Promise<number> {
+    const rows = await this.sql`
+      select count(distinct metadata->>'agentId')::int n from usage_events
+      where organization_id = ${organizationId} and environment = ${environment}
+        and meter = 'GOVERNED_ACTION' and occurred_at >= ${from} and occurred_at < ${to}
+        and metadata ? 'agentId'`;
+    return Number(rows[0]?.n ?? 0);
   }
 
   async usageEvents(

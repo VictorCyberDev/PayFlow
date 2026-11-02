@@ -13,6 +13,7 @@ import {
 } from "./admin-rest.js";
 import { CredentialStore } from "./credentials.js";
 import { ExecutingGateway } from "./gateway-execution.js";
+import { PostgresNetworkStore } from "./postgres-adapters.js";
 import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
 import { createExecutingRestHandler } from "./rest-execution.js";
@@ -63,11 +64,33 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   const { sql, repo, demo, clock } = options;
   const iso = () => clock().toISOString();
   const store = new CredentialStore(sql);
+  const network = new PostgresNetworkStore(sql);
   const gateway = new ExecutingGateway({
     repo,
     delegated: demo.gatewayPort(),
     ranker: new FakeCommerceRanker(),
     now: iso,
+    // GOVERNED_ACTION = an authenticated, well-formed, non-replayed request PayFlow evaluated.
+    onEvent: async (event) => {
+      if (event.type !== "gateway.evaluated" || !event.evaluation) return;
+      const owner = await sql`
+        select organization_id, environment from agent_credentials where credential_id = ${event.clientId}`;
+      if (!owner[0]) return;
+      await network.recordUsage({
+        id: `use_${event.evaluation.key.slice(0, 32)}`,
+        organizationId: String(owner[0].organization_id),
+        environment: owner[0].environment as "SANDBOX" | "PRODUCTION",
+        meter: "GOVERNED_ACTION",
+        quantity: 1,
+        occurredAt: event.at,
+        idempotencyKey: `ga:${event.evaluation.key}`,
+        metadata: {
+          agentId: event.evaluation.agentId,
+          decision: event.evaluation.decision,
+          status: event.evaluation.status,
+        },
+      });
+    },
   });
   const proofs = new ProofReader(repo, demo.keys);
   const key = demo.verificationKey();

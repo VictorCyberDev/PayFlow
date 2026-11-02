@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { MoneySchema } from "../domain.js";
 import type { CommerceRanker } from "../commerce-discovery.js";
@@ -73,7 +74,16 @@ export interface GatewayExecutionResponse {
 
 /** Privacy-safe analytics event. Carries identifiers and outcome only: no payloads, no secrets. */
 export interface GatewayEvent {
+  /** Present only on `gateway.evaluated`: what billing needs, and nothing sensitive. */
+  readonly evaluation?: {
+    /** Stable per logical request (Authority + agent + nonce), never the nonce itself. */
+    readonly key: string;
+    readonly agentId: string;
+    readonly decision: string;
+    readonly status: string;
+  };
   readonly type:
+    | "gateway.evaluated"
     | "gateway.request_received"
     | "gateway.replay_blocked"
     | "gateway.allow"
@@ -90,7 +100,7 @@ export interface ExecutingGatewayDependencies {
   readonly delegated: Pick<DelegatedCommerceService, "attempt">;
   readonly ranker: CommerceRanker;
   readonly now: () => string;
-  readonly onEvent?: (event: GatewayEvent) => void;
+  readonly onEvent?: (event: GatewayEvent) => void | Promise<void>;
 }
 
 const usd = (minor: number, currency: string): string =>
@@ -244,14 +254,24 @@ export class ExecutingGateway {
     if (access.principalId !== mandate.principalId)
       throw new GatewayRequestError("ACCESS_PRINCIPAL_MISMATCH");
 
-    const emit = (type: GatewayEvent["type"]) =>
-      onEvent?.({
-        type,
-        at: now(),
-        clientId: access.clientId,
-        authority: mandate.id,
-      });
-    emit("gateway.request_received");
+    // Observability and metering must never change a financial result: failures are swallowed.
+    const emit = async (
+      type: GatewayEvent["type"],
+      evaluation?: GatewayEvent["evaluation"],
+    ) => {
+      try {
+        await onEvent?.({
+          type,
+          at: now(),
+          clientId: access.clientId,
+          authority: mandate.id,
+          ...(evaluation ? { evaluation } : {}),
+        });
+      } catch {
+        /* never affects the outcome */
+      }
+    };
+    await emit("gateway.request_received");
     const limit = usd(mandate.maxSingleTransactionMinor, mandate.currency);
 
     // Atomic. The first presentation of a nonce wins; every replay is a zero-effect DENY.
@@ -260,7 +280,7 @@ export class ExecutingGateway {
       request.nonce,
     );
     if (!first) {
-      emit("gateway.replay_blocked");
+      await emit("gateway.replay_blocked");
       return deny(requestId, {
         reason: "REPLAY_DETECTED",
         recoverable: true,
@@ -289,7 +309,15 @@ export class ExecutingGateway {
           }),
         })
       : presented;
-    emit(
+    await emit("gateway.evaluated", {
+      key: createHash("sha256")
+        .update(`${mandate.id}\u0000${request.agentId}\u0000${request.nonce}`)
+        .digest("hex"),
+      agentId: request.agentId,
+      decision: response.decision,
+      status: response.status,
+    });
+    await emit(
       response.status === "COMPLETED"
         ? "gateway.executed"
         : response.status === "UNRESOLVED"

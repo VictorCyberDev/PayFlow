@@ -9,6 +9,8 @@ export interface UsageEvent {
   readonly quantity: number;
   readonly occurredAt: string;
   readonly idempotencyKey: string;
+  /** Audit/dispute context. Never secrets, never request payloads. */
+  readonly metadata?: Readonly<Record<string, string>>;
 }
 
 export interface PricingPlan {

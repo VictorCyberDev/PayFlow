@@ -1,3 +1,5 @@
+import { ProofVerifier } from "../ui/proof-verifier";
+
 export default function VerifyPage() {
   return (
     <>
@@ -8,6 +10,7 @@ export default function VerifyPage() {
         whether this exact action fits, and whether Proof is authentic. Verify
         is read-only by design.
       </p>
+      <ProofVerifier />
       <section className="verifier-panel" aria-labelledby="verify-contract">
         <h2 id="verify-contract" className="h2">
           Verification contract
