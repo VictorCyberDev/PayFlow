@@ -846,12 +846,18 @@
 }
 
 /* Organization views */
+.org-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.org-table-wrap:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
 .org-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
-  display: block;
-  overflow-x: auto;
 }
 .org-table caption {
   text-align: left;
