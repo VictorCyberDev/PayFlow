@@ -75,5 +75,23 @@
     "deploymentEnabled": {
       "m7-m60-master-execution": false
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/v1/admin/ops/reconcile/tick/",
+      "schedule": "0 6 * * *"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/developers",
+      "destination": "/docs/",
+      "permanent": false
+    },
+    {
+      "source": "/developers/",
+      "destination": "/docs/",
+      "permanent": false
+    }
+  ]
 }

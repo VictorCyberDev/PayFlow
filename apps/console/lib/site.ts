@@ -3,6 +3,7 @@
  * boundary test forbids reading the environment in the browser graph, so this is a constant: change
  * it in the commit that makes the public host live (see docs/GATE-A-PUBLIC-HOST.md).
  *
- * Today this is the `payflow` project's production alias, which Vercel Authentication protects (anonymous requests get 404).
+ * This is the `payflow-public` project's stable alias: the isolated public Gate A environment (no accepted
+ * evidence, simulated rail only). The older `payflow-one-kappa.vercel.app` alias returns 404 to the public.
  */
-export const SITE_URL = "https://payflow-one-kappa.vercel.app";
+export const SITE_URL = "https://payflow-public.vercel.app";

@@ -696,6 +696,194 @@ const at = (offsetSeconds: number) =>
       });
     });
 
+    describe("scheduler credential and alert channel (deployed-shape)", () => {
+      const CRON = "c".repeat(48);
+      const HOOK = "https://alerts.example.invalid/hook";
+      const restart = async (
+        over: Record<string, unknown>,
+        sendAlert?: (
+          url: string,
+          init: RequestInit,
+        ) => Promise<{ ok: boolean }>,
+      ) => {
+        await host?.close();
+        host = createHostedConsole(parseHostedConfig(env(over)), {
+          clock,
+          paymentProvider: provider,
+          ...(sendAlert ? { sendAlert } : {}),
+        });
+      };
+
+      it("the scheduler credential can call the observation-only tick by GET and nothing else", async () => {
+        await restart({ CRON_SECRET: CRON });
+        const s = await sandbox();
+        const ok = await call(CRON, "GET", "/v1/admin/ops/reconcile/tick");
+        expect(ok.status).toBe(200);
+        expect(await ok.json()).toMatchObject({ via: "SCHEDULER" });
+        // Not by POST, not for any other admin route, not a wrong value, not without configuration.
+        expect(
+          (await call(CRON, "POST", "/v1/admin/ops/reconcile/tick")).status,
+        ).toBe(401);
+        for (const [m, path] of [
+          ["GET", "/v1/admin/ops/alerts"],
+          ["GET", "/v1/admin/ops/reconciliation"],
+          ["POST", "/v1/admin/ops/alerts/test"],
+          ["GET", "/v1/admin/members"],
+          ["GET", "/v1/admin/credentials"],
+          ["GET", "/v1/admin/org/audit"],
+        ] as const)
+          expect(
+            (await call(CRON, m, path)).status,
+            `${m} ${path}`,
+          ).toBeGreaterThanOrEqual(401);
+        expect(
+          (await call("x".repeat(48), "GET", "/v1/admin/ops/reconcile/tick"))
+            .status,
+        ).toBe(401);
+        expect(
+          (await call(null, "GET", "/v1/admin/ops/reconcile/tick")).status,
+        ).toBe(401);
+        await restart({});
+        expect(
+          (await call(CRON, "GET", "/v1/admin/ops/reconcile/tick")).status,
+        ).toBe(401);
+        void s;
+      });
+
+      it("repeated scheduled ticks are idempotent and never touch the provider's money calls", async () => {
+        await restart({ CRON_SECRET: CRON });
+        const s = await sandbox();
+        provider.loseCapture = true;
+        await s.client.actions.execute(buy(s.authority));
+        provider.order = {
+          ...provider.order!,
+          status: "APPROVED",
+          captures: [],
+        };
+        const calls0 = provider.createCalls + provider.captureCalls;
+        const first = (await (
+          await call(CRON, "GET", "/v1/admin/ops/reconcile/tick")
+        ).json()) as {
+          tick: { enrolled: number; examined: number; stillUnknown: number };
+        };
+        expect(first.tick).toMatchObject({
+          enrolled: 1,
+          examined: 1,
+          stillUnknown: 1,
+        });
+        for (let i = 0; i < 3; i++) {
+          const again = (await (
+            await call(CRON, "GET", "/v1/admin/ops/reconcile/tick")
+          ).json()) as { tick: { enrolled: number; examined: number } };
+          expect(again.tick).toMatchObject({ enrolled: 0, examined: 0 });
+        }
+        expect(
+          Number(
+            (
+              await repo.sql`select count(*)::int n from reconciliation_lookups`
+            )[0]!.n,
+          ),
+        ).toBe(1);
+        expect(provider.createCalls + provider.captureCalls).toBe(calls0);
+      });
+
+      it("a synthetic alert is delivered to the channel, labelled, secret-free, and resolved at once", async () => {
+        const sent: { url: string; body: string }[] = [];
+        await restart(
+          { PAYFLOW_ALERT_WEBHOOK_URL: HOOK },
+          async (url, init) => {
+            sent.push({
+              url,
+              body: typeof init.body === "string" ? init.body : "",
+            });
+            return { ok: true };
+          },
+        );
+        const r = await call(operator, "POST", "/v1/admin/ops/alerts/test");
+        expect(r.status).toBe(200);
+        expect(await r.json()).toMatchObject({
+          synthetic: true,
+          channelConfigured: true,
+          delivery: { attempted: 1, delivered: 1, failed: 0 },
+        });
+        expect(sent).toHaveLength(1);
+        expect(sent[0]!.url).toBe(HOOK);
+        const payload = JSON.parse(sent[0]!.body) as Record<string, unknown>;
+        expect(payload).toMatchObject({
+          source: "payflow",
+          severity: "P2",
+          code: "SYNTHETIC_TEST",
+          detail: { synthetic: true },
+        });
+        expect(String(payload.text)).toContain("SYNTHETIC_TEST");
+        expect(sent[0]!.body).not.toMatch(
+          /token|secret|bearer|password|postgres:/iu,
+        );
+        // It does not linger as incident history.
+        const rows =
+          await repo.sql`select state, delivered_at is not null delivered from operational_alerts where code='SYNTHETIC_TEST'`;
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ state: "RESOLVED", delivered: true });
+        // Members and the scheduler credential cannot raise it.
+        expect(
+          (
+            await call(
+              "pf_act_pfm_" + "0".repeat(24) + "." + "y".repeat(40),
+              "POST",
+              "/v1/admin/ops/alerts/test",
+            )
+          ).status,
+        ).toBe(401);
+      });
+
+      it("a failing channel never loses the alert: it stays undelivered and is retried on the next tick", async () => {
+        let up = false;
+        let attempts = 0;
+        await restart(
+          { PAYFLOW_ALERT_WEBHOOK_URL: HOOK, CRON_SECRET: CRON },
+          async () => {
+            attempts++;
+            if (!up) throw new Error("channel down");
+            return { ok: true };
+          },
+        );
+        const alerts = new AlertEngine(repo.sql);
+        await alerts.raise(
+          {
+            severity: "P0",
+            code: "DUPLICATE_ECONOMIC_EFFECT",
+            subjectKind: "PROPOSAL",
+            subjectId: "a-1",
+            detail: { captures: 2 },
+          },
+          NOW,
+        );
+        const down = (await (
+          await call(CRON, "GET", "/v1/admin/ops/reconcile/tick")
+        ).json()) as { delivery: { failed: number; delivered: number } };
+        expect(down.delivery).toMatchObject({ failed: 1, delivered: 0 });
+        expect((await alerts.undelivered()).length).toBe(1);
+        up = true;
+        const back = (await (
+          await call(CRON, "GET", "/v1/admin/ops/reconcile/tick")
+        ).json()) as { delivery: { delivered: number } };
+        expect(back.delivery.delivered).toBe(1);
+        expect((await alerts.undelivered()).length).toBe(0);
+        expect(attempts).toBeGreaterThanOrEqual(2);
+      });
+
+      it("configuration is validated: a short scheduler secret and a non-https channel are refused", () => {
+        expect(() => parseHostedConfig(env({ CRON_SECRET: "short" }))).toThrow(
+          "CRON_SECRET_TOO_SHORT",
+        );
+        expect(() =>
+          parseHostedConfig(
+            env({ PAYFLOW_ALERT_WEBHOOK_URL: "http://example.com/x" }),
+          ),
+        ).toThrow("PAYFLOW_ALERT_WEBHOOK_URL_MUST_BE_HTTPS");
+      });
+    });
+
     describe("signing-key lifecycle", () => {
       async function paidAndProof(
         token: string,

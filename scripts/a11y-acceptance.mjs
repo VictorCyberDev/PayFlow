@@ -18,10 +18,14 @@ import { resolve, extname } from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
+// A11Y_ORIGIN=https://host runs the same checks against a DEPLOYED site instead of the local static export.
+const remote = (process.env.A11Y_ORIGIN ?? "").replace(/\/+$/u, "");
 const root = resolve("apps/console/out");
-if (!existsSync(root))
+if (!remote && !existsSync(root))
   throw new Error("build the console first: cd apps/console && npm run build");
-const sitemap = readFileSync(resolve(root, "sitemap.xml"), "utf8");
+const sitemap = remote
+  ? await (await fetch(remote + "/sitemap.xml")).text()
+  : readFileSync(resolve(root, "sitemap.xml"), "utf8");
 const routes = [
   ...new Set([
     ...[...sitemap.matchAll(/<loc>https?:\/\/[^/]+(\/[^<]*)<\/loc>/gu)].map(
@@ -62,8 +66,8 @@ const server = createServer((req, res) => {
     res.end("Not found");
   }
 });
-await new Promise((r) => server.listen(0, "127.0.0.1", r));
-const origin = `http://127.0.0.1:${server.address().port}`;
+if (!remote) await new Promise((r) => server.listen(0, "127.0.0.1", r));
+const origin = remote || `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({
   ...(process.env.PLAYWRIGHT_CHROMIUM
     ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM }
@@ -307,17 +311,24 @@ try {
   await context.close();
 } finally {
   await browser.close();
-  server.closeAllConnections();
-  await new Promise((r) => server.close(r));
+  if (!remote) {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  }
 }
 
-mkdirSync("docs/evidence/company", { recursive: true });
+mkdirSync(remote ? "docs/evidence/public" : "docs/evidence/company", {
+  recursive: true,
+});
 writeFileSync(
-  "docs/evidence/company/a11y-acceptance.json",
+  remote
+    ? "docs/evidence/public/a11y-deployed.json"
+    : "docs/evidence/company/a11y-acceptance.json",
   JSON.stringify(
     {
-      environment:
-        "local static production export served on 127.0.0.1; Chromium headless; no deployed host",
+      environment: remote
+        ? `DEPLOYED site ${new URL(remote).hostname}; Chromium headless`
+        : "local static production export served on 127.0.0.1; Chromium headless; no deployed host",
       routes: routes.length,
       widths: WIDTHS,
       checks: [

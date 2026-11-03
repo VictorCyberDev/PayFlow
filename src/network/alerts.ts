@@ -119,6 +119,55 @@ export class AlertEngine {
     return rows.length === 1;
   }
 
+  /**
+   * Delivers every undelivered OPEN alert to one webhook (a generic JSON POST; the `text` and `content`
+   * fields make it work as a Slack or Discord incoming webhook). An alert is marked delivered only on
+   * a 2xx. A failure never throws, never loses the alert, and is retried on the next tick. Payloads
+   * contain identifiers and counts only, because alert details are already refused secret-looking keys.
+   */
+  async deliver(
+    webhookUrl: string,
+    send: (url: string, init: RequestInit) => Promise<{ ok: boolean }>,
+    now: string,
+    timeoutMs = 5000,
+  ): Promise<{ attempted: number; delivered: number; failed: number }> {
+    const result = { attempted: 0, delivered: 0, failed: 0 };
+    for (const a of await this.undelivered()) {
+      result.attempted++;
+      const text = `[${a.severity}] ${a.code} ${a.subjectKind} ${a.subjectId} (x${a.occurrences})`;
+      try {
+        const res = await send(webhookUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            source: "payflow",
+            alertId: a.alertId,
+            severity: a.severity,
+            code: a.code,
+            subjectKind: a.subjectKind,
+            subjectId: a.subjectId,
+            organizationId: a.organizationId ?? null,
+            occurrences: a.occurrences,
+            firstSeenAt: a.firstSeenAt,
+            lastSeenAt: a.lastSeenAt,
+            detail: a.detail ?? {},
+            text,
+            content: text,
+          }),
+          signal: AbortSignal.timeout(timeoutMs),
+          redirect: "error",
+        });
+        if (res.ok) {
+          await this.markDelivered(a.alertId, now);
+          result.delivered++;
+        } else result.failed++;
+      } catch {
+        result.failed++;
+      }
+    }
+    return result;
+  }
+
   /** Hand-off for an external channel. Marks nothing; call `markDelivered` after a real send. */
   async undelivered(): Promise<readonly AlertRecord[]> {
     const rows = await this
