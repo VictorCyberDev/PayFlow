@@ -29,6 +29,10 @@ needs no wallet. Real organisations can never reach the simulated provider.
 
 - **Isolated database created:** Neon project `withered-rice-68056451` (branch `br-steep-glade-bdsyx5v5`, PostgreSQL 17), separate from the accepted
   evidence project. Migrations `001`–`023` and the three NOLOGIN roles are applied; its schema fingerprint equals the accepted database's. It holds no data.
+- **Public Vercel project created, empty:** `payflow-public` (`prj_BDxFuhwF0AcvRJaGWehd3eZSIYWm`), root `hosting/m6`, Node 22, **no Git connection** (nothing deploys by itself), **no deployment**,
+  Vercel Authentication off (nothing is reachable because nothing is deployed). Non-secret variables already set (Production and Preview): `PAYFLOW_M5_DEMO`, `PAYFLOW_M6_DEMO_AGENT`,
+  `PAYFLOW_PUBLIC_SANDBOX`, `PAYFLOW_M5_PRINCIPAL_ID=public-sandbox-owner`, `PAYFLOW_M5_AGENT_ID=public-sandbox-agent`, `PAYFLOW_M6_SIGNING_KID=public-2026-11`, `PAYFLOW_M5_ORIGIN=https://payflow-public.vercel.app`
+  (correct that last value if the real origin differs). No PayPal variable exists on it.
 - **Evidence environment protected:** Vercel Authentication was found OFF on `payflow-m6-acceptance` and is now ON for that whole project.
 
 ## Steps only the owner can take (each needs a secret to pass through a tool call, or changes who can reach the service)
@@ -38,12 +42,12 @@ needs no wallet. Real organisations can never reach the simulated provider.
    (tested against a fully migrated empty database: it provisions one principal, one passport and one policy, and is idempotent).
 2. **Create the runtime login.** In that Neon project: `CREATE ROLE svc_public_app LOGIN PASSWORD '<from your secret store>' IN ROLE payflow_runtime;` and use _its_ connection string
    as `DATABASE_URL` on Vercel, so the running app never holds schema-owner rights.
-3. **Create a new Vercel project** (not the acceptance one, not a branch of `payflow`) with root directory `hosting/m6`, and set its Production environment in the dashboard.
-   Names only: `DATABASE_URL`, `PAYFLOW_GATEWAY_ADMIN_TOKEN` (platform operator, 32+ chars), `PAYFLOW_M6_SIGNING_KEY` (new Ed25519 PKCS8 PEM, **not** the acceptance key),
-   `PAYFLOW_M6_SIGNING_KID` (unique, not `m6-hosted`), `PAYFLOW_M6_DEMO_AGENT=true`, `PAYFLOW_M5_DEMO=true`, `PAYFLOW_M5_PRINCIPAL_ID`, `PAYFLOW_M5_AGENT_ID`,
-   `PAYFLOW_M5_BOOTSTRAP_KEY`, `PAYFLOW_M5_ORIGIN` (the public origin), `PAYFLOW_PUBLIC_SANDBOX=true`. Leave **every PayPal variable unset**: with no rail the real path refuses and only
-   the simulated sandbox runs.
-4. **Make that one project public:** Vercel Authentication off for it (and only it).
+3. **Set the four secrets on `payflow-public`** in the Vercel dashboard (Production and Preview), values from your secret store, never pasted into chat:
+   `DATABASE_URL` (the `svc_public_app` runtime connection string from step 2), `PAYFLOW_GATEWAY_ADMIN_TOKEN` (platform operator, 32+ chars),
+   `PAYFLOW_M6_SIGNING_KEY` (a new Ed25519 PKCS8 PEM, **not** the acceptance key), `PAYFLOW_M5_BOOTSTRAP_KEY` (32+ chars). Leave **every PayPal variable unset**: with no rail the real path
+   refuses and only the simulated sandbox runs.
+4. **Tell me, or deploy yourself:** one deployment of this repository's `hosting/m6` to `payflow-public` (the `payflow-public` project has Vercel Authentication off already; do not turn it on or
+   the sandbox cannot be reached). I can run the deployment and the acceptance in step 7 as soon as steps 1–3 are done.
 5. **Set the canonical origin** in `apps/console/lib/site.ts` to the public origin, in the commit that goes live.
 6. **Schedule the reconciler** (`GET /v1/admin/ops/reconcile/tick` with the operator token) and **publish a real security contact** (below).
 7. **Run the acceptance** against the public origin: `node --import tsx scripts/stranger-journey.mjs <origin>` and `node scripts/a11y-acceptance.mjs`, and record the result in `docs/GATE-EVALUATION.md`.
