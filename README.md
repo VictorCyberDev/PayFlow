@@ -1,4 +1,4 @@
-> **2026-10-29 company launch correction:** PayFlow remains a developer preview. M6 is unaccepted; PR #18 remains draft. The company website and new protocol work are local, not a public launch. See [Company RC](docs/PAYFLOW-COMPANY-LAUNCH-RC.md), [corrected milestone audit](docs/COMPANY-LAUNCH-MILESTONE-AUDIT.md), [protocol commissioning](docs/PROTOCOL-COMMISSIONING.md), and [security review](docs/COMPANY-LAUNCH-SECURITY-REVIEW.md). Historical reports below are not current launch certifications.
+> **Status (2026-11-03):** M7–M15 are merged to `main` (PR #19). PayFlow is a **developer preview**: PayPal Sandbox and a simulated rail only, no real money, no customers, no audit or certification. The per-milestone truth is in [docs/GATE-EVALUATION.md](docs/GATE-EVALUATION.md). The public host is not live yet; what remains, and why, is in [docs/GATE-A-PUBLIC-HOST.md](docs/GATE-A-PUBLIC-HOST.md). Older reports below are historical, not current certifications.
 
 # PayFlow
 

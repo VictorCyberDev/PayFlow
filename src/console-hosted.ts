@@ -64,6 +64,10 @@ const DemoAgentSchema = z.object({
 export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
   /** Optional Sandbox admin secret for credential issue/revoke and sample Authority. Never logged. */
   gatewayAdminToken?: string;
+  /** Scheduler credential: may call only the observation-only reconcile tick. Never logged. */
+  cronSecret?: string;
+  /** One alert webhook (https). When absent, alerts are persisted but not delivered. Never logged. */
+  alertWebhookUrl?: string;
   /** Enables self-serve /v1/sandbox/start on a clearly labelled SIMULATED rail. Off by default. */
   publicSandbox?: boolean;
   demoAgent?: z.infer<typeof DemoAgentSchema>;
@@ -100,9 +104,20 @@ export function parseHostedConfig(
   const adminToken = env.PAYFLOW_GATEWAY_ADMIN_TOKEN;
   if (adminToken !== undefined && adminToken.length < 32)
     throw new Error("PAYFLOW_GATEWAY_ADMIN_TOKEN_TOO_SHORT");
+  const cronSecret = env.CRON_SECRET;
+  if (cronSecret !== undefined && cronSecret.length < 32)
+    throw new Error("CRON_SECRET_TOO_SHORT");
+  const alertWebhookUrl = env.PAYFLOW_ALERT_WEBHOOK_URL;
+  if (
+    alertWebhookUrl !== undefined &&
+    !/^https:\/\/[^\s]+$/u.test(alertWebhookUrl)
+  )
+    throw new Error("PAYFLOW_ALERT_WEBHOOK_URL_MUST_BE_HTTPS");
   return {
     ...base,
     ...(adminToken ? { gatewayAdminToken: adminToken } : {}),
+    ...(cronSecret ? { cronSecret } : {}),
+    ...(alertWebhookUrl ? { alertWebhookUrl } : {}),
     ...(env.PAYFLOW_PUBLIC_SANDBOX === "true" ? { publicSandbox: true } : {}),
     ...(demoAgent
       ? {
@@ -151,6 +166,8 @@ export function createHostedConsole(
     clock?: () => Date;
     /** Test seam: replaces the PayPal provider built from the environment. */
     paymentProvider?: PaymentProvider | null;
+    /** Test seam for alert delivery. */
+    sendAlert?: (url: string, init: RequestInit) => Promise<{ ok: boolean }>;
   } = {},
 ) {
   const clock = deps.clock ?? (() => new Date());
@@ -268,6 +285,11 @@ export function createHostedConsole(
         ...(config.gatewayAdminToken
           ? { adminToken: config.gatewayAdminToken }
           : {}),
+        ...(config.cronSecret ? { cronSecret: config.cronSecret } : {}),
+        ...(config.alertWebhookUrl
+          ? { alertWebhookUrl: config.alertWebhookUrl }
+          : {}),
+        ...(deps.sendAlert ? { sendAlert: deps.sendAlert } : {}),
         clock,
       })
     : undefined;

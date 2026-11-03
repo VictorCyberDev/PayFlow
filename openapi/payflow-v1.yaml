@@ -459,11 +459,26 @@ paths:
   /v1/admin/ops/reconcile/tick:
     post:
       operationId: reconcileTick
-      summary: Operator-only. One OBSERVATION-ONLY reconciliation pass plus alert evaluation. Safe to repeat. GET is also accepted for schedulers.
+      summary: >-
+        One OBSERVATION-ONLY reconciliation pass plus alert evaluation and alert delivery. Safe to repeat. The operator
+        token may POST or GET it; a scheduler credential (`CRON_SECRET`, for example Vercel Cron) may call it by GET and
+        nothing else.
       x-hosted-only: true
       security: [{ operatorAuth: [] }]
       responses:
         "200": { description: Tick summary }
+        "401": { description: Authentication required }
+        "403": { description: Platform operator only }
+  /v1/admin/ops/alerts/test:
+    post:
+      operationId: sendSyntheticAlert
+      summary: >-
+        Operator-only. Raise a clearly labelled P2 SYNTHETIC_TEST alert, deliver it to the configured alert
+        webhook, and resolve it at once. Proves the channel without creating incident history.
+      x-hosted-only: true
+      security: [{ operatorAuth: [] }]
+      responses:
+        "200": { description: Delivery summary }
         "401": { description: Authentication required }
         "403": { description: Platform operator only }
   /v1/admin/ops/alerts:

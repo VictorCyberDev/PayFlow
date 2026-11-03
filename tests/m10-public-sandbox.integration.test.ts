@@ -258,6 +258,33 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       expect(out.stdout).not.toMatch(/pf_sbx_/u); // the token is never printed
     }, 60_000);
 
+    it("the public-acceptance script refuses an anonymous caller everywhere and finishes the journey (static routes are out of scope for this API-only host)", async () => {
+      const out = await new Promise<{ code: number | null; stdout: string }>(
+        (done) => {
+          const child = spawn(
+            process.execPath,
+            ["--import", "tsx", "scripts/public-acceptance.mjs", origin],
+            {
+              stdio: ["ignore", "pipe", "pipe"],
+              env: {
+                ...process.env,
+                PUBLIC_ACCEPTANCE_OUT: "/tmp/public-acceptance-test.json",
+              },
+            },
+          );
+          let stdout = "";
+          child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+          child.on("close", (code) => done({ code, stdout }));
+        },
+      );
+      const report = JSON.parse(out.stdout) as { failed: { name: string }[] };
+      // Only the static-site route checks may fail here: this test host serves the API, not the pages.
+      expect(
+        report.failed.filter((f) => !f.name.startsWith("public route")),
+      ).toEqual([]);
+      expect(out.stdout).not.toMatch(/pf_sbx_|pf_act_/u);
+    }, 90_000);
+
     it("each sandbox is an isolated tenant: another sandbox's Authority and Proof are unreachable", async () => {
       const a = await sandbox("198.51.100.1");
       const b = await sandbox("198.51.100.2");

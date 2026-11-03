@@ -1,4 +1,9 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Sql } from "postgres";
 import { FakeCommerceRanker } from "../commerce-discovery.js";
@@ -61,6 +66,18 @@ export interface HostedGatewayOptions {
   readonly organizationId: string;
   /** When absent, every administrative route is disabled (404). */
   readonly adminToken?: string;
+  /**
+   * A scheduler credential (for example Vercel Cron's `CRON_SECRET`). It can call ONE route, the
+   * observation-only `GET /v1/admin/ops/reconcile/tick`, and nothing else. It is not an operator token.
+   */
+  readonly cronSecret?: string;
+  /** One alert webhook. When absent, alerts are persisted and visible but not delivered anywhere. */
+  readonly alertWebhookUrl?: string;
+  /** Test seam for alert delivery. */
+  readonly sendAlert?: (
+    url: string,
+    init: RequestInit,
+  ) => Promise<{ ok: boolean }>;
   readonly clock: () => Date;
 }
 
@@ -625,6 +642,25 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     return null;
   }
 
+  const cronAuthorized = (authorization: string | undefined): boolean => {
+    if (!options.cronSecret) return false;
+    const presented = authorization?.startsWith("Bearer ")
+      ? authorization.slice(7)
+      : "";
+    if (!presented) return false;
+    const a = createHash("sha256").update(presented).digest();
+    const b = createHash("sha256").update(options.cronSecret).digest();
+    return timingSafeEqual(a, b);
+  };
+  const deliverAlerts = async (now: string) =>
+    options.alertWebhookUrl
+      ? alerts.deliver(
+          options.alertWebhookUrl,
+          options.sendAlert ?? ((url, init) => fetch(url, init)),
+          now,
+        )
+      : { attempted: 0, delivered: 0, failed: 0 };
+
   /** Members, credentials, org pause, and platform operations. */
   async function controlRoute(
     request: RestRequest,
@@ -643,13 +679,20 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
 
     // ---- platform operator routes: the operator token only, never a member role.
     if (opsPath) {
-      if (actor === "UNAUTHENTICATED")
-        return reply(requestId, 401, { reason: "ADMIN_AUTH_REQUIRED" });
-      if (actor.kind !== "OPERATOR")
-        return reply(requestId, 403, {
-          reason: "PLATFORM_OPERATOR_ONLY",
-          nextAction: "ASK_THE_PLATFORM_OPERATOR",
-        });
+      // The scheduler credential may call the observation-only tick and nothing else.
+      const cronCall =
+        opsPath[1] === "reconcile/tick" &&
+        request.method === "GET" &&
+        cronAuthorized(request.authorization);
+      if (!cronCall) {
+        if (actor === "UNAUTHENTICATED")
+          return reply(requestId, 401, { reason: "ADMIN_AUTH_REQUIRED" });
+        if (actor.kind !== "OPERATOR")
+          return reply(requestId, 403, {
+            reason: "PLATFORM_OPERATOR_ONLY",
+            nextAction: "ASK_THE_PLATFORM_OPERATOR",
+          });
+      }
       const now = iso();
       const op = opsPath[1]!;
       if (request.method === "GET" && op === "reconciliation")
@@ -664,7 +707,34 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       if (op === "reconcile/tick") {
         const tick = await reconciler.tick(now);
         const evaluated = await alerts.evaluate(now);
-        return reply(requestId, 200, { tick, alerts: evaluated });
+        const delivery = await deliverAlerts(now);
+        return reply(requestId, 200, {
+          tick,
+          alerts: evaluated,
+          delivery,
+          via: cronCall ? "SCHEDULER" : "OPERATOR",
+        });
+      }
+      // A clearly labelled synthetic alert to prove the channel end to end. It is raised, delivered
+      // and resolved at once, so it never lingers as incident history.
+      if (request.method === "POST" && op === "alerts/test") {
+        const { alertId } = await alerts.raise(
+          {
+            severity: "P2",
+            code: "SYNTHETIC_TEST",
+            subjectKind: "TEST",
+            subjectId: "synthetic",
+            detail: { synthetic: true },
+          },
+          now,
+        );
+        const delivery = await deliverAlerts(now);
+        await alerts.resolve(alertId, now);
+        return reply(requestId, 200, {
+          synthetic: true,
+          delivery,
+          channelConfigured: Boolean(options.alertWebhookUrl),
+        });
       }
       const alertAction = /^alerts\/(alr_[a-f0-9]{24})\/(ack|resolve)$/u.exec(
         op,
