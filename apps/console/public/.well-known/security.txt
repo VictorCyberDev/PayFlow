@@ -1,0 +1,8 @@
+# PayFlow security contact (RFC 9116)
+# DRAFT: placeholder host. Contact: https://payflow.example/contact/ (REPLACE with the real production address before publication)
+# Do not rely on this file until the placeholders below are replaced and the file is served over HTTPS from the production host.
+# No bounty is offered and no response-time SLA is promised. See SECURITY.md in the repository for scope and handling.
+Contact: https://payflow.example/contact/
+Expires: 2027-11-02T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://payflow.example/.well-known/security.txt

@@ -1,4 +1,4 @@
-import type { KeyObject } from "node:crypto";
+import type { JsonWebKey, KeyObject } from "node:crypto";
 import { z } from "zod";
 import { DurableCheckoutService } from "./checkout.js";
 import {
@@ -69,6 +69,25 @@ export class DemoShoppingAgent {
     this.keys = new StaticPublicKeyRing(
       new Map([[deps.signing.kid, deps.signing.publicKey]]),
     );
+  }
+  /** Public verification material for the grant/proof signing key. Never the private key. */
+  verificationKey(): { keyId: string; jwk: JsonWebKey } {
+    return {
+      keyId: this.deps.signing.kid,
+      jwk: this.deps.signing.publicKey.export({ format: "jwk" }),
+    };
+  }
+  /** Signing handle for the portable Proof issuer. Server-side only. */
+  signingForProofs(): { keyId: string; privateKey: KeyObject } {
+    return {
+      keyId: this.deps.signing.kid,
+      privateKey: this.deps.signing.privateKey,
+    };
+  }
+  /** Read-only provider handle for reconciliation. It exposes getOrder and nothing that moves money. */
+  lookupProvider(): Pick<PaymentProvider, "getOrder"> | null {
+    const p = this.deps.provider;
+    return p ? { getOrder: (id: string) => p.getOrder(id) } : null;
   }
   /** Backwards-compatible configuration signal. Hosted status uses paymentAvailable(). */
   get paymentConnected(): boolean {
@@ -161,6 +180,58 @@ export class DemoShoppingAgent {
       }
     }
     return resolved;
+  }
+
+  /**
+   * Port used by the external-agent Gateway. It is the same composition `run` uses, but the query
+   * and the agent's claimed terms come from the (authenticated) caller rather than a fixed demo
+   * scenario. Without a connected payment rail it refuses before any record is written.
+   */
+  gatewayPort(): Pick<DelegatedCommerceService, "attempt"> {
+    const refuse = (code: string): DelegatedOutcome =>
+      Object.freeze({
+        status: "REFUSED",
+        code,
+        proposalId: null,
+        operationId: null,
+        askedHuman: false,
+        providerEffect: "NONE",
+      } as const);
+    return {
+      attempt: async (input) => {
+        const { repo, provider, clock } = this.deps;
+        if (!(await this.paymentAvailable()))
+          return refuse("PAYMENT_RAIL_NOT_CONNECTED");
+        const normal = this.stack(demoCommerceCatalog());
+        try {
+          await normal.checkout.registerMerchantBinding();
+        } catch (error) {
+          return refuse(
+            error instanceof Error && /^[A-Z0-9_]{3,96}$/.test(error.message)
+              ? error.message
+              : "MERCHANT_BINDING_UNAVAILABLE",
+          );
+        }
+        const rail = new PayPalExecutionRail(
+          repo,
+          provider ?? refusingProvider,
+          () => clock().toISOString(),
+        );
+        return new DelegatedCommerceService({
+          discovery: normal.discovery,
+          checkout: normal.checkout,
+          authorizer: new DurableAuthorizationService(repo),
+          issuer: new ExecutionGrantIssuer(
+            repo,
+            this.deps.signing.kid,
+            this.deps.signing.privateKey,
+          ),
+          boundary: new ExecutionBoundary(repo, this.keys, rail),
+          merchantRisk: "LOW",
+          clock: () => clock().toISOString(),
+        }).attempt(input);
+      },
+    };
   }
 
   async run(

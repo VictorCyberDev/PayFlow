@@ -1,0 +1,28 @@
+{
+  "environment": "local static production export served on 127.0.0.1; Chromium headless; no deployed host",
+  "routes": 44,
+  "widths": [
+    320,
+    375,
+    430,
+    768,
+    1024,
+    1440
+  ],
+  "checks": [
+    "status",
+    "horizontal overflow",
+    "one h1",
+    "html lang",
+    "one main",
+    "axe WCAG 2.0/2.1/2.2 A+AA",
+    "reduced-motion animation",
+    "touch targets >= 24px",
+    "skip link",
+    "focus indicator",
+    "no focus trap",
+    "keyboard-only verifier"
+  ],
+  "pagesChecked": 264,
+  "failures": []
+}

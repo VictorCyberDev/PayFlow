@@ -89,6 +89,15 @@ export interface DelegatedAttemptInput {
   readonly mandateId: string;
   readonly query: unknown;
   readonly ranker: CommerceRanker;
+  /**
+   * Terms an external caller claims it is buying. They are never authority: the trusted quote
+   * decides. A mismatch refuses before any manifest, proposal, reservation, grant or provider call.
+   */
+  readonly expected?: Readonly<{
+    totalMinor: number;
+    currency: string;
+    merchantId: string;
+  }>;
 }
 
 const safeCode = (error: unknown, fallback: string): string => {
@@ -122,6 +131,13 @@ export class DelegatedCommerceService {
         input.ranker,
       );
       const quote = await discovery.quoteSelection(selectionId);
+      if (
+        input.expected &&
+        (quote.totalMinor !== input.expected.totalMinor ||
+          quote.currency !== input.expected.currency ||
+          quote.logicalMerchantId !== input.expected.merchantId)
+      )
+        throw new Error("CLAIMED_TERMS_MISMATCH");
       const manifest = await checkout.sealManifest(quote.quoteId);
       const proposal = await checkout.compileManifestProposal(
         manifest.manifestId,

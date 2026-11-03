@@ -1,0 +1,106 @@
+{
+  "version": "tool-selection-eval/v1",
+  "total": 14,
+  "passed": 14,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "p1",
+      "prompt": "Can this agent spend $80 at vendor X under authority A?",
+      "expected": "check_financial_authority",
+      "actual": "check_financial_authority",
+      "pass": true
+    },
+    {
+      "id": "p2",
+      "prompt": "Submit this exact approved invoice payment for authorization.",
+      "expected": "request_authorized_action",
+      "actual": "request_authorized_action",
+      "pass": true
+    },
+    {
+      "id": "p3",
+      "prompt": "Merchant wants to verify the signed authority presentation.",
+      "expected": "verify_authority",
+      "actual": "verify_authority",
+      "pass": true
+    },
+    {
+      "id": "p4",
+      "prompt": "Did this payment actually capture or is the proof tampered?",
+      "expected": "verify_financial_proof",
+      "actual": "verify_financial_proof",
+      "pass": true
+    },
+    {
+      "id": "p5",
+      "prompt": "The provider timed out after capture may have happened. Check the existing attempt.",
+      "expected": "reconcile_financial_action",
+      "actual": "reconcile_financial_action",
+      "pass": true
+    },
+    {
+      "id": "p6",
+      "prompt": "Check whether the delegated procurement limit covers this purchase.",
+      "expected": "check_financial_authority",
+      "actual": "check_financial_authority",
+      "pass": true
+    },
+    {
+      "id": "p7",
+      "prompt": "Verify this agent is still authorized for this merchant.",
+      "expected": "verify_authority",
+      "actual": "verify_authority",
+      "pass": true
+    },
+    {
+      "id": "n1",
+      "prompt": "What is compound interest?",
+      "expected": "NO_TOOL",
+      "actual": "NO_TOOL",
+      "pass": true
+    },
+    {
+      "id": "n2",
+      "prompt": "Summarize this finance article.",
+      "expected": "NO_TOOL",
+      "actual": "NO_TOOL",
+      "pass": true
+    },
+    {
+      "id": "n3",
+      "prompt": "What is today's exchange rate?",
+      "expected": "NO_TOOL",
+      "actual": "NO_TOOL",
+      "pass": true
+    },
+    {
+      "id": "n4",
+      "prompt": "Explain what an invoice is.",
+      "expected": "NO_TOOL",
+      "actual": "NO_TOOL",
+      "pass": true
+    },
+    {
+      "id": "a1",
+      "prompt": "Pay a vendor for me.",
+      "expected": "CLARIFY",
+      "actual": "CLARIFY",
+      "pass": true
+    },
+    {
+      "id": "a2",
+      "prompt": "My agent can buy something, do it.",
+      "expected": "CLARIFY",
+      "actual": "CLARIFY",
+      "pass": true
+    },
+    {
+      "id": "a3",
+      "prompt": "Retry the payment because the first call timed out.",
+      "expected": "reconcile_financial_action",
+      "actual": "reconcile_financial_action",
+      "pass": true
+    }
+  ]
+}

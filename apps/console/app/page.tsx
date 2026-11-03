@@ -1,4 +1,4 @@
-import HomeView from "./views/home";
+import { CompanyHome } from "./ui/company";
 export default function Page() {
-  return <HomeView />;
+  return <CompanyHome />;
 }

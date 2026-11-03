@@ -1,4 +1,5 @@
 import { createPrivateKey, createPublicKey } from "node:crypto";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import postgres, { type Sql } from "postgres";
 import { z } from "zod";
 import {
@@ -24,6 +25,8 @@ import {
 import { PostgresTrustRepository } from "./persistence.js";
 import { ConsoleDemoAgent } from "./console-demo-agent.js";
 import { DemoShoppingAgent } from "./delegated-demo.js";
+import { createHostedGatewayHandler } from "./network/hosted-gateway.js";
+import { SimulatedPaymentProvider } from "./simulated-rail.js";
 import { PayPalOAuthClient, type PaymentProvider } from "./paypal.js";
 import {
   PayPalVaultStore,
@@ -59,6 +62,10 @@ const DemoAgentSchema = z.object({
     .default("DEMOACCOUNT01"),
 });
 export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
+  /** Optional Sandbox admin secret for credential issue/revoke and sample Authority. Never logged. */
+  gatewayAdminToken?: string;
+  /** Enables self-serve /v1/sandbox/start on a clearly labelled SIMULATED rail. Off by default. */
+  publicSandbox?: boolean;
   demoAgent?: z.infer<typeof DemoAgentSchema>;
   /** Raw PayPal settings; consumed only by the isolated M6 composition. Never logged. */
   paypalEnv?: Record<string, string | undefined>;
@@ -90,8 +97,13 @@ export function parseHostedConfig(
       : {}),
     PAYFLOW_M5_ORIGIN: env.PAYFLOW_M5_ORIGIN,
   });
+  const adminToken = env.PAYFLOW_GATEWAY_ADMIN_TOKEN;
+  if (adminToken !== undefined && adminToken.length < 32)
+    throw new Error("PAYFLOW_GATEWAY_ADMIN_TOKEN_TOO_SHORT");
   return {
     ...base,
+    ...(adminToken ? { gatewayAdminToken: adminToken } : {}),
+    ...(env.PAYFLOW_PUBLIC_SANDBOX === "true" ? { publicSandbox: true } : {}),
     ...(demoAgent
       ? {
           demoAgent,
@@ -177,6 +189,7 @@ export function createHostedConsole(
     clock,
   );
   let demo: DemoShoppingAgent | undefined;
+  let simulated: DemoShoppingAgent | undefined;
   if (config.demoAgent) {
     const privateKey = createPrivateKey(
       config.demoAgent.PAYFLOW_M6_SIGNING_KEY,
@@ -207,18 +220,29 @@ export function createHostedConsole(
       payment = stored;
       paymentReady = () => stored.connected();
     }
+    const signing = {
+      kid: config.demoAgent.PAYFLOW_M6_SIGNING_KID,
+      privateKey,
+      publicKey: createPublicKey(privateKey),
+    };
     demo = new DemoShoppingAgent({
       repo,
       provider: payment,
       ...(paymentReady ? { paymentReady } : {}),
-      signing: {
-        kid: config.demoAgent.PAYFLOW_M6_SIGNING_KID,
-        privateKey,
-        publicKey: createPublicKey(privateKey),
-      },
+      signing,
       expectedPayPalMerchantId: config.demoAgent.PAYPAL_EXPECTED_MERCHANT_ID,
       clock,
     });
+    // Same merchant binding as the real rail (so one binding revision serves both); only the
+    // provider differs. Reached solely by `sbx_` organizations.
+    if (config.publicSandbox)
+      simulated = new DemoShoppingAgent({
+        repo,
+        provider: new SimulatedPaymentProvider(ownedSql),
+        signing,
+        expectedPayPalMerchantId: config.demoAgent.PAYPAL_EXPECTED_MERCHANT_ID,
+        clock,
+      });
   }
   const handler = activationHttpHandler(app, {
     sample: () => hostedSample(bucketOf(clock())).text,
@@ -232,8 +256,28 @@ export function createHostedConsole(
     review: new IntentReviewService(provider, demoReviewBounds, clock),
     ...(demo ? { demoAgent: new ConsoleDemoAgent(repo, sessions, demo) } : {}),
   });
+  const gateway = demo
+    ? createHostedGatewayHandler({
+        sql: ownedSql,
+        repo,
+        demo,
+        principalId: config.PAYFLOW_M5_PRINCIPAL_ID,
+        agentId: config.PAYFLOW_M5_AGENT_ID,
+        ...(simulated ? { simulated } : {}),
+        organizationId: "payflow-sandbox",
+        ...(config.gatewayAdminToken
+          ? { adminToken: config.gatewayAdminToken }
+          : {}),
+        clock,
+      })
+    : undefined;
   return {
-    handler,
+    handler: gateway
+      ? async (req: IncomingMessage, res: ServerResponse) => {
+          if (await gateway(req, res)) return;
+          await handler(req, res);
+        }
+      : handler,
     close: async () => {
       if (!deps.sql) await ownedSql.end();
     },

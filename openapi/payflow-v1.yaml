@@ -1,0 +1,1057 @@
+openapi: 3.1.0
+info:
+  title: PayFlow Financial Authority API
+  version: 1.0.0-preview
+  description: >-
+    Developer-preview API for bounded financial authority. Protocol and rail
+    adapters never override Trust Kernel decisions. Verification is read-only.
+servers:
+  - url: http://localhost:3000
+paths:
+  /v1/authorities/{authorityId}:
+    get:
+      operationId: readAuthority
+      summary: Read the bounded Authority visible to the authenticated agent.
+      security: [{ bearerAuth: [authority:read] }]
+      parameters:
+        - in: path
+          name: authorityId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Authority projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthorityEnvelope" }
+        "403": { $ref: "#/components/responses/Denied" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/actions:
+    post:
+      operationId: requestAuthorizedAction
+      summary: Ask the Trust Kernel whether an exact financial action may proceed.
+      description: >-
+        The caller does not provide a mandate fingerprint or merchant-risk truth.
+        PayFlow loads Authority state and trusted context server-side. The
+        `nonce` field is the replay/idempotency key: a second request with the
+        same nonce is denied with `REPLAY_DETECTED` and never issues a second
+        execution capability. A revoked or suspended Authority is refused with
+        `AUTHORITY_INACTIVE` before the Trust Kernel runs.
+      security: [{ bearerAuth: [action:request] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ActionRequest" }
+      responses:
+        "200":
+          description: Deterministic ALLOW, DENY, or ESCALATE decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActionResult" }
+        "400": { $ref: "#/components/responses/Malformed" }
+        "403": { $ref: "#/components/responses/Denied" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/verify/presentations:
+    post:
+      operationId: verifyAuthorityPresentation
+      summary: Verify a signed Authority presentation without moving money.
+      description: >-
+        A verifier checks signature, audience, challenge, freshness, lifecycle,
+        Authority binding and presentation replay. This endpoint has no execution capability.
+      responses:
+        "200": { description: Verification verdict }
+  /v1/actions/execute:
+    post:
+      operationId: executeBoundedPurchase
+      summary: Perform a bounded purchase through the one Authority path.
+      description: >-
+        Authenticated external-agent execution. The request is normalised into the same
+        path every protocol uses: trusted quote, claimed-terms check, Trust Kernel, durable
+        Reservation, one-time execution grant, Execution Boundary, payment rail,
+        reconciliation, Proof. `amount` and `merchant` are untrusted assertions that are
+        compared with the trusted price; they never grant anything.
+
+
+        **Idempotency.** `nonce` is the replay key and is scoped to the Authority and agent.
+        The first presentation wins. A repeat is answered with `REPLAY_DETECTED` and never
+        causes a second provider effect. To retry the same logical request after a
+        transport error, send the same `nonce` and read the Proof; to make a new request,
+        use a new `nonce`.
+
+
+        **Status semantics.** Policy outcomes (ALLOW, DENY, ESCALATE, UNRESOLVED) are
+        HTTP 200 with a structured body. 400/401/403/404 mean the request was refused at
+        the door and `effectCount` is 0. A 5xx means PayFlow cannot tell whether money
+        moved: `effectCount` is `null`, never 0, and `doNotRetry` is true.
+
+
+        **effectCount.** `1` = exactly one provider effect. `0` = PayFlow is certain no
+        provider effect occurred. `null` = unknown; the operation is being reconciled and
+        must not be retried.
+      security: [{ credentialAuth: [action:request] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecuteRequest" }
+      responses:
+        "200":
+          description: A deterministic outcome. Switch on `status`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteOutcome" }
+        "400":
+          description: Malformed request. Nothing was stored. $0 moved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "401":
+          description: Credential missing, unknown, expired or revoked. $0 moved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "403":
+          description: Credential lacks scope, or is not bound to this agent or principal. $0 moved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "404":
+          description: Authority not found for this credential. $0 moved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "500":
+          description: Unexpected failure after acceptance. Effect unknown.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteUnknownFailure" }
+  /v1/proofs/{proposalId}:
+    get:
+      operationId: readProof
+      summary: Read the durable Proof for an operation owned by the calling agent.
+      security: [{ credentialAuth: [proof:read] }]
+      parameters:
+        - in: path
+          name: proposalId
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        "200":
+          description: Read-only Proof projection verified from durable records
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProofEnvelope" }
+        "401":
+          description: Credential invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "403":
+          description: Credential lacks the `proof:read` scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "404":
+          description: No Proof for that id (also returned for another agent's operation)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+  /v1/proofs/{proposalId}/portable:
+    get:
+      operationId: readPortableProof
+      summary: A signed, portable Proof that a separate party can verify offline.
+      description: >-
+        Signs a `payflow-proof/v1` from the already-verified operation trace. `outcome` is
+        SUCCEEDED (`effectCount` 1), FAILED (0) or UNKNOWN (`null`, never 0). Verify it with the
+        public key from `listPublicKeys` and `payflow-verify`; no PayFlow session is needed.
+        Returns 409 until the outcome is verified.
+      security: [{ credentialAuth: [proof:read] }]
+      parameters:
+        - in: path
+          name: proposalId
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        "200":
+          description: Signed portable Proof
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortableProofEnvelope" }
+        "401":
+          description: Credential invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "403":
+          description: Credential lacks the `proof:read` scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "404":
+          description: No Proof for that id (also returned for another agent's operation)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+        "409":
+          description: The outcome is not verified yet; no portable Proof can be signed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExecuteRejection" }
+  /v1/keys:
+    get:
+      operationId: listPublicKeys
+      summary: Public verification keys. Unauthenticated; they can verify, never sign.
+      security: []
+      responses:
+        "200":
+          description: Issuer and public JWKs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicKeys" }
+  /v1/sandbox/start:
+    post:
+      operationId: startSandbox
+      summary: Start a self-serve developer sandbox on the SIMULATED rail. No account.
+      description: >-
+        Creates an isolated sandbox tenant with its own agent, a $100 one-keyboard Authority and a
+        one-hour credential. No payment provider is contacted and no money moves; every response
+        and Proof is labelled SIMULATED. Rate limited per address; disabled unless the host enables it.
+        The token is shown exactly once.
+      x-hosted-only: true
+      security: []
+      responses:
+        "201":
+          description: Sandbox created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SandboxStarted" }
+        "404": { description: Self-serve sandbox is not enabled on this host }
+        "429":
+          {
+            description: Too many sandboxes started from this address; see Retry-After,
+          }
+  /v1/admin/sandbox/authority:
+    post:
+      operationId: provisionSampleAuthority
+      summary: Operator-only. Provision a sample Authority for the real Sandbox rail.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "201": { description: Provisioned }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/agents:
+    get:
+      operationId: listOrgAgents
+      summary: "Agent inventory: sponsor, lifecycle, active Authorities, exposure."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/finance:
+    get:
+      operationId: orgFinanceHome
+      summary: "Finance home: reserved, in flight, settled, available. Obligations beyond a reservation are NOT_MODELLED."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/security:
+    get:
+      operationId: orgSecurityHome
+      summary: "Security home: per-agent blast radius, delegation and recent denials."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/authorities:
+    get:
+      operationId: listOrgAuthorities
+      summary: Per-Authority exposure.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/decisions:
+    get:
+      operationId: listPendingDecisions
+      summary: Escalations waiting for a human. The agent cannot reach this.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/unknown:
+    get:
+      operationId: listUnknownOperations
+      summary: Unresolved payments. Observation only; nothing is re-executed.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/audit:
+    get:
+      operationId: listAuditEvents
+      summary: Append-only audit trail. Identifiers and outcomes only.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/org/funnel:
+    get:
+      operationId: developerFunnel
+      summary: Privacy-safe developer funnel from durable records; names what is not measured.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Tenant- and environment-scoped, read-only projection
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { description: Administrative authentication required }
+  /v1/admin/decisions/{receiptId}/approve:
+    post:
+      operationId: approveDecision
+      summary: Approve once. Reserves the Authority; does NOT pay.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: receiptId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Approved once }
+        "401": { description: Administrative authentication required }
+        "404":
+          {
+            description: No pending decision with that id (also for another tenant's),
+          }
+        "409": { description: The approval could not be recorded }
+  /v1/admin/decisions/{receiptId}/reject:
+    post:
+      operationId: rejectDecision
+      summary: Reject. Records an audit event; $0 moved.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: receiptId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Rejected }
+        "401": { description: Administrative authentication required }
+        "404": { description: No pending decision with that id }
+  /v1/admin/members:
+    post:
+      operationId: addMember
+      summary: >-
+        OWNER adds a member with a role (the token is shown once). The platform operator may instead
+        bootstrap the FIRST OWNER of an existing organization.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }, { operatorAuth: [] }]
+      responses:
+        "201":
+          { description: Created. `token` is returned only in this response. }
+        "400":
+          {
+            description: Malformed request,
+            or the operator asked for something other than an OWNER,
+          }
+        "401": { description: Authentication required }
+        "403": { description: The role does not allow this. Nothing changed. }
+    get:
+      operationId: listMembers
+      summary: List members of the caller's organization and environment. Never returns secrets.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200": { description: Member metadata }
+        "401": { description: Authentication required }
+        "403": { description: The role does not allow this }
+  /v1/admin/members/{memberId}/revoke:
+    post:
+      operationId: revokeMember
+      summary: OWNER revokes a member. The last active OWNER cannot be revoked.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: memberId
+          required: true
+          schema: { type: string, pattern: "^pfm_[a-f0-9]{24}$" }
+      responses:
+        "200": { description: Revoked }
+        "401": { description: Authentication required }
+        "403": { description: The role does not allow this }
+        "404": { description: Not found in this organization and environment }
+        "409": { description: Refused because it is the last active OWNER }
+  /v1/admin/org/pause:
+    post:
+      operationId: pauseOrganization
+      summary: OWNER or SECURITY_ADMIN stops NEW executions for the organization. Reads and Proof stay available.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200": { description: Paused }
+        "401": { description: Authentication required }
+        "403": { description: The role does not allow this }
+  /v1/admin/org/resume:
+    post:
+      operationId: resumeOrganization
+      summary: Lift the organization pause. Cannot lift a GLOBAL or environment pause.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200": { description: Resumed }
+        "401": { description: Authentication required }
+        "403": { description: The role does not allow this }
+  /v1/admin/ops/reconciliation:
+    get:
+      operationId: reconciliationMetrics
+      summary: Operator-only. UNKNOWN reconciliation backlog, oldest age, buckets, failure and resolution rates.
+      x-hosted-only: true
+      security: [{ operatorAuth: [] }]
+      responses:
+        "200": { description: Metrics }
+        "401": { description: Authentication required }
+        "403": { description: Platform operator only }
+  /v1/admin/ops/reconcile/tick:
+    post:
+      operationId: reconcileTick
+      summary: Operator-only. One OBSERVATION-ONLY reconciliation pass plus alert evaluation. Safe to repeat. GET is also accepted for schedulers.
+      x-hosted-only: true
+      security: [{ operatorAuth: [] }]
+      responses:
+        "200": { description: Tick summary }
+        "401": { description: Authentication required }
+        "403": { description: Platform operator only }
+  /v1/admin/ops/alerts:
+    get:
+      operationId: listAlerts
+      summary: Operator-only. Persisted operational alerts (P0 economic, P1 operational, P2 degraded).
+      x-hosted-only: true
+      security: [{ operatorAuth: [] }]
+      responses:
+        "200": { description: Alerts }
+        "401": { description: Authentication required }
+        "403": { description: Platform operator only }
+  /v1/admin/credentials:
+    post:
+      operationId: issueCredential
+      summary: Issue a scoped, expiring credential for an agent. The secret is shown once.
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CredentialIssueRequest" }
+      responses:
+        "201":
+          description: Issued. `token` is returned only in this response.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CredentialIssued" }
+        "400": { description: Malformed request or unknown agent }
+        "401": { description: Administrative authentication required }
+        "403": { description: The member role does not allow this }
+    get:
+      operationId: listCredentials
+      summary: List credentials for the administrator's tenant and environment. Never returns secrets.
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          description: Credential metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CredentialList" }
+        "401": { description: Administrative authentication required }
+  /v1/admin/credentials/{credentialId}/revoke:
+    post:
+      operationId: revokeCredential
+      summary: Revoke a credential. Idempotent. Takes effect on the next request.
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: credentialId
+          required: true
+          schema: { type: string, pattern: "^pfc_[a-f0-9]{24}$" }
+      responses:
+        "200": { description: Revoked }
+        "401": { description: Administrative authentication required }
+        "404": { description: Not found in this tenant and environment }
+components:
+  securitySchemes:
+    credentialAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        PayFlow developer-preview credential `pf_sbx_<id>.<secret>`, issued by
+        `issueCredential`. Bound to one tenant, environment, agent and principal, with
+        scopes, audience and expiry. OAuth/OIDC is the later production path.
+    adminAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Organization MEMBER token `pf_act_<id>.<secret>`. The server decides what it may do from the
+        member's stored role (OWNER, FINANCE_ADMIN, SECURITY_ADMIN, DEVELOPER, APPROVER, AUDITOR,
+        VIEWER). It is bound to one organization and one environment. A role named in a header, query
+        or body is ignored. The platform operator token is NOT a member and holds no role.
+    operatorAuth:
+      type: http
+      scheme: bearer
+      description: Platform operator secret. Bootstraps the first OWNER and runs platform operations only.
+    bearerAuth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /oauth/token
+          scopes:
+            authority:read: Read Authority projections.
+            action:request: Request bounded financial actions.
+            verify:read: Verify Authority or Proof material.
+  schemas:
+    Money:
+      type: object
+      additionalProperties: false
+      required: [currency, minor]
+      properties:
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        minor: { type: integer, minimum: 0 }
+    Merchant:
+      type: object
+      additionalProperties: false
+      required: [id, displayName]
+      properties:
+        id: { type: string, minLength: 1 }
+        displayName: { type: string, minLength: 1 }
+    ActionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - mandateId
+        - agentId
+        - amount
+        - merchant
+        - category
+        - condition
+        - requestedCapability
+        - proposedAt
+        - nonce
+      properties:
+        requestId: { type: string }
+        mandateId: { type: string }
+        agentId: { type: string }
+        amount: { $ref: "#/components/schemas/Money" }
+        quantity: { type: integer, minimum: 1, maximum: 1000 }
+        merchant: { $ref: "#/components/schemas/Merchant" }
+        category: { type: string }
+        condition: { type: string, enum: [NEW, REFURBISHED, USED] }
+        requestedCapability:
+          type: string
+          enum:
+            [
+              SEARCH_PRODUCTS,
+              EVALUATE_PRODUCTS,
+              CREATE_ORDER,
+              CAPTURE_PAYMENT,
+              REQUEST_REFUND,
+              CREATE_SUBSCRIPTION,
+              OPEN_DISPUTE,
+            ]
+        proposedAt: { type: string, format: date-time }
+        nonce: { type: string, minLength: 16 }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+    ExecuteRequest:
+      type: object
+      additionalProperties: false
+      required: [authority, agentId, action, query, amount, merchant, nonce]
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        authority:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 128,
+            description: Authority id.,
+          }
+        agentId:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 128,
+            description: Must equal the credential's agent.,
+          }
+        action: { type: string, const: purchase }
+        query:
+          type: object
+          additionalProperties: false
+          required: [text, quantity]
+          properties:
+            text: { type: string, minLength: 1, maxLength: 200 }
+            quantity: { type: integer, minimum: 1, maximum: 1000 }
+        amount:
+          description: Claimed total in minor units. Verified against the trusted price.
+          $ref: "#/components/schemas/Money"
+        merchant:
+          type: object
+          additionalProperties: false
+          required: [id]
+          properties:
+            id: { type: string, minLength: 1, maxLength: 128 }
+        nonce: { type: string, minLength: 16, maxLength: 128 }
+    ProofReference:
+      type: object
+      additionalProperties: false
+      required: [proposalId]
+      properties:
+        proposalId: { type: [string, "null"] }
+        href: { type: string, description: Path for readProof. }
+        receiptId: { type: string }
+        executionId: { type: string }
+    ExecuteCompleted:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          decision,
+          status,
+          effectCount,
+          recoverable,
+          humanSummary,
+          nextAction,
+          proof,
+        ]
+      properties:
+        rail:
+          type: string
+          enum: [SIMULATED, PAYPAL_SANDBOX]
+          description: Which rail executes this Authority. SIMULATED moves no money. Never production.
+        requestId: { type: string }
+        decision: { type: string, const: ALLOW }
+        status: { type: string, const: COMPLETED }
+        effectCount: { type: integer, const: 1 }
+        recoverable: { type: boolean, const: false }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+        proof: { $ref: "#/components/schemas/ProofReference" }
+    ExecuteDenied:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          decision,
+          status,
+          effectCount,
+          reason,
+          recoverable,
+          humanSummary,
+          nextAction,
+        ]
+      properties:
+        rail:
+          type: string
+          enum: [SIMULATED, PAYPAL_SANDBOX]
+          description: Which rail executes this Authority. SIMULATED moves no money. Never production.
+        requestId: { type: string }
+        decision: { type: string, const: DENY }
+        status: { type: string, const: DENIED }
+        effectCount: { type: integer, const: 0 }
+        reason: { type: string, pattern: "^[A-Z0-9_]+$" }
+        recoverable: { type: boolean }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+        proof: { $ref: "#/components/schemas/ProofReference" }
+    ExecuteNeedsApproval:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          decision,
+          status,
+          effectCount,
+          reason,
+          recoverable,
+          humanSummary,
+          nextAction,
+          proof,
+        ]
+      properties:
+        rail:
+          type: string
+          enum: [SIMULATED, PAYPAL_SANDBOX]
+          description: Which rail executes this Authority. SIMULATED moves no money. Never production.
+        requestId: { type: string }
+        decision: { type: string, const: ESCALATE }
+        status: { type: string, const: NEEDS_APPROVAL }
+        effectCount: { type: integer, const: 0 }
+        reason: { type: string }
+        recoverable: { type: boolean }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+        proof: { $ref: "#/components/schemas/ProofReference" }
+    ExecuteUnresolved:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          decision,
+          status,
+          effectCount,
+          recoverable,
+          doNotRetry,
+          humanSummary,
+          nextAction,
+          proof,
+        ]
+      properties:
+        rail:
+          type: string
+          enum: [SIMULATED, PAYPAL_SANDBOX]
+          description: Which rail executes this Authority. SIMULATED moves no money. Never production.
+        requestId: { type: string }
+        decision: { type: string, const: ALLOW }
+        status: { type: string, const: UNRESOLVED }
+        effectCount:
+          type: "null"
+          description: Unknown. NEVER zero. PayFlow is confirming with the provider.
+        reason: { type: string }
+        recoverable: { type: boolean, const: false }
+        doNotRetry: { type: boolean, const: true }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+        proof: { $ref: "#/components/schemas/ProofReference" }
+    ExecuteOutcome:
+      oneOf:
+        - $ref: "#/components/schemas/ExecuteCompleted"
+        - $ref: "#/components/schemas/ExecuteDenied"
+        - $ref: "#/components/schemas/ExecuteNeedsApproval"
+        - $ref: "#/components/schemas/ExecuteUnresolved"
+    ExecuteRejection:
+      type: object
+      additionalProperties: true
+      required: [requestId, reason]
+      properties:
+        requestId: { type: string }
+        decision: { type: string, const: DENY }
+        effectCount: { type: integer, const: 0 }
+        reason: { type: string }
+        recoverable: { type: boolean }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+    ExecuteUnknownFailure:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          decision,
+          effectCount,
+          reason,
+          recoverable,
+          doNotRetry,
+          humanSummary,
+          nextAction,
+        ]
+      properties:
+        requestId: { type: string }
+        decision: { type: string, const: DENY }
+        effectCount: { type: "null" }
+        reason: { type: string }
+        recoverable: { type: boolean, const: false }
+        doNotRetry: { type: boolean, const: true }
+        humanSummary: { type: string }
+        nextAction: { type: string }
+    ProofEnvelope:
+      type: object
+      required: [requestId, proof]
+      properties:
+        requestId: { type: string }
+        proof:
+          {
+            type: object,
+            description: "Operation trace projection (payflow operation trace).",
+          }
+    CredentialIssueRequest:
+      type: object
+      additionalProperties: false
+      required: [agentId, scopes, ttlSeconds]
+      properties:
+        agentId: { type: string }
+        scopes:
+          type: array
+          minItems: 1
+          items:
+            {
+              type: string,
+              enum:
+                [
+                  authority:read,
+                  action:request,
+                  verify:read,
+                  proof:read,
+                  reconcile:request,
+                ],
+            }
+        ttlSeconds: { type: integer, minimum: 60, maximum: 7776000 }
+        label: { type: string, maxLength: 128 }
+        audience: { type: string }
+    Credential:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          credentialId,
+          organizationId,
+          environment,
+          agentId,
+          principalId,
+          audience,
+          scopes,
+          label,
+          status,
+          issuedAt,
+          expiresAt,
+          revokedAt,
+          lastUsedAt,
+        ]
+      properties:
+        credentialId: { type: string, pattern: "^pfc_[a-f0-9]{24}$" }
+        organizationId: { type: string }
+        environment: { type: string, enum: [SANDBOX, PRODUCTION] }
+        agentId: { type: string }
+        principalId: { type: string }
+        audience: { type: string }
+        scopes: { type: array, items: { type: string } }
+        label: { type: string }
+        status: { type: string, enum: [ACTIVE, REVOKED] }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: [string, "null"] }
+        lastUsedAt: { type: [string, "null"] }
+    CredentialIssued:
+      type: object
+      additionalProperties: false
+      required: [requestId, credential, token, notice]
+      properties:
+        requestId: { type: string }
+        credential: { $ref: "#/components/schemas/Credential" }
+        token:
+          { type: string, description: Shown once. Never retrievable again. }
+        notice: { type: string }
+    CredentialList:
+      type: object
+      additionalProperties: false
+      required: [requestId, credentials]
+      properties:
+        requestId: { type: string }
+        credentials:
+          type: array
+          items: { $ref: "#/components/schemas/Credential" }
+    PortableProof:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          version,
+          issuer,
+          keyId,
+          authorityId,
+          actionId,
+          outcome,
+          effectCount,
+          observedAt,
+          evidenceDigest,
+          signature,
+        ]
+      properties:
+        version: { type: string, const: payflow-proof/v1 }
+        issuer: { type: string }
+        keyId: { type: string }
+        authorityId: { type: string }
+        actionId: { type: string }
+        outcome: { type: string, enum: [SUCCEEDED, FAILED, UNKNOWN] }
+        effectCount:
+          description: 1 for SUCCEEDED, 0 for FAILED, null for UNKNOWN (never 0).
+          type: [integer, "null"]
+          enum: [0, 1, null]
+        observedAt: { type: string, format: date-time }
+        evidenceDigest: { type: string, pattern: "^[a-f0-9]{64}$" }
+        signature: { type: string }
+    PortableProofEnvelope:
+      type: object
+      additionalProperties: false
+      required: [requestId, proof]
+      properties:
+        requestId: { type: string }
+        proof: { $ref: "#/components/schemas/PortableProof" }
+    PublicKeys:
+      type: object
+      additionalProperties: false
+      required: [requestId, issuer, keys]
+      properties:
+        requestId: { type: string }
+        issuer: { type: string }
+        keys:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [keyId, jwk]
+            properties:
+              keyId: { type: string }
+              status:
+                type: string
+                enum: [ACTIVE, RETIRED]
+                description: RETIRED keys still verify historical Proof. A revoked key is not listed.
+              jwk: { type: object }
+    SandboxStarted:
+      type: object
+      additionalProperties: false
+      required: [requestId, sandbox, token, authority, next]
+      properties:
+        requestId: { type: string }
+        sandbox:
+          type: object
+          additionalProperties: false
+          required: [rail, notice, expiresAt]
+          properties:
+            rail: { type: string, const: SIMULATED }
+            notice: { type: string }
+            expiresAt: { type: string, format: date-time }
+        token: { type: string, description: Shown once. }
+        authority:
+          type: object
+          additionalProperties: false
+          required:
+            [
+              id,
+              agentId,
+              limitMinor,
+              currency,
+              merchant,
+              item,
+              priceMinor,
+              expiresAt,
+            ]
+          properties:
+            id: { type: string }
+            agentId: { type: string }
+            limitMinor: { type: integer }
+            currency: { type: string }
+            merchant: { type: string }
+            item: { type: string }
+            priceMinor: { type: integer }
+            expiresAt: { type: string, format: date-time }
+        next:
+          type: object
+          additionalProperties: { type: string }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [requestId, error]
+      properties:
+        requestId: { type: string }
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+    AuthorityEnvelope:
+      type: object
+      required: [requestId, authority]
+      properties:
+        requestId: { type: string }
+        authority:
+          type: object
+          required: [id, principalId, authorizedAgentId, status, fingerprint]
+          properties:
+            id: { type: string }
+            principalId: { type: string }
+            authorizedAgentId: { type: string }
+            status:
+              { type: string, enum: [ACTIVE, EXPIRED, SUSPENDED, REVOKED] }
+            fingerprint: { type: string, pattern: "^[a-f0-9]{64}$" }
+    ActionResult:
+      type: object
+      required: [requestId, decision]
+      properties:
+        requestId: { type: string }
+        decision:
+          type: object
+          required: [decision, reasonCodes]
+          properties:
+            decision: { type: string, enum: [ALLOW, DENY, ESCALATE] }
+            reasonCodes: { type: array, items: { type: string } }
+        executionCapability:
+          type: object
+          description: Short-lived, one-time, action-bound capability. Never a payment credential.
+          required: [grantId, expiresAt, proposalDigest]
+          properties:
+            grantId: { type: string }
+            expiresAt: { type: string, format: date-time }
+            proposalDigest: { type: string }
+  responses:
+    Malformed:
+      description: Malformed request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Denied:
+      description: Authentication, scope, authority binding or lifecycle denied
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

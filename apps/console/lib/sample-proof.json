@@ -1,0 +1,36 @@
+{
+  "_notice": "ILLUSTRATIVE SAMPLE signed with a throwaway key. Not a real payment. Not a PayFlow production Proof.",
+  "proof": {
+    "version": "payflow-proof/v1",
+    "issuer": "payflow-sample-issuer",
+    "keyId": "sample-key-1",
+    "authorityId": "sample-keyboard-authority",
+    "actionId": "sample-operation-0001",
+    "outcome": "SUCCEEDED",
+    "effectCount": 1,
+    "observedAt": "2026-11-02T12:00:00.000Z",
+    "evidenceDigest": "0000000000000000000000000000000000000000000000000000000000000001",
+    "subject": {
+      "principalId": "sample-owner",
+      "agentId": "Shopping Agent",
+      "capability": "CAPTURE_PAYMENT",
+      "amountMinor": 8400,
+      "currency": "USD",
+      "merchantId": "sample.merchant"
+    },
+    "signature": "1mclPm5pso3b-8c-mzCHM1vcy3ZgYMW2AHyym8ckrAy9bJXsqOVlLMC3XyNw1vATm3uauSaJuY8BgDFw0ueCBg"
+  },
+  "keys": {
+    "issuer": "payflow-sample-issuer",
+    "keys": [
+      {
+        "keyId": "sample-key-1",
+        "jwk": {
+          "crv": "Ed25519",
+          "x": "sZKL2f4Qmdov0auNrIGJLvl97eAMhui5hDMHQTPNCWM",
+          "kty": "OKP"
+        }
+      }
+    ]
+  }
+}

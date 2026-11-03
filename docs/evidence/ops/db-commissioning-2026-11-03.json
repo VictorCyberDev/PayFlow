@@ -1,0 +1,98 @@
+{
+  "title": "M14 database commissioning on the accepted database",
+  "date": "2026-11-03",
+  "note": "No connection strings, passwords or tokens in this file.",
+  "accepted_branch": "br-noisy-brook-b89epb6e",
+  "snapshot_before": "br-shy-fire-b86qozvq (snapshot-pre-023-2026-11-03, copy-on-write, no compute)",
+  "rehearsal_first": "Migration 023 and the role script were applied to copy br-morning-pond-b8kh9ukx and verified before the accepted branch was touched. A first attempt of the role script failed on the copy ('permission denied to change default privileges'); the script now grants the group roles to the running role first.",
+  "rollback_path": [
+    "drop the four tables created by 023 and restore organization_audit_events_actor_kind_check to its 021 definition (audit table had 0 rows)",
+    "or branch from the snapshot"
+  ],
+  "before": {
+    "tables": 69,
+    "capturedPayments": 2,
+    "capturedMinorUnits": 16800,
+    "evidenceEvents": 120,
+    "evidenceMaxSequence": 120,
+    "mandates": 16,
+    "grants": 2,
+    "credentials": 3,
+    "auditRows": 0,
+    "migration021": true,
+    "migration022": true,
+    "migration023": false,
+    "unvalidatedConstraints": 0
+  },
+  "after": {
+    "tables": 73,
+    "capturedPayments": 2,
+    "capturedMinorUnits": 16800,
+    "evidenceEvents": 120,
+    "evidenceMaxSequence": 120,
+    "mandates": 16,
+    "grants": 2,
+    "credentials": 3,
+    "migration023": true,
+    "unvalidatedConstraints": 0,
+    "auditTriggers": 2
+  },
+  "accepted_evidence_unchanged": true,
+  "roles_created": [
+    "payflow_migrator",
+    "payflow_runtime",
+    "payflow_readonly"
+  ],
+  "roles_are": "NOLOGIN group roles; no login role and no password exist",
+  "privilege_matrix_on_accepted_database": {
+    "runtime_can_update_attempts": true,
+    "runtime_can_update_audit_log": false,
+    "runtime_can_delete_evidence": false,
+    "runtime_can_truncate": false,
+    "runtime_can_create_objects": false,
+    "readonly_can_read_member_secret_digest": false,
+    "readonly_can_read_credential_secret_digest": false,
+    "readonly_can_update": false,
+    "migrator_can_create": true
+  },
+  "executed_refusals_under_SET_ROLE": {
+    "runtime: DROP TABLE payment_attempts": "must be owner of table payment_attempts",
+    "readonly: UPDATE payment_attempts": "permission denied for table payment_attempts",
+    "runtime: SELECT captured attempts": "allowed, 2 rows"
+  },
+  "not_done": [
+    "No login role exists, so the deployed application still connects as the schema owner. Creating a payflow_runtime login needs a password, which must not pass through this session; the owner must create it and swap DATABASE_URL.",
+    "The new code is not deployed against this database."
+  ],
+  "isolated_public_database": {
+    "neonProject": "withered-rice-68056451",
+    "branch": "br-steep-glade-bdsyx5v5",
+    "postgres": "17.11",
+    "data": "none",
+    "migrationsApplied": "001-023",
+    "rolesApplied": true,
+    "schemaFingerprintEqualsAcceptedDatabase": true,
+    "fingerprint_md5": "82498c06eefce00974061e000d349f29",
+    "tables": 73,
+    "columns": 598,
+    "triggers": 22,
+    "constraintsExcludingNotNull": 438,
+    "note_on_constraint_counts": "The accepted database is PostgreSQL 18.6, which stores NOT NULL as constraints; counts match once those are excluded.",
+    "runtime_DROP_TABLE_refused": "must be owner of table principals",
+    "pointedAtByAnyVercelProject": false,
+    "provisioning_script_verified_on": "a fully migrated empty local database; idempotent"
+  },
+  "vercel_authentication_finding": {
+    "project": "payflow-m6-acceptance",
+    "found": "OFF; anonymous GET of the RC preview returned 200",
+    "exposed": [
+      "static site",
+      "public key document /v1/keys/",
+      "credential-gated routes that refused anonymous callers"
+    ],
+    "admin_plane": "disabled on that deployment (404)",
+    "self_serve_sandbox": "off",
+    "action": "Vercel Authentication set to ON for the whole project (all); anonymous requests now get 302 to Vercel login",
+    "note": "Whether it was ever ON earlier is not known; earlier records calling the preview protected were not re-verified."
+  }
+}

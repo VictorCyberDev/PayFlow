@@ -1,0 +1,147 @@
+{
+  "version": "break-authority-summary/v1",
+  "generatedAt": "2026-10-28T03:00:00.000Z",
+  "scope": {
+    "railKind": "deterministic-fake",
+    "providerEffectsExercised": false,
+    "realModelRun": false,
+    "independentReproduction": false,
+    "certificationClaim": false,
+    "note": "Production authority modules against a deterministic fake rail. No real money, no real model, no third-party reproduction."
+  },
+  "integrated": {
+    "scenarios": 1000,
+    "uncontained": 0,
+    "attackFamilies": 16,
+    "distinctContainmentOutcomes": 38,
+    "validControls": {
+      "passed": 5,
+      "total": 5
+    },
+    "categories": [
+      {
+        "category": "IDENTITY",
+        "scenarios": 63,
+        "contained": 63,
+        "distinctOutcomes": 2
+      },
+      {
+        "category": "DELEGATION",
+        "scenarios": 63,
+        "contained": 63,
+        "distinctOutcomes": 5
+      },
+      {
+        "category": "AMOUNT",
+        "scenarios": 63,
+        "contained": 63,
+        "distinctOutcomes": 1
+      },
+      {
+        "category": "MERCHANT",
+        "scenarios": 63,
+        "contained": 63,
+        "distinctOutcomes": 2
+      },
+      {
+        "category": "PRODUCT",
+        "scenarios": 63,
+        "contained": 63,
+        "distinctOutcomes": 2
+      },
+      {
+        "category": "CURRENCY",
+        "scenarios": 63,
+        "contained": 63,
+        "distinctOutcomes": 2
+      },
+      {
+        "category": "FEES",
+        "scenarios": 63,
+        "contained": 63,
+        "distinctOutcomes": 1
+      },
+      {
+        "category": "REPLAY",
+        "scenarios": 63,
+        "contained": 63,
+        "distinctOutcomes": 1
+      },
+      {
+        "category": "CONCURRENCY",
+        "scenarios": 62,
+        "contained": 62,
+        "distinctOutcomes": 1
+      },
+      {
+        "category": "PROVIDER_AMBIGUITY",
+        "scenarios": 62,
+        "contained": 62,
+        "distinctOutcomes": 2
+      },
+      {
+        "category": "PROTOCOL",
+        "scenarios": 62,
+        "contained": 62,
+        "distinctOutcomes": 3
+      },
+      {
+        "category": "PROOF_TAMPERING",
+        "scenarios": 62,
+        "contained": 62,
+        "distinctOutcomes": 2
+      },
+      {
+        "category": "PRIVILEGE_ESCALATION",
+        "scenarios": 62,
+        "contained": 62,
+        "distinctOutcomes": 2
+      },
+      {
+        "category": "CROSS_TENANT",
+        "scenarios": 62,
+        "contained": 62,
+        "distinctOutcomes": 2
+      },
+      {
+        "category": "LIFECYCLE",
+        "scenarios": 62,
+        "contained": 62,
+        "distinctOutcomes": 2
+      },
+      {
+        "category": "MACHINE_TO_MACHINE",
+        "scenarios": 62,
+        "contained": 62,
+        "distinctOutcomes": 8
+      }
+    ]
+  },
+  "kernelOnly": {
+    "scenarios": 1000,
+    "unauthorizedAllows": 0,
+    "families": 10
+  },
+  "faultInjection": {
+    "total": 41,
+    "passed": 41
+  },
+  "conformance": {
+    "passed": 7,
+    "failed": 0,
+    "certificationClaim": false
+  },
+  "toolSelection": {
+    "total": 14,
+    "passed": 14,
+    "kind": "deterministic reference selector; no model was run"
+  },
+  "sourceFileSha256": {
+    "break-authority-kernel-1000.json": "30a0f8585e996958f4c10dc4369cd06b8a2da690384e4c4eadbb683179d01b9b",
+    "break-authority-integrated-100.json": "30a054d3cbbe97c11af1f95e5fcc453035ddaf1fde1d420cf4dadfcf3c94fffb",
+    "break-authority-integrated-1000.json": "a2863dcf2a8a8262d7d017e3456155cc71213833aef2c24eb0a81db7f35832f0",
+    "fault-injection-report.json": "57521788bd3fa169ce36a584c41cd5402e979f2545a5fe1bcfe4ab498e16d004",
+    "conformance-report.json": "b776f595a02e43064f65c40ab6dda37a99984bb750fc44a8f995dbaa4e450e4a",
+    "tool-selection-eval.json": "4973cf2b1bae5e58301e440832b51366a2178ff7ee8e59756a9d2c6c6245106f"
+  }
+}

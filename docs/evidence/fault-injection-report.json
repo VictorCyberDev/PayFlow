@@ -1,0 +1,295 @@
+{
+  "version": "fault-injection/v1",
+  "total": 41,
+  "passed": 41,
+  "failed": 0,
+  "results": [
+    {
+      "scenarioId": "agent-amount-change",
+      "actual": "DENY",
+      "evidence": "kernel:DENY:AMOUNT_EXCEEDS_LIMIT,HUMAN_APPROVAL_LIMIT_EXCEEDED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "merchant-substitution",
+      "actual": "DENY",
+      "evidence": "kernel:DENY:MERCHANT_NOT_ALLOWED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "sku-substitution",
+      "actual": "DENY",
+      "evidence": "kernel:DENY:CATEGORY_DENIED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "condition-substitution",
+      "actual": "DENY",
+      "evidence": "kernel:DENY:CONDITION_DENIED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "quantity-widening",
+      "actual": "DENY",
+      "evidence": "kernel:DENY:QUANTITY_EXHAUSTED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "currency-change",
+      "actual": "DENY",
+      "evidence": "kernel:DENY:CURRENCY_MISMATCH",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "fee-widening",
+      "actual": "DENY",
+      "evidence": "action:DENY:MONEY:FEE_BOUNDARY_EXCEEDED:QUANTITY_EXHAUSTED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "revoked-authority",
+      "actual": "DENY",
+      "evidence": "gateway-refusal:AUTHORITY_INACTIVE|verify:REVOKED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "expired-authority",
+      "actual": "DENY",
+      "evidence": "kernel:DENY:MANDATE_EXPIRED,AGENT_EXPIRED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "suspended-authority",
+      "actual": "DENY",
+      "evidence": "gateway-refusal:AUTHORITY_INACTIVE",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "wrong-agent",
+      "actual": "DENY",
+      "evidence": "gateway-refusal:ACCESS_AGENT_MISMATCH",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "stale-assertion",
+      "actual": "REJECT",
+      "evidence": "verify:EXPIRED:PRESENTATION_EXPIRED",
+      "expected": "REJECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "forged-assertion",
+      "actual": "REJECT",
+      "evidence": "verify:TAMPERED:SIGNATURE_INVALID",
+      "expected": "REJECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "replay",
+      "actual": "DENY",
+      "evidence": "second use denied REPLAY_DETECTED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "duplicate-callback",
+      "actual": "IDEMPOTENT",
+      "evidence": "duplicate provider callback produced one effect",
+      "expected": "IDEMPOTENT",
+      "pass": true
+    },
+    {
+      "scenarioId": "concurrent-execution",
+      "actual": "NO_DUPLICATE_EFFECT",
+      "evidence": "25 concurrent executions produced one provider effect",
+      "expected": "NO_DUPLICATE_EFFECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "duplicated-webhook",
+      "actual": "IDEMPOTENT",
+      "evidence": "second delivery DUPLICATE",
+      "expected": "IDEMPOTENT",
+      "pass": true
+    },
+    {
+      "scenarioId": "delayed-webhook",
+      "actual": "RECONCILE_ONLY",
+      "evidence": "late webhook rejected; provider lookup decided truth",
+      "expected": "RECONCILE_ONLY",
+      "pass": true
+    },
+    {
+      "scenarioId": "dropped-response",
+      "actual": "UNKNOWN",
+      "evidence": "rail:UNKNOWN:SIMULATED_NETWORK_LOSS_AFTER_EFFECT",
+      "expected": "UNKNOWN",
+      "pass": true
+    },
+    {
+      "scenarioId": "provider-timeout",
+      "actual": "UNKNOWN",
+      "evidence": "rail:UNKNOWN:SIMULATED_TIMEOUT_BEFORE_PROVIDER_TRUTH",
+      "expected": "UNKNOWN",
+      "pass": true
+    },
+    {
+      "scenarioId": "provider-effect-network-failure",
+      "actual": "UNKNOWN",
+      "evidence": "execute stayed UNKNOWN; lookup found exactly one effect",
+      "expected": "UNKNOWN",
+      "pass": true
+    },
+    {
+      "scenarioId": "ambiguous-provider-state",
+      "actual": "UNKNOWN",
+      "evidence": "no provider record stays UNKNOWN/UNRESOLVED",
+      "expected": "UNKNOWN",
+      "pass": true
+    },
+    {
+      "scenarioId": "database-retry",
+      "actual": "IDEMPOTENT",
+      "evidence": "contended retries converged on one resolution",
+      "expected": "IDEMPOTENT",
+      "pass": true
+    },
+    {
+      "scenarioId": "crash-after-reservation",
+      "actual": "RECONCILE_ONLY",
+      "evidence": "recovery observed no provider effect without executing",
+      "expected": "RECONCILE_ONLY",
+      "pass": true
+    },
+    {
+      "scenarioId": "crash-after-grant",
+      "actual": "RECONCILE_ONLY",
+      "evidence": "expired grant refused; recovery is lookup-only",
+      "expected": "RECONCILE_ONLY",
+      "pass": true
+    },
+    {
+      "scenarioId": "crash-after-provider-create",
+      "actual": "UNKNOWN",
+      "evidence": "pre-recovery state UNKNOWN; same-key retry did not duplicate; expired grant refused",
+      "expected": "UNKNOWN",
+      "pass": true
+    },
+    {
+      "scenarioId": "crash-after-capture",
+      "actual": "UNKNOWN",
+      "evidence": "local truth UNKNOWN until lookup; exactly one capture",
+      "expected": "UNKNOWN",
+      "pass": true
+    },
+    {
+      "scenarioId": "reconciliation-race",
+      "actual": "NO_DUPLICATE_EFFECT",
+      "evidence": "reconciliation never executes; one provider effect",
+      "expected": "NO_DUPLICATE_EFFECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "tampered-proof",
+      "actual": "REJECT",
+      "evidence": "proof:SIGNATURE_INVALID",
+      "expected": "REJECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "stale-proof",
+      "actual": "REJECT",
+      "evidence": "proof:STALE_PROOF",
+      "expected": "REJECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "delegation-widening",
+      "actual": "DENY",
+      "evidence": "DELEGATION_WIDENING:ACTION_KIND_WIDENED,AMOUNT_WIDENED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "privilege-escalation",
+      "actual": "DENY",
+      "evidence": "DELEGATION_WIDENING:PRINCIPAL_CHANGED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "duplicate-a2a-request",
+      "actual": "IDEMPOTENT",
+      "evidence": "second A2A delegation DUPLICATE",
+      "expected": "IDEMPOTENT",
+      "pass": true
+    },
+    {
+      "scenarioId": "duplicate-mcp-invocation",
+      "actual": "IDEMPOTENT",
+      "evidence": "second MCP call DENY; one capability",
+      "expected": "IDEMPOTENT",
+      "pass": true
+    },
+    {
+      "scenarioId": "malformed-commerce-context",
+      "actual": "REJECT",
+      "evidence": "gateway-refusal:REQUEST_MALFORMED",
+      "expected": "REJECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "unsupported-action-type",
+      "actual": "REJECT",
+      "evidence": "financial-action-schema",
+      "expected": "REJECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "unsupported-rail",
+      "actual": "REJECT",
+      "evidence": "RECONCILIATION_RAIL_UNAVAILABLE",
+      "expected": "REJECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "negative-zero-extreme-amount",
+      "actual": "REJECT",
+      "evidence": "rejected 5 hostile amounts",
+      "expected": "REJECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "precision-rounding",
+      "actual": "REJECT",
+      "evidence": "fractional minor units rejected",
+      "expected": "REJECT",
+      "pass": true
+    },
+    {
+      "scenarioId": "cross-currency-mismatch",
+      "actual": "DENY",
+      "evidence": "action:DENY:MONEY:SETTLEMENT_CURRENCY_DENIED:CURRENCY_MISMATCH,QUANTITY_EXHAUSTED",
+      "expected": "DENY",
+      "pass": true
+    },
+    {
+      "scenarioId": "fee-mismatch",
+      "actual": "DENY",
+      "evidence": "action:DENY:MONEY:TAX_BOUNDARY_EXCEEDED,MONEY:FX_DENIED,MONEY:FX_SLIPPAGE_EXCEEDED:QUANTITY_EXHAUSTED",
+      "expected": "DENY",
+      "pass": true
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { BRAND } from "../../lib/brand";
 /** The Frame with its Gate open and the Flow line passing through (BRAND-001 §1). */
 export function BrandMark({ size = 28 }: { size?: number }) {
   return (
@@ -24,7 +25,7 @@ export function Wordmark() {
   return (
     <span className="wordmark">
       <BrandMark />
-      <span>PayFlow</span>
+      <span>{BRAND.name}</span>
     </span>
   );
 }
