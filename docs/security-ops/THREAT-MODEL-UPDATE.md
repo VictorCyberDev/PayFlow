@@ -80,7 +80,7 @@ Assets used below: A1 funds and Authority (the right to spend, `mandates`); A2 t
 
 - Asset: A1, A8.
 - Attacker: anyone who obtains a shared preview URL or its bypass material.
-- Existing controls: the M7 acceptance preview was behind Vercel Authentication and accessed with a 23-hour share link (`docs/TAKEOVER-AUDIT-M7-M25.md` section 6, `docs/evidence/live/m7-sandbox-acceptance-2026-11-02.json`). Application security headers and CSP in `vercel.json`. The gateway still requires a bearer credential, so a share link alone does not authenticate a caller.
+- Existing controls: the M7 acceptance preview was believed to be behind Vercel Authentication and was accessed with a 23-hour share link; on 2026-11-03 the project's setting was found OFF and was switched ON (see GATE-EVALUATION.md) (`docs/TAKEOVER-AUDIT-M7-M25.md` section 6, `docs/evidence/live/m7-sandbox-acceptance-2026-11-02.json`). Application security headers and CSP in `vercel.json`. The gateway still requires a bearer credential, so a share link alone does not authenticate a caller.
 - Residual: deployment protection is a platform setting not represented in the repository, so it can be switched off without any code change or test failing. A share link removes the only outer layer; then rate limiting is absent (T11) and the admin token is the only barrier on `/v1/admin/*`. Share links are not inventoried or revoked by any PayFlow procedure. Record each link's expiry and revoke it after use.
 
 ### T10b Admin token

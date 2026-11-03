@@ -8,13 +8,13 @@ Related: [UNKNOWN-OPERATIONS.md](./UNKNOWN-OPERATIONS.md), [BACKUP-RESTORE.md](.
 
 There is no staffed rota. Until one exists, one named person holds each role per incident (one person may hold several).
 
-| Role                | Does                                                                                                   |
-| ------------------- | ------------------------------------------------------------------------------------------------------ |
-| Incident lead (IL)  | Declares severity, owns the timeline, decides restrict/resume, approves any write to production data.  |
-| Operator            | Runs the commands below. Holds Vercel project access, Neon project access and the Sandbox admin token. |
-| Provider liaison    | Looks at the PayPal Sandbox dashboard / API for provider truth (read-only).                            |
-| Communications lead | Writes the status statement. Says only what is measured; never "no impact" without evidence.           |
-| Scribe              | Keeps the timestamped log (UTC) and stores evidence exports. Can be the IL for a small incident.       |
+| Role                | Does                                                                                                                                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Incident lead (IL)  | Declares severity, owns the timeline, decides restrict/resume, approves any write to production data.                                                                                                                        |
+| Operator            | Runs the commands below. Holds Vercel project access, Neon project access and the platform operator token. Credential routes need an organization MEMBER token (OWNER, SECURITY_ADMIN or DEVELOPER), not the operator token. |
+| Provider liaison    | Looks at the PayPal Sandbox dashboard / API for provider truth (read-only).                                                                                                                                                  |
+| Communications lead | Writes the status statement. Says only what is measured; never "no impact" without evidence.                                                                                                                                 |
+| Scribe              | Keeps the timestamped log (UTC) and stores evidence exports. Can be the IL for a small incident.                                                                                                                             |
 
 ## Rules that apply to every runbook
 
@@ -136,17 +136,17 @@ Trigger: slow proof reads, one agent's requests failing, console views failing, 
 
 Trigger: a bearer token `pf_sbx_pfc_<24 hex>.<secret>` leaked (repository, log, screenshot, chat), or unexpected `last_used_at`.
 
-Who: Operator (holds the Sandbox admin token).
+Who: an organization member whose role may revoke credentials (OWNER or SECURITY_ADMIN; DEVELOPER may too). The platform operator token is refused on these routes. If no member token is at hand, the operator uses SQL as a logged emergency action.
 
 1. Identify the credential ID, not the secret. The ID is the `pfc_` + 24 hex portion. If only the secret leaked, find the credential via Q4 (`label`, `agent_id`, `last_used_at`). Or list with the admin route:
-   `curl -sS -H "Authorization: Bearer $PAYFLOW_ADMIN_TOKEN" https://<HOST>/v1/admin/credentials`
+   `curl -sS -H "Authorization: Bearer $PAYFLOW_MEMBER_TOKEN" https://<HOST>/v1/admin/credentials`
 2. **Revoke:**
-   `curl -sS -X POST -H "Authorization: Bearer $PAYFLOW_ADMIN_TOKEN" https://<HOST>/v1/admin/credentials/<CREDENTIAL_ID>/revoke`
-   Expected: `200 {"result":"REVOKED"}`. `404 {"result":"NOT_FOUND"}` means wrong ID or wrong tenant/environment (the call is scoped to the admin token's organization and environment). Revoke is idempotent; `revoked_at` keeps its first value. If the admin route is disabled (no `PAYFLOW_GATEWAY_ADMIN_TOKEN`), use SQL as a logged action:
+   `curl -sS -X POST -H "Authorization: Bearer $PAYFLOW_MEMBER_TOKEN" https://<HOST>/v1/admin/credentials/<CREDENTIAL_ID>/revoke`
+   Expected: `200 {"result":"REVOKED"}`. `404 {"result":"NOT_FOUND"}` means wrong ID or wrong tenant/environment (the call is scoped to the member's organization and environment). Revoke is idempotent; `revoked_at` keeps its first value. If the admin plane is disabled (no `PAYFLOW_GATEWAY_ADMIN_TOKEN`), use SQL as a logged action:
    `update agent_credentials set status='REVOKED', revoked_at=coalesce(revoked_at, now()) where credential_id='<CREDENTIAL_ID>';`
 3. **Verify fail-closed.** Using the leaked token (in a safe shell, history disabled), call any gateway route, for example `GET /v1/proofs/<ANY_ID>` or `POST /v1/actions/execute` with a throwaway nonce. Expected: `401`, reason `ACCESS_INACTIVE` (a wrong scope is `403 ACCESS_SCOPE_DENIED`), `effectCount 0`. Confirm in SQL: `status='REVOKED'`, `revoked_at` is set, `last_used_at` does not advance after your revoke time.
 4. **Assess use.** Compare `last_used_at` with the revoke time. Run the RB-1 impacted-Authority query for the credential's `agent_id`. If any request was accepted, treat as SEV-1.
-5. **Replace.** Issue a new credential for the agent (`POST /v1/admin/credentials`, body: `agentId`, `scopes` (subset of `authority:read`, `action:request`, `verify:read`, `proof:read`, `reconcile:request`), `ttlSeconds` 60 to 7776000, `label`). The token is shown once; deliver over a private channel, never in a ticket.
+5. **Replace.** Issue a new credential for the agent as an OWNER or DEVELOPER member (`POST /v1/admin/credentials`, body: `agentId`, `scopes` (subset of `authority:read`, `action:request`, `verify:read`, `proof:read`, `reconcile:request`), `ttlSeconds` 60 to 7776000, `label`). The token is shown once; deliver over a private channel, never in a ticket.
 6. **If the agent itself is malicious or compromised**, also suspend it (`organization_agents.lifecycle = 'SUSPENDED'`) so any other credential for it fails too, and revoke its Authority (`mandates.revoked_at`).
 7. Remove the secret from where it leaked (rewrite or delete the message, rotate if it was committed; history rewriting is not a substitute for revocation).
 

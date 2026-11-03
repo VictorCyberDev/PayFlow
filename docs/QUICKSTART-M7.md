@@ -22,18 +22,25 @@ real PayPal Sandbox rail, which needs an administrator-issued credential.
 
 ## 1. Get a sandbox credential (real PayPal Sandbox rail)
 
-An administrator of your sandbox tenant issues a scoped, expiring credential for one agent.
-The secret is shown **once**; PayFlow stores only a digest.
+Two different secrets are involved, and they are not interchangeable:
+
+- the **platform operator token** (`PAYFLOW_GATEWAY_ADMIN_TOKEN`) can only bootstrap the first OWNER of an existing organization and run platform operations;
+- an **organization member token** (`pf_act_…`) carries a role. OWNER and DEVELOPER may issue credentials.
 
 ```bash
+# once per organization, by the operator: create the first OWNER (the token is shown once)
+curl -sS -X POST "$PAYFLOW_URL/v1/admin/members" \
+  -H "authorization: Bearer $PAYFLOW_OPERATOR_TOKEN" -H "content-type: application/json" \
+  -d '{"organizationId":"<org>","environment":"SANDBOX","displayName":"you","role":"OWNER"}'
+
+# then, as that member: issue a scoped, expiring credential for one agent (the secret is shown once)
 curl -sS -X POST "$PAYFLOW_URL/v1/admin/credentials" \
-  -H "authorization: Bearer $PAYFLOW_ADMIN_TOKEN" \
-  -H "content-type: application/json" \
+  -H "authorization: Bearer $PAYFLOW_MEMBER_TOKEN" -H "content-type: application/json" \
   -d '{"agentId":"<agent id>","scopes":["action:request","proof:read"],"ttlSeconds":3600,"label":"quickstart"}'
 ```
 
-Keep the returned `token` (`pf_sbx_…`) in `PAYFLOW_TOKEN`. Revoke it any time with
-`POST /v1/admin/credentials/<credentialId>/revoke`; the next request fails closed.
+PayFlow stores only a digest of each token. Keep the returned `token` (`pf_sbx_…`) in `PAYFLOW_TOKEN`. Revoke it any time with
+`POST /v1/admin/credentials/<credentialId>/revoke` as a member whose role allows it; the next request fails closed.
 
 ## 2. Install the SDK
 

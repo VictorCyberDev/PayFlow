@@ -4,10 +4,10 @@ Status: 2026-11-03. Written after inspecting the Vercel team. Nothing in this fi
 
 ## What exists today (observed)
 
-| Project                 | Purpose                                         | Protection                                                                       | Database                                                            |
-| ----------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `payflow`               | production alias `payflow-one-kappa.vercel.app` | Vercel Authentication on every `*.vercel.app` host (`all_except_custom_domains`) | not inspected (env values are never read)                           |
-| `payflow-m6-acceptance` | M6/M7 acceptance and the 2026-11-03 RC preview  | Vercel Authentication                                                            | the **accepted evidence database** (Neon `br-noisy-brook-b89epb6e`) |
+| Project                 | Purpose                                         | Protection                                                                         | Database                                                            |
+| ----------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `payflow`               | production alias `payflow-one-kappa.vercel.app` | Vercel Authentication on every `*.vercel.app` host (`all_except_custom_domains`)   | not inspected (env values are never read)                           |
+| `payflow-m6-acceptance` | M6/M7 acceptance and the 2026-11-03 RC preview  | Vercel Authentication **was OFF** (anonymous 200) until 2026-11-03; now ON (`all`) | the **accepted evidence database** (Neon `br-noisy-brook-b89epb6e`) |
 
 Consequence, measured: `https://payflow-one-kappa.vercel.app/` returns 404 to an anonymous client, and so do `/verify/`, `/status/`,
 `/.well-known/security.txt`, `/sitemap.xml` and `/robots.txt`. The canonical URL in the site metadata therefore points at a host a
@@ -25,33 +25,31 @@ Why: the self-serve sandbox creates tenants for strangers. It must not share a d
 project routes `sbx_` organisations only to the simulated provider (`src/simulated-rail.ts`, fail-closed), holds no PayPal secret, and
 needs no wallet. Real organisations can never reach the simulated provider.
 
-## Steps only the owner can take (they involve secrets or public exposure)
+## Done on 2026-11-03 (no secrets involved)
 
-I did not do these: each one needs a secret value to pass through a tool call (which would put it in the session transcript), or
-changes who can reach the service.
+- **Isolated database created:** Neon project `withered-rice-68056451` (branch `br-steep-glade-bdsyx5v5`, PostgreSQL 17), separate from the accepted
+  evidence project. Migrations `001`–`023` and the three NOLOGIN roles are applied; its schema fingerprint equals the accepted database's. It holds no data.
+- **Evidence environment protected:** Vercel Authentication was found OFF on `payflow-m6-acceptance` and is now ON for that whole project.
 
-1. **Create the isolated database.** A new, empty Neon project (not a branch of the accepted one: a branch inherits its data).
-   Apply `db/migrations/001` to `023` in order, then `db/roles/least-privilege.sql`; create a login in `payflow_runtime` for the app.
-2. **Set the project's environment** in the Vercel dashboard (Production). Names only; values come from your secret store:
-   `DATABASE_URL` (runtime-role login), `PAYFLOW_GATEWAY_ADMIN_TOKEN` (platform operator, 32+ chars), `PAYFLOW_M6_SIGNING_KEY`
-   (new Ed25519 PKCS8 PEM, **not** the acceptance key), `PAYFLOW_M6_SIGNING_KID` (unique), `PAYFLOW_M6_DEMO_AGENT=true`,
-   `PAYFLOW_M5_DEMO=true` with the M5 principal/agent/bootstrap/origin variables the host already requires, and
-   `PAYFLOW_PUBLIC_SANDBOX=true`. Leave **all PayPal variables unset**: with no rail the real path refuses and only the simulated
-   sandbox runs.
-3. **Make the deployment reachable.** Either turn off Vercel Authentication for Production on this project, or attach a custom domain
-   (the current setting already exempts custom domains). Do not do this for `payflow-m6-acceptance`.
-4. **Set the canonical origin.** Edit `apps/console/lib/site.ts` to the public origin in the same commit that goes live.
-5. **Bootstrap an owner** with `POST /v1/admin/members` and the operator token, and schedule `POST /v1/admin/ops/reconcile/tick`
-   (see `docs/security-ops/M14-OPERATIONS.md`).
-6. **Publish a real security contact** (see below).
+## Steps only the owner can take (each needs a secret to pass through a tool call, or changes who can reach the service)
+
+1. **Provision the sandbox principal.** With the _owner_ connection string of the new Neon project (copy it from the Neon console; do not paste it into chat):
+   `DATABASE_URL=… PAYFLOW_M5_PRINCIPAL_ID=public-sandbox-owner PAYFLOW_M5_AGENT_ID=public-sandbox-agent node --import tsx hosting/operator/provision-m5.ts`
+   (tested against a fully migrated empty database: it provisions one principal, one passport and one policy, and is idempotent).
+2. **Create the runtime login.** In that Neon project: `CREATE ROLE svc_public_app LOGIN PASSWORD '<from your secret store>' IN ROLE payflow_runtime;` and use _its_ connection string
+   as `DATABASE_URL` on Vercel, so the running app never holds schema-owner rights.
+3. **Create a new Vercel project** (not the acceptance one, not a branch of `payflow`) with root directory `hosting/m6`, and set its Production environment in the dashboard.
+   Names only: `DATABASE_URL`, `PAYFLOW_GATEWAY_ADMIN_TOKEN` (platform operator, 32+ chars), `PAYFLOW_M6_SIGNING_KEY` (new Ed25519 PKCS8 PEM, **not** the acceptance key),
+   `PAYFLOW_M6_SIGNING_KID` (unique, not `m6-hosted`), `PAYFLOW_M6_DEMO_AGENT=true`, `PAYFLOW_M5_DEMO=true`, `PAYFLOW_M5_PRINCIPAL_ID`, `PAYFLOW_M5_AGENT_ID`,
+   `PAYFLOW_M5_BOOTSTRAP_KEY`, `PAYFLOW_M5_ORIGIN` (the public origin), `PAYFLOW_PUBLIC_SANDBOX=true`. Leave **every PayPal variable unset**: with no rail the real path refuses and only
+   the simulated sandbox runs.
+4. **Make that one project public:** Vercel Authentication off for it (and only it).
+5. **Set the canonical origin** in `apps/console/lib/site.ts` to the public origin, in the commit that goes live.
+6. **Schedule the reconciler** (`GET /v1/admin/ops/reconcile/tick` with the operator token) and **publish a real security contact** (below).
+7. **Run the acceptance** against the public origin: `node --import tsx scripts/stranger-journey.mjs <origin>` and `node scripts/a11y-acceptance.mjs`, and record the result in `docs/GATE-EVALUATION.md`.
 
 ## Security contact
 
 `SECURITY.md` and `/.well-known/security.txt` still carry a placeholder because I do not know a monitored address and will not invent
 one or publish your personal address without your say-so. Give me an address that someone actually reads and I will put it in
 `SECURITY.md`, `security.txt` and the Security page. Until then the page says so plainly.
-
-## After it is live
-
-Run, against the public origin: the browser acceptance at 320/375/430/768/1024/1440 px, `POST /v1/sandbox/start` followed by an ALLOW,
-a DENY and an offline-verified Proof, and record the result in `docs/GATE-EVALUATION.md`. Until that is recorded, Gate A stays open.

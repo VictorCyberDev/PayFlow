@@ -1,7 +1,8 @@
 # M14 operations: reconciliation, alerts, key lifecycle, database roles
 
-Status: 2026-11-03. Implemented and tested locally against PostgreSQL. **Not yet deployed.** The preview that was
-deployed on 2026-11-03 (commit cd5c427) predates all of this; the accepted database does not yet have migration 023.
+Status: 2026-11-03. Implemented and tested locally against PostgreSQL. **The code is not deployed.** The preview that was
+deployed on 2026-11-03 (commit cd5c427) predates it. Migration 023 and the three database roles **are applied to the accepted
+database** (`docs/evidence/ops/db-commissioning-2026-11-03.json`).
 Nothing here is an uptime, recovery-time, certification or audit claim.
 
 ## 1. Scheduled UNKNOWN reconciliation (observation only)
@@ -94,8 +95,11 @@ environment variable.
 | `payflow_readonly` | status, Verify, BI | SELECT on every column except `secret_hash`               | any write; reading credential or member secret digests                                     |
 
 The test suite runs the **entire hosted gateway on the runtime role alone** (paid purchase, portable Proof, member, tick) and probes
-each refusal. **Not done:** these roles have not been applied to the Neon project; that needs a login per service and secrets in the
-secret store, which is a deployment decision.
+each refusal. Applied to the accepted Neon database on 2026-11-03 after a snapshot, with evidence counts unchanged, and verified there by a privilege
+matrix and by refused statements under `SET ROLE` (runtime `DROP TABLE` refused; read-only `UPDATE` refused). **Not done:** there is no login
+role, so the deployed application still connects as the schema owner. A `payflow_runtime` login needs a password, which must not pass through
+this session; the owner creates it (`CREATE ROLE … LOGIN PASSWORD … IN ROLE payflow_runtime`) and swaps `DATABASE_URL`. Until then the
+strict reading of "the app does not run with admin privileges" is not met in any deployment.
 
 ## 5. Restore rehearsal
 

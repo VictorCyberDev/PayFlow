@@ -6,6 +6,8 @@ Status: DRAFT, 2026-11-02. Developer preview, Neon Postgres behind a Vercel-host
 
 **Two restore rehearsals were recorded on 2026-11-03** (`docs/evidence/ops/restore-rehearsal-2026-11-03.json`, details in `M14-OPERATIONS.md` section 5): a real `pg_dump`/`pg_restore` into an isolated database, and a Neon copy-on-write branch of the accepted database. Both verified table counts, constraint validity and the append-only audit triggers, and the accepted M6/M7 evidence counts were unchanged. **Still not done:** a point-in-time restore of the accepted branch, a measured recovery time or recovery point, and post-restore provider reconciliation. Do not state a recovery time or recovery point to anyone.
 
+Snapshot branches now on the project: `br-super-field-b8baqoz2` (pre-M7), `br-lucky-star-b8a87fk4` (pre-021/022), `br-shy-fire-b86qozvq` (pre-023), and the rehearsal copy `br-morning-pond-b8kh9ukx`. None has been deleted.
+
 ## What exists
 
 | Capability                          | Detail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Evidence in repo                                                                                                                          |

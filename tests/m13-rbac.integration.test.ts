@@ -792,25 +792,89 @@ const EXPECTED: Record<string, Record<(typeof ROLES)[number], boolean>> = {
     });
 
     describe("administrative rate limiting", () => {
-      it("a flood of bad-token admin calls cannot lock a legitimate member out", async () => {
+      const flood = async (token: string, n: number) => {
+        const out: Response[] = [];
+        for (let i = 0; i < n; i++)
+          out.push(await call(token, "GET", "/v1/admin/org/agents"));
+        return out;
+      };
+
+      it("one member exhausting its own allowance does not block another member of the same organization", async () => {
         const t = await tenant("payflow-sandbox");
-        let limited = 0;
-        for (let i = 0; i < 75; i++) {
-          const r = await call(
-            "pf_act_pfm_" + "0".repeat(24) + ".x".repeat(20),
-            "GET",
-            "/v1/admin/org/agents",
-          );
-          if (r.status === 429) limited++;
-        }
-        expect(limited).toBeGreaterThan(0); // the flood itself is throttled
-        // The owner has their own bucket and still gets through.
+        const spent = await flood(t.VIEWER, 70);
+        const limited = spent.filter((r) => r.status === 429);
+        expect(limited.length).toBeGreaterThan(0);
+        // Correct error shape and headers on the throttled response.
+        const r = limited[0]!;
+        expect(r.headers.get("retry-after")).toMatch(/^[1-9][0-9]*$/u);
+        expect(r.headers.get("cache-control")).toBe("no-store");
+        expect(await r.json()).toMatchObject({
+          reason: "RATE_LIMITED",
+          effectCount: 0,
+          recoverable: true,
+        });
+        // The viewer is locked for now; every other member is untouched and still authorized correctly.
+        expect(
+          (await call(t.VIEWER, "GET", "/v1/admin/org/agents")).status,
+        ).toBe(429);
         expect(
           (await call(t.OWNER, "GET", "/v1/admin/org/agents")).status,
         ).toBe(200);
         expect(
           (await call(t.AUDITOR, "GET", "/v1/admin/org/audit")).status,
         ).toBe(200);
+        expect(
+          (await call(t.DEVELOPER, "GET", "/v1/admin/credentials")).status,
+        ).toBe(200);
+      });
+
+      it("one organization cannot exhaust another organization's allowance", async () => {
+        const a = await tenant("payflow-sandbox");
+        const b = await tenant("other-org");
+        await flood(a.OWNER, 70);
+        expect(
+          (await call(a.OWNER, "GET", "/v1/admin/org/agents")).status,
+        ).toBe(429);
+        expect(
+          (await call(b.OWNER, "GET", "/v1/admin/org/agents")).status,
+        ).toBe(200);
+        expect(
+          (await call(b.VIEWER, "GET", "/v1/admin/org/agents")).status,
+        ).toBe(200);
+      });
+
+      it("a flood of bad-token calls cannot lock out a valid member, and the flood itself is throttled", async () => {
+        const t = await tenant("payflow-sandbox");
+        const forged = "pf_act_pfm_" + "0".repeat(24) + "." + "x".repeat(40);
+        const spent = await flood(forged, 75);
+        expect(spent.filter((r) => r.status === 429).length).toBeGreaterThan(0);
+        expect(spent[0]!.status).toBe(401);
+        expect(
+          (await call(t.OWNER, "GET", "/v1/admin/org/agents")).status,
+        ).toBe(200);
+        expect(
+          (await call(t.AUDITOR, "GET", "/v1/admin/org/audit")).status,
+        ).toBe(200);
+      });
+
+      it("a refused (403) request still counts against the member's own allowance, not anyone else's", async () => {
+        const t = await tenant("payflow-sandbox");
+        let throttled = 0;
+        for (let i = 0; i < 70; i++)
+          if (
+            (await call(t.VIEWER, "POST", "/v1/admin/org/pause", {})).status ===
+            429
+          )
+            throttled++;
+        expect(throttled).toBeGreaterThan(0);
+        expect(
+          (
+            await call(t.SECURITY_ADMIN, "POST", "/v1/admin/org/pause", {
+              reason: "x",
+            })
+          ).status,
+        ).toBe(200);
+        await call(t.OWNER, "POST", "/v1/admin/org/resume");
       });
     });
 

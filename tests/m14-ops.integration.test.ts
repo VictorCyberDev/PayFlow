@@ -8,7 +8,7 @@ import {
   expect,
   it,
 } from "vitest";
-import { generateKeyPairSync } from "node:crypto";
+import { createPrivateKey, generateKeyPairSync } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { readFile, readdir } from "node:fs/promises";
@@ -494,6 +494,88 @@ const at = (offsetSeconds: number) =>
         ]);
       });
 
+      it("ACCEPTANCE: UNKNOWN -> queued -> lookup -> still unknown -> old UNKNOWN surfaced -> provider settles -> leaves the queue, with no re-execution and idempotent repeated ticks", async () => {
+        await unknownPending();
+        const alerts = new AlertEngine(repo.sql);
+        const r = reconciler();
+        const providerCalls = () =>
+          provider.createCalls + provider.captureCalls;
+        const calls0 = providerCalls();
+        const attempts0 = JSON.stringify(await attempts());
+
+        // queued, then looked up: the provider still shows nothing captured
+        expect(await r.tick(NOW)).toMatchObject({
+          enrolled: 1,
+          examined: 1,
+          stillUnknown: 1,
+        });
+        // the same instant again: nothing due, nothing enrolled twice (idempotent)
+        expect(await r.tick(NOW)).toMatchObject({ enrolled: 0, examined: 0 });
+        expect(
+          Number(
+            (
+              await repo.sql`select count(*)::int n from reconciliation_lookups`
+            )[0]!.n,
+          ),
+        ).toBe(1);
+
+        // backoff: not due at +30 s, due after the delay
+        expect(await r.tick(at(30))).toMatchObject({ examined: 0 });
+        expect(await r.tick(at(3 * 3600))).toMatchObject({
+          examined: 1,
+          stillUnknown: 1,
+        });
+
+        // old UNKNOWN is surfaced as ONE persisted alert; repeats are counted, not duplicated
+        for (const off of [3 * 3600 + 1, 3 * 3600 + 2, 3 * 3600 + 3])
+          await alerts.evaluate(at(off));
+        const open = await alerts.list({ state: "OPEN" });
+        expect(open.filter((a) => a.code === "UNKNOWN_TOO_OLD")).toHaveLength(
+          1,
+        );
+        expect(
+          open.find((a) => a.code === "UNKNOWN_TOO_OLD")!.occurrences,
+        ).toBe(3);
+
+        // the provider finally reports the capture: recorded, resolved, and gone from the backlog
+        provider.order = {
+          ...provider.order!,
+          captures: [
+            {
+              id: "CAP-ACC",
+              status: "COMPLETED",
+              amountValue: "84.00",
+              currency: "USD",
+            },
+          ],
+        };
+        expect(await r.tick(at(7 * 3600))).toMatchObject({
+          examined: 1,
+          capturedAtProvider: 1,
+        });
+        expect(await r.tick(at(8 * 3600))).toMatchObject({ examined: 0 });
+        expect(
+          (await reconciliationMetrics(repo.sql, at(8 * 3600))).backlog,
+        ).toBe(0);
+        expect(
+          (await alerts.evaluate(at(8 * 3600 + 1))).autoResolved,
+        ).toBeGreaterThanOrEqual(1);
+        expect(
+          (await alerts.list({ state: "OPEN" })).filter(
+            (a) => a.code === "UNKNOWN_TOO_OLD",
+          ),
+        ).toHaveLength(0);
+        expect(
+          (await alerts.list({ state: "RESOLVED" })).some(
+            (a) => a.code === "UNKNOWN_TOO_OLD",
+          ),
+        ).toBe(true);
+
+        // throughout: nothing was created, captured or rewritten
+        expect(providerCalls()).toBe(calls0);
+        expect(JSON.stringify(await attempts())).toBe(attempts0);
+      });
+
       it("raises P0 for a duplicate economic effect and for captured money above the Authority limit, and never auto-resolves them", async () => {
         const s = await sandbox();
         expect((await s.client.actions.execute(buy(s.authority))).status).toBe(
@@ -719,6 +801,26 @@ const at = (offsetSeconds: number) =>
         expect(refused.status).toBeGreaterThanOrEqual(500);
         expect(JSON.stringify(await refused.text())).not.toMatch(
           /BEGIN|PRIVATE/u,
+        );
+        // No private key material exists anywhere a caller or an operator can read: not in the
+        // database, not in the key document, not in an issued or refused response.
+        const privateD = (k: string) =>
+          (createPrivateKey(k).export({ format: "jwk" }) as { d: string }).d;
+        const secrets = [privateD(PEM1), privateD(PEM2), PEM1, PEM2];
+        const haystacks = [
+          JSON.stringify(await repo.sql`select * from proof_signing_keys`),
+          await (await fetch(origin + "/v1/keys")).text(),
+          JSON.stringify(old.proof),
+          JSON.stringify(fresh.proof),
+          JSON.stringify(
+            await repo.sql`select * from organization_audit_events`,
+          ),
+          JSON.stringify(await repo.sql`select detail from operational_alerts`),
+        ];
+        for (const h of haystacks)
+          for (const secret of secrets) expect(h.includes(secret)).toBe(false);
+        expect(haystacks.join("")).not.toMatch(
+          /BEGIN (?:EC |ED25519 )?PRIVATE KEY/u,
         );
       });
 

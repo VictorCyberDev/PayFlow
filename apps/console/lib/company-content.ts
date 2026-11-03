@@ -136,6 +136,12 @@ export const companyDocuments: Record<string, CompanyDocument> = {
         ],
       },
       {
+        title: "Organization roles",
+        paragraphs: [
+          "People act through member tokens with one of seven roles (owner, finance admin, security admin, developer, approver, auditor, viewer). The server decides what a role may do; a role named in a request is ignored, and the shared platform operator secret holds no organization role. A viewer or auditor cannot change anything, a developer cannot widen Authority or approve spend, and another organization or environment sees nothing. This is tested against an independent statement of the rules. There is no sign-in screen yet and no single sign-on: members are bearer tokens.",
+        ],
+      },
+      {
         title: "Credentials",
         paragraphs: [
           "Hosted access uses scoped, expiring tokens bound to one organization, environment, agent and principal. Only a SHA-256 digest is stored; the secret is shown once and can be revoked, after which the next request fails closed. Suspending an agent or an organization stops access at once. Tested in source; the hosted preview ran one revoked-credential check on 2026-11-02.",
@@ -150,7 +156,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       {
         title: "UNKNOWN",
         paragraphs: [
-          "If a provider does not answer, the outcome is UNKNOWN, never failed, and the amount stays held. Nothing is retried automatically. Operators have an observe-only view of unresolved payments.",
+          "If a provider does not answer, the outcome is UNKNOWN, never failed, and the amount stays held. Nothing is retried automatically. A scheduled reconciler looks the payment up at the provider with a read-only call, backs off, and raises an alert when it gets old; it cannot create, capture or repeat a payment. Operators also have an observe-only view of unresolved payments.",
         ],
       },
       {
@@ -162,7 +168,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       {
         title: "Operations (in source, not deployed)",
         paragraphs: [
-          "Per-credential rate limits that hold across serverless instances, operator pauses for one organization, one environment or everything (no public endpoint can set them), an append-only audit trail enforced by the database, and organization isolation tests. Backup restore has not been rehearsed. There is one signing key and one database role.",
+          "Rate limits keyed per credential and per member so one caller cannot lock others out, pauses for one organization (an authenticated OWNER or SECURITY_ADMIN can set theirs), one environment or everything (platform-level, no public endpoint), an append-only audit trail enforced by the database that also records refused attempts, and organization and environment isolation tests. A restore was rehearsed on a copy of the accepted database and a real dump and restore passed; no recovery time has been measured. Proof-signing keys can be rotated, rolled back and revoked, and old Proof keeps verifying. Three database roles exist (migration, application runtime, read-only), but the deployed application does not use them yet. No alert delivery channel and no scheduler trigger are configured. All of this is in source and tested; none of it is deployed.",
         ],
       },
       {
@@ -204,7 +210,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       {
         title: "Hosted API (Gateway, Proof, Verify)",
         paragraphs: [
-          "Two protected previews exist: commissioning on 2026-11-02 (commit 540f10f) and a release candidate on 2026-11-03 (commit cd5c427, adds portable Proof, Verify, org views and the self-serve sandbox code). Neither is publicly reachable and neither carries an availability claim. The self-serve sandbox is switched off on the preview and has not been exercised on a deployed host. Later source work (organization roles, reconciliation, alerts, key rotation) is not deployed.",
+          "Two previews exist, both behind Vercel Authentication since 2026-11-03 (the acceptance project had it switched off until then, so its preview was publicly reachable for a time; see the changelog): commissioning on 2026-11-02 (commit 540f10f) and a release candidate on 2026-11-03 (commit cd5c427, adds portable Proof, Verify, org views and the self-serve sandbox code). Neither is publicly reachable and neither carries an availability claim. The self-serve sandbox is switched off on the preview and has not been exercised on a deployed host. Later source work (organization roles, reconciliation, alerts, key rotation) is not deployed.",
         ],
       },
       {
@@ -357,7 +363,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       {
         title: "2026-11-03 / Release candidate verified offline",
         paragraphs: [
-          "DEPLOYED once as a protected preview (commit cd5c427). COMMISSIONED: the real PayPal Sandbox Proof from 2026-11-02 was fetched from it and verified offline by the standalone CLI; a tampered copy was rejected. The self-serve sandbox was NOT switched on there and has not been run on a deployed host. EXTERNALLY VALIDATED: no.",
+          "DEPLOYED once as a preview (commit cd5c427). That project had Vercel Authentication switched off until it was checked on 2026-11-03; the admin plane and self-serve sandbox were off on it. Authentication is now on. COMMISSIONED: the real PayPal Sandbox Proof from 2026-11-02 was fetched from it and verified offline by the standalone CLI; a tampered copy was rejected. The self-serve sandbox was NOT switched on there and has not been run on a deployed host. EXTERNALLY VALIDATED: no.",
         ],
       },
       {
@@ -375,7 +381,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       {
         title: "2026-11-02 / M7 external Gateway execution",
         paragraphs: [
-          "BUILT and TESTED. DEPLOYED as protected previews (commissioned on 540f10f; release candidate cd5c427). COMMISSIONED: one PayPal Sandbox capture through the hosted Gateway, with replay, concurrent-overrun, revoked-credential and revoked-Authority checks. EXTERNALLY VALIDATED: no. Not publicly reachable; Sandbox only.",
+          "BUILT and TESTED. DEPLOYED as previews (commissioned on 540f10f; release candidate cd5c427), now behind Vercel Authentication. COMMISSIONED: one PayPal Sandbox capture through the hosted Gateway, with replay, concurrent-overrun, revoked-credential and revoked-Authority checks. EXTERNALLY VALIDATED: no. Not publicly reachable; Sandbox only.",
         ],
       },
       {

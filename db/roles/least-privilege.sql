@@ -17,6 +17,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'payflow_readonly') THEN CREATE ROLE payflow_readonly NOLOGIN; END IF;
 END $$;
 
+-- The role that runs this script must be a member of the group roles to set default privileges for the
+-- migrator and to be able to SET ROLE for verification. (A superuser already is.)
+GRANT payflow_migrator, payflow_runtime, payflow_readonly TO CURRENT_USER WITH SET TRUE;
+
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO payflow_runtime, payflow_readonly;
 GRANT USAGE, CREATE ON SCHEMA public TO payflow_migrator;
