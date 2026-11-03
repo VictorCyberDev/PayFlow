@@ -204,7 +204,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       {
         title: "Hosted API (Gateway, Proof, Verify)",
         paragraphs: [
-          "Two protected previews exist: commissioning on 2026-11-02 (commit 540f10f) and a release candidate on 2026-11-03 (commit cd5c427, adds portable Proof, Verify, org views and the self-serve sandbox code). Neither is publicly reachable and neither carries an availability claim. The self-serve sandbox is switched off on the preview and has not been exercised live.",
+          "Two protected previews exist: commissioning on 2026-11-02 (commit 540f10f) and a release candidate on 2026-11-03 (commit cd5c427, adds portable Proof, Verify, org views and the self-serve sandbox code). Neither is publicly reachable and neither carries an availability claim. The self-serve sandbox is switched off on the preview and has not been exercised on a deployed host. Later source work (organization roles, reconciliation, alerts, key rotation) is not deployed.",
         ],
       },
       {
@@ -347,6 +347,19 @@ export const companyDocuments: Record<string, CompanyDocument> = {
     "Changelog",
     "Each entry says how far a change has actually travelled: built, tested, deployed, commissioned or externally validated.",
     [
+      {
+        title:
+          "2026-11-03 / Organization roles, UNKNOWN reconciliation, alerts, key rotation",
+        paragraphs: [
+          "BUILT and TESTED in source against PostgreSQL. Not deployed. Seven organization roles are enforced on the server and tested against an independent oracle, with cross-organization and cross-environment isolation; the shared admin secret no longer grants any organization role. A scheduled reconciler looks up UNKNOWN payments with a read-only provider call and can never create or repeat one. Persisted alerts, a signing-key registry with rotation, rollback and revocation, and least-privilege database roles are included. A restore was rehearsed on a copy of the accepted database. COMMISSIONED: no. EXTERNALLY VALIDATED: no. No alert delivery channel and no scheduler trigger are configured.",
+        ],
+      },
+      {
+        title: "2026-11-03 / Release candidate verified offline",
+        paragraphs: [
+          "DEPLOYED once as a protected preview (commit cd5c427). COMMISSIONED: the real PayPal Sandbox Proof from 2026-11-02 was fetched from it and verified offline by the standalone CLI; a tampered copy was rejected. The self-serve sandbox was NOT switched on there and has not been run on a deployed host. EXTERNALLY VALIDATED: no.",
+        ],
+      },
       {
         title: "2026-11-02 / M9 Break Authority research page",
         paragraphs: [

@@ -8,6 +8,7 @@ import {
   it,
 } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
+import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { readFile, readdir } from "node:fs/promises";
@@ -225,6 +226,37 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
         "Simulated (no real money)",
       );
     });
+
+    it("the Gate A journey runner passes end to end against the real hosted sandbox (ALLOW, DENY, Proof, offline verify, tamper)", async () => {
+      const out = await new Promise<{ code: number | null; stdout: string }>(
+        (resolveRun) => {
+          const child = spawn(
+            process.execPath,
+            ["--import", "tsx", "scripts/stranger-journey.mjs", origin],
+            { stdio: ["ignore", "pipe", "pipe"] },
+          );
+          let stdout = "";
+          child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+          child.on("close", (code) => resolveRun({ code, stdout }));
+        },
+      );
+      expect(out.code, out.stdout).toBe(0);
+      const report = JSON.parse(out.stdout) as {
+        verdict: string;
+        steps: { name: string; ok: boolean }[];
+      };
+      expect(report.verdict).toBe("PASSED");
+      expect(report.steps.map((x) => x.name)).toEqual([
+        "start sandbox",
+        "ALLOW: paid once",
+        "DENY: $0 moved",
+        "portable Proof issued",
+        "public key published",
+        "Proof verified OFFLINE",
+        "tampered Proof rejected",
+      ]);
+      expect(out.stdout).not.toMatch(/pf_sbx_/u); // the token is never printed
+    }, 60_000);
 
     it("each sandbox is an isolated tenant: another sandbox's Authority and Proof are unreachable", async () => {
       const a = await sandbox("198.51.100.1");
