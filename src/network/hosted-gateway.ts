@@ -924,7 +924,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     // decision; a limited request has zero effect by construction.
     {
       const bearer = authorization?.match(
-        /^Bearer pf_(?:sbx|live)_(pfc_[a-f0-9]{24})\./u,
+        /^Bearer pf_(?:sbx|live|act)_(pf[cm]_[a-f0-9]{24})\./u,
       )?.[1];
       const forwarded = String(req.headers["x-forwarded-for"] ?? "")
         .split(",")[0]
@@ -935,11 +935,10 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           ? "keys"
           : "api";
       const limitFor = { admin: 60, keys: 120, api: 120 }[family];
-      const subject =
-        bearer ??
-        (path.startsWith("/v1/admin/")
-          ? "admin"
-          : `anon:${forwarded ?? "unknown"}`);
+      // One bucket per credential or member; callers with no recognizable identity are keyed by
+      // address. A shared bucket would let one noisy or hostile caller lock every organization out
+      // of its own administrative API.
+      const subject = bearer ?? `anon:${forwarded ?? "unknown"}`;
       let decision;
       try {
         decision = await enforceRateLimit(limiter, {

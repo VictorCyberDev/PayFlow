@@ -791,6 +791,29 @@ const EXPECTED: Record<string, Record<(typeof ROLES)[number], boolean>> = {
       });
     });
 
+    describe("administrative rate limiting", () => {
+      it("a flood of bad-token admin calls cannot lock a legitimate member out", async () => {
+        const t = await tenant("payflow-sandbox");
+        let limited = 0;
+        for (let i = 0; i < 75; i++) {
+          const r = await call(
+            "pf_act_pfm_" + "0".repeat(24) + ".x".repeat(20),
+            "GET",
+            "/v1/admin/org/agents",
+          );
+          if (r.status === 429) limited++;
+        }
+        expect(limited).toBeGreaterThan(0); // the flood itself is throttled
+        // The owner has their own bucket and still gets through.
+        expect(
+          (await call(t.OWNER, "GET", "/v1/admin/org/agents")).status,
+        ).toBe(200);
+        expect(
+          (await call(t.AUDITOR, "GET", "/v1/admin/org/audit")).status,
+        ).toBe(200);
+      });
+    });
+
     describe("audit and containment", () => {
       it("a denied attempt is recorded under the member, and a member action is attributed to them", async () => {
         const t = await tenant("payflow-sandbox");
