@@ -204,3 +204,16 @@ copy of the summary equals the CI-verified file.
 
 Pre-existing guard honoured: the console's boundary test forbids `process.env` in the browser graph, so
 the page does not read a build commit from the environment.
+
+## Gate A release-candidate deployment (2026-11-03)
+
+| Item                | Value                                                                                                                                                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source              | `cd5c427e9461348e08808298eff4826917aac0eb`, exact-head CI green (verify / console / console-e2e)                                                                                                                      |
+| Deployment          | `dpl_8MShVQRKcTrZD4m9Fg3DrSmLYx3e`, Vercel preview, project `payflow-m6-acceptance`, READY, still behind Vercel Authentication                                                                                        |
+| Database            | additive migrations 021 and 022 applied after a snapshot; M6 evidence intact                                                                                                                                          |
+| Live check done     | Real PayPal Sandbox proof fetched through `GET /v1/proofs/{id}/portable` with a one-use read-only credential (revoked afterwards) and verified offline by the CLI in a separate process: YES. Tampered copy: rejected |
+| Live check NOT done | `POST /v1/sandbox/start` (flag `PAYFLOW_PUBLIC_SANDBOX` not set: the only available scope was every preview of the project that holds accepted evidence); width/keyboard review of the deployed site                  |
+| Site pages          | `/verify/` and `/status/` served 200 from the preview                                                                                                                                                                 |
+| Known issue         | `console-e2e` M6 hero test has failed once in about six CI runs without a root cause; it passed on re-run. Not explained, not hidden                                                                                  |
+| Known issue         | Canonical/OG URLs on the site point to `payflow-one-kappa.vercel.app`, not to the preview host                                                                                                                        |

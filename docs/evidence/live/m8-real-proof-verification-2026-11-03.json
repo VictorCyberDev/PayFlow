@@ -1,0 +1,38 @@
+{
+  "note": "Real PayPal Sandbox purchase (2026-11-02) fetched from the Gate A RC preview (commit cd5c427, dpl_8MShVQRKcTrZD4m9Fg3DrSmLYx3e) on 2026-11-03 and verified offline with the standalone CLI in a separate process. Verified: YES; tampered copy (effectCount edited) rejected. Public key only; no credential in this file.",
+  "proof": {
+    "version": "payflow-proof/v1",
+    "issuer": "payflow-sandbox",
+    "keyId": "m6-hosted",
+    "authorityId": "sandbox-authority-d9dce8c8-0b76-4187-93c5-e1f6d5469099",
+    "actionId": "984df79e-2f94-4304-acee-81dc388fa6e8",
+    "outcome": "SUCCEEDED",
+    "effectCount": 1,
+    "observedAt": "2026-11-03T11:54:15.491Z",
+    "evidenceDigest": "164c8f18b512e7571bcffb5c4b17c9bd1ca29f6b47e9d6b5604002a43a2ded2f",
+    "subject": {
+      "principalId": "m6-demo-owner",
+      "agentId": "m6-shopping-agent",
+      "capability": "CAPTURE_PAYMENT",
+      "amountMinor": 8400,
+      "currency": "USD",
+      "merchantId": "payflow.demo.merchant",
+      "rail": "PAYPAL_SANDBOX"
+    },
+    "signature": "bVEaXgWcZyXdd95YInfIvhU-ryYJvHJ1WAEzFF6eNXm5h9-Q0zmDy6BpaoHu7IxyMeLXISQiRXuaw_B0puluAw"
+  },
+  "keys": {
+    "requestId": "req_24332184-7587-4f07-960d-1987b9cf3ccc",
+    "issuer": "payflow-sandbox",
+    "keys": [
+      {
+        "keyId": "m6-hosted",
+        "jwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "To03uD_NbgrKxZNtyduLWjlM-mzGdtaYGAMg5E5xR84"
+        }
+      }
+    ]
+  }
+}

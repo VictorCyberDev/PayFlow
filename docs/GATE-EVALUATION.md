@@ -1,6 +1,6 @@
 # Gate A and Gate B evaluation
 
-Last updated 2026-11-02. Status words: `COMPLETE_REAL`, `COMPLETE_LOCAL`, `BLOCKED_EXTERNAL`, `PARTIAL`.
+Last updated 2026-11-03. Release candidate cd5c427 deployed once as a protected preview (dpl_8MShVQRKcTrZD4m9Fg3DrSmLYx3e); `PAYFLOW_PUBLIC_SANDBOX` was deliberately NOT enabled there (it would affect every preview of the project holding the accepted M6 evidence DB), so `POST /v1/sandbox/start` is built and tested but not live-verified. Status words: `COMPLETE_REAL`, `COMPLETE_LOCAL`, `BLOCKED_EXTERNAL`, `PARTIAL`.
 Nothing below is a claim of customers, revenue, certification, audit, legal review or uptime.
 
 ## Gate A — can a stranger use PayFlow?

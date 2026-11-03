@@ -204,7 +204,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       {
         title: "Hosted API (Gateway, Proof, Verify)",
         paragraphs: [
-          "Deployed once as a protected preview for commissioning on 2026-11-02 (commit 540f10f). It is not publicly reachable and carries no availability claim.",
+          "Two protected previews exist: commissioning on 2026-11-02 (commit 540f10f) and a release candidate on 2026-11-03 (commit cd5c427, adds portable Proof, Verify, org views and the self-serve sandbox code). Neither is publicly reachable and neither carries an availability claim. The self-serve sandbox is switched off on the preview and has not been exercised live.",
         ],
       },
       {
@@ -362,7 +362,7 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       {
         title: "2026-11-02 / M7 external Gateway execution",
         paragraphs: [
-          "BUILT and TESTED. DEPLOYED as a protected preview (commit 540f10f). COMMISSIONED: one PayPal Sandbox capture through the hosted Gateway, with replay, concurrent-overrun, revoked-credential and revoked-Authority checks. EXTERNALLY VALIDATED: no. Not publicly reachable; Sandbox only.",
+          "BUILT and TESTED. DEPLOYED as protected previews (commissioned on 540f10f; release candidate cd5c427). COMMISSIONED: one PayPal Sandbox capture through the hosted Gateway, with replay, concurrent-overrun, revoked-credential and revoked-Authority checks. EXTERNALLY VALIDATED: no. Not publicly reachable; Sandbox only.",
         ],
       },
       {
