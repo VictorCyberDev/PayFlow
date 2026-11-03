@@ -52,3 +52,23 @@ Best effort, by email or shared channel agreed per pilot. No response-time commi
 ## 10. Timeline (indicative)
 
 Week 0: scope and use case. Week 1: sandbox provisioned, integration. Week 2: test vectors (denial, replay, revocation, UNKNOWN). Week 3: measured run. Week 4: review and written outcome. Dates depend on the partner; none are committed.
+
+## 11. Procurement worked example (to adapt, not a claim of any partner)
+
+Authority: office supplies, one approved vendor, $100 per purchase, $500 per month, human approval above $50. The agent asks for a $84 keyboard.
+ALLOW within the limit (paid once in the Sandbox), DENY when the vendor or price is outside the Authority ($0 moved), ESCALATE when the amount is above the autonomous threshold (nothing is reserved or paid until a person with an approver role decides), and a Proof the partner's finance team can verify offline. See docs/PROCUREMENT-AUTHORITY.md.
+
+## 12. Integration requirements
+
+- An engineer who can call `actions.execute` from the agent (TypeScript or Python SDK, or plain HTTPS).
+- A named human who owns each Authority, and a named person per role (approver, security, finance reader).
+- The partner's own agent, or the sample agent, and the Sandbox payment rail. No production rail is available yet.
+- A decision on what the partner wants to prove afterwards, so the Proof fields match their audit question.
+
+## 13. Evidence plan
+
+Everything measured in section 6 is read from PayFlow's own records (audit trail, reconciliation metrics, Proof) and from the partner's feedback log. Nothing is pre-filled. At the end: the written outcome, the Proof exports the partner verified themselves, the defects found, and what the partner would need before a production pilot. No result is published or named without the partner's written agreement.
+
+## 14. Security brief
+
+One page for the partner's security reviewer: docs/security-ops/THREAT-MODEL-UPDATE.md (what is defended and what is not), docs/security-ops/M14-OPERATIONS.md (reconciliation, alerts, key rotation, database roles), the role matrix in `src/network/rbac.ts`, and the limits stated on the public Security page. No independent audit or certification exists.

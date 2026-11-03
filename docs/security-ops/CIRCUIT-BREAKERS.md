@@ -8,14 +8,15 @@ Another engineer is currently adding some broader breakers (organization suspend
 
 Ordered narrowest to broadest. Each entry gives what it stops, how to apply it, the code path, how to verify fail-closed, and the limit.
 
-| #   | Control                             | Stops                                                                       | How to apply                                                                                         |
-| --- | ----------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| 1   | Revoke a developer credential       | One bearer token (one agent's API access via that token)                    | `POST /v1/admin/credentials/{credentialId}/revoke` with the Sandbox admin token                      |
-| 2   | Suspend or revoke an agent          | Every credential of one agent                                               | `organization_agents.lifecycle` to `SUSPENDED`, `REVOKED` or `RETIRED`                               |
-| 3   | Revoke an Authority                 | One Authority (mandate); all future spend against it                        | `mandates.revoked_at` set, via owner console `POST /api/activation/revoke` or an operator SQL update |
-| 4   | Disconnect the payment rail         | All execution that needs the owner's vaulted wallet (zero provider effect)  | Remove the owner's wallet connection; the gateway answers `PAYMENT_RAIL_NOT_CONNECTED`               |
-| 5   | Unset `PAYFLOW_GATEWAY_ADMIN_TOKEN` | The whole admin surface (issue, list, revoke credentials; sample Authority) | Remove the variable in Vercel and redeploy                                                           |
-| 6   | Platform-level pause (Vercel)       | The entire deployment                                                       | Pause or disable the Vercel project/deployment. This is a hosting action, not a PayFlow control.     |
+| #   | Control                             | Stops                                                                       | How to apply                                                                                                                                   |
+| --- | ----------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Revoke a developer credential       | One bearer token (one agent's API access via that token)                    | `POST /v1/admin/credentials/{credentialId}/revoke` as a member whose role allows it (OWNER, SECURITY_ADMIN, DEVELOPER)                         |
+| 2   | Suspend or revoke an agent          | Every credential of one agent                                               | `organization_agents.lifecycle` to `SUSPENDED`, `REVOKED` or `RETIRED`                                                                         |
+| 3   | Revoke an Authority                 | One Authority (mandate); all future spend against it                        | `mandates.revoked_at` set, via owner console `POST /api/activation/revoke` or an operator SQL update                                           |
+| 4   | Disconnect the payment rail         | All execution that needs the owner's vaulted wallet (zero provider effect)  | Remove the owner's wallet connection; the gateway answers `PAYMENT_RAIL_NOT_CONNECTED`                                                         |
+| 5   | Pause the whole organization        | New executions for one organization (reads and Proof stay available)        | `POST /v1/admin/org/pause` as OWNER or SECURITY_ADMIN; `POST /v1/admin/org/resume` to lift. Audited; cannot lift a GLOBAL or environment pause |
+| 5b  | Unset `PAYFLOW_GATEWAY_ADMIN_TOKEN` | The whole admin surface (issue, list, revoke credentials; sample Authority) | Remove the variable in Vercel and redeploy                                                                                                     |
+| 6   | Platform-level pause (Vercel)       | The entire deployment                                                       | Pause or disable the Vercel project/deployment. This is a hosting action, not a PayFlow control.                                               |
 
 ### 1. Revoke a credential
 

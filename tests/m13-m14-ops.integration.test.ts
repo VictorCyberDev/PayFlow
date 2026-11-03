@@ -1,4 +1,5 @@
 import { truncateTenantData } from "./helpers/reset.js";
+import { ownerFactory } from "./helpers/owner.js";
 import {
   afterAll,
   afterEach,
@@ -58,15 +59,30 @@ const NOW = "2026-10-23T10:00:00.000Z";
       PAYFLOW_M6_SIGNING_KEY: pem,
       PAYFLOW_GATEWAY_ADMIN_TOKEN: adminToken,
     });
-    const admin = (path: string, body?: unknown, token = adminToken) =>
-      fetch(origin + path, {
+    const owner = ownerFactory(
+      () => origin,
+      () => repo.sql,
+      adminToken,
+    );
+    const admin = async (
+      path: string,
+      body?: unknown,
+      token: string | undefined = undefined,
+    ) => {
+      const t =
+        token ??
+        (path === "/v1/admin/sandbox/authority"
+          ? adminToken
+          : await owner.token());
+      return fetch(origin + path, {
         method: body === undefined ? "GET" : "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Bearer ${token}`,
+          authorization: `Bearer ${t}`,
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
+    };
     let seq = 0;
     const buy = (authority: string, over: Record<string, unknown> = {}) => ({
       authority,
@@ -140,6 +156,7 @@ const NOW = "2026-10-23T10:00:00.000Z";
       origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     });
     beforeEach(async () => {
+      owner.reset();
       await repo.sql`delete from execution_controls`;
       await repo.sql`delete from rate_limit_windows`;
       await truncateTenantData(
@@ -550,8 +567,13 @@ const NOW = "2026-10-23T10:00:00.000Z";
 
       it("the developer funnel counts stages from durable records and names what it does not measure", async () => {
         const s = await sandbox();
-        await s.client.actions.execute(buy(s.authority));
+        const paid = (await s.client.actions.execute(buy(s.authority))) as {
+          proof?: { proposalId: string };
+        };
         await s.client.actions.execute(buy(s.authority, { amount: 5000 }));
+        // Reading the Proof (twice, same id) is the next funnel stage; a repeat is not a new one.
+        await s.client.proofs.get(paid.proof!.proposalId);
+        await s.client.proofs.get(paid.proof!.proposalId);
         const f = (await (await admin("/v1/admin/org/funnel")).json()) as {
           funnel: Record<string, unknown>;
         };
@@ -562,7 +584,10 @@ const NOW = "2026-10-23T10:00:00.000Z";
           allowedAndPaid: 1,
           denied: 1,
           unresolved: 0,
+          activeDays: 1,
         });
+        // Two reads of one Proof are two reads; distinct ids are what the dashboard shows.
+        expect(f.funnel.proofsRead).toBe(2);
         expect(f.funnel.firstEvaluatedAt).toBeTruthy();
         expect(f.funnel.notMeasuredServerSide).toEqual(
           expect.arrayContaining(["visit", "docs", "first verify"]),

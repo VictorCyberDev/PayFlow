@@ -84,6 +84,11 @@ export class DemoShoppingAgent {
       privateKey: this.deps.signing.privateKey,
     };
   }
+  /** Read-only provider handle for reconciliation. It exposes getOrder and nothing that moves money. */
+  lookupProvider(): Pick<PaymentProvider, "getOrder"> | null {
+    const p = this.deps.provider;
+    return p ? { getOrder: (id: string) => p.getOrder(id) } : null;
+  }
   /** Backwards-compatible configuration signal. Hosted status uses paymentAvailable(). */
   get paymentConnected(): boolean {
     return this.deps.provider !== null;

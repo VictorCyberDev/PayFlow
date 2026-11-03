@@ -382,6 +382,100 @@ paths:
         "200": { description: Rejected }
         "401": { description: Administrative authentication required }
         "404": { description: No pending decision with that id }
+  /v1/admin/members:
+    post:
+      operationId: addMember
+      summary: >-
+        OWNER adds a member with a role (the token is shown once). The platform operator may instead
+        bootstrap the FIRST OWNER of an existing organization.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }, { operatorAuth: [] }]
+      responses:
+        "201":
+          { description: Created. `token` is returned only in this response. }
+        "400":
+          {
+            description: Malformed request,
+            or the operator asked for something other than an OWNER,
+          }
+        "401": { description: Authentication required }
+        "403": { description: The role does not allow this. Nothing changed. }
+    get:
+      operationId: listMembers
+      summary: List members of the caller's organization and environment. Never returns secrets.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200": { description: Member metadata }
+        "401": { description: Authentication required }
+        "403": { description: The role does not allow this }
+  /v1/admin/members/{memberId}/revoke:
+    post:
+      operationId: revokeMember
+      summary: OWNER revokes a member. The last active OWNER cannot be revoked.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: memberId
+          required: true
+          schema: { type: string, pattern: "^pfm_[a-f0-9]{24}$" }
+      responses:
+        "200": { description: Revoked }
+        "401": { description: Authentication required }
+        "403": { description: The role does not allow this }
+        "404": { description: Not found in this organization and environment }
+        "409": { description: Refused because it is the last active OWNER }
+  /v1/admin/org/pause:
+    post:
+      operationId: pauseOrganization
+      summary: OWNER or SECURITY_ADMIN stops NEW executions for the organization. Reads and Proof stay available.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200": { description: Paused }
+        "401": { description: Authentication required }
+        "403": { description: The role does not allow this }
+  /v1/admin/org/resume:
+    post:
+      operationId: resumeOrganization
+      summary: Lift the organization pause. Cannot lift a GLOBAL or environment pause.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200": { description: Resumed }
+        "401": { description: Authentication required }
+        "403": { description: The role does not allow this }
+  /v1/admin/ops/reconciliation:
+    get:
+      operationId: reconciliationMetrics
+      summary: Operator-only. UNKNOWN reconciliation backlog, oldest age, buckets, failure and resolution rates.
+      x-hosted-only: true
+      security: [{ operatorAuth: [] }]
+      responses:
+        "200": { description: Metrics }
+        "401": { description: Authentication required }
+        "403": { description: Platform operator only }
+  /v1/admin/ops/reconcile/tick:
+    post:
+      operationId: reconcileTick
+      summary: Operator-only. One OBSERVATION-ONLY reconciliation pass plus alert evaluation. Safe to repeat. GET is also accepted for schedulers.
+      x-hosted-only: true
+      security: [{ operatorAuth: [] }]
+      responses:
+        "200": { description: Tick summary }
+        "401": { description: Authentication required }
+        "403": { description: Platform operator only }
+  /v1/admin/ops/alerts:
+    get:
+      operationId: listAlerts
+      summary: Operator-only. Persisted operational alerts (P0 economic, P1 operational, P2 degraded).
+      x-hosted-only: true
+      security: [{ operatorAuth: [] }]
+      responses:
+        "200": { description: Alerts }
+        "401": { description: Authentication required }
+        "403": { description: Platform operator only }
   /v1/admin/credentials:
     post:
       operationId: issueCredential
@@ -400,6 +494,7 @@ paths:
               schema: { $ref: "#/components/schemas/CredentialIssued" }
         "400": { description: Malformed request or unknown agent }
         "401": { description: Administrative authentication required }
+        "403": { description: The member role does not allow this }
     get:
       operationId: listCredentials
       summary: List credentials for the administrator's tenant and environment. Never returns secrets.
@@ -437,7 +532,15 @@ components:
     adminAuth:
       type: http
       scheme: bearer
-      description: Administrative secret for one tenant and environment.
+      description: >-
+        Organization MEMBER token `pf_act_<id>.<secret>`. The server decides what it may do from the
+        member's stored role (OWNER, FINANCE_ADMIN, SECURITY_ADMIN, DEVELOPER, APPROVER, AUDITOR,
+        VIEWER). It is bound to one organization and one environment. A role named in a header, query
+        or body is ignored. The platform operator token is NOT a member and holds no role.
+    operatorAuth:
+      type: http
+      scheme: bearer
+      description: Platform operator secret. Bootstraps the first OWNER and runs platform operations only.
     bearerAuth:
       type: oauth2
       flows:
@@ -843,6 +946,10 @@ components:
             required: [keyId, jwk]
             properties:
               keyId: { type: string }
+              status:
+                type: string
+                enum: [ACTIVE, RETIRED]
+                description: RETIRED keys still verify historical Proof. A revoked key is not listed.
               jwk: { type: object }
     SandboxStarted:
       type: object

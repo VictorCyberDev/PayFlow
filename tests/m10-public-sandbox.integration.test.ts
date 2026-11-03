@@ -12,6 +12,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { readFile, readdir } from "node:fs/promises";
 import { truncateTenantData } from "./helpers/reset.js";
+import { ownerFactory } from "./helpers/owner.js";
 import { PostgresTrustRepository } from "../src/persistence.js";
 import {
   createHostedConsole,
@@ -268,7 +269,11 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
         await fetch(origin + "/v1/admin/credentials", {
           method: "POST",
           headers: {
-            authorization: `Bearer ${adminToken}`,
+            authorization: `Bearer ${await ownerFactory(
+              () => origin,
+              () => repo.sql,
+              adminToken,
+            ).token()}`,
             "content-type": "application/json",
           },
           body: JSON.stringify({

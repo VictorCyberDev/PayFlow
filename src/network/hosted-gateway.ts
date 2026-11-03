@@ -11,6 +11,20 @@ import {
   createCredentialAdminHandler,
   staticAdminAuthenticator,
 } from "./admin-rest.js";
+import { AlertEngine } from "./alerts.js";
+import {
+  can,
+  MemberAuthError,
+  MemberStore,
+  ROLES,
+  type Member,
+  type Permission,
+} from "./rbac.js";
+import { SigningKeyRegistry } from "./signing-keys.js";
+import {
+  reconciliationMetrics,
+  UnknownReconciler,
+} from "./unknown-reconciler.js";
 import { CredentialStore } from "./credentials.js";
 import { ExecutingGateway } from "./gateway-execution.js";
 import { DurableAuthorizationService } from "../durable-service.js";
@@ -182,12 +196,31 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     keyId: key.keyId,
     privateKey: demo.signingForProofs().privateKey,
   });
+  const registry = new SigningKeyRegistry(sql);
+  const members = new MemberStore(sql);
+  const alerts = new AlertEngine(sql);
+  // The active key is registered once; older keys stay published so historical Proof still
+  // verifies. A key that was revoked cannot be re-activated: the process then refuses to sign.
+  let keysReady: Promise<unknown> | undefined;
+  const ensureKeys = () =>
+    (keysReady ??= registry
+      .activate(options.organizationId, key.keyId, key.jwk, iso())
+      .catch((error) => {
+        keysReady = undefined;
+        throw error;
+      }));
   const executing = createExecutingRestHandler(gateway, {
-    issuePortableProof: (access, id) => portable.issue(access, id, iso()),
-    publicKeys: () => ({
-      issuer: options.organizationId,
-      keys: [{ keyId: key.keyId, jwk: key.jwk }],
-    }),
+    issuePortableProof: async (access, id) => {
+      await ensureKeys();
+      return portable.issue(access, id, iso());
+    },
+    publicKeys: async () => {
+      await ensureKeys();
+      return {
+        issuer: options.organizationId,
+        keys: await registry.published(options.organizationId),
+      };
+    },
     authenticate: (authorization) => store.authenticate(authorization, iso()),
     readProof: (access, id) => proofs.read(access, id, iso()),
   });
@@ -198,12 +231,13 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         environment: "SANDBOX",
       })
     : undefined;
-  const admin = authenticateAdmin
-    ? createCredentialAdminHandler(store, {
-        authenticateAdmin,
-        now: iso,
-      })
-    : undefined;
+  const reconciler = new UnknownReconciler(sql, (organizationId) => {
+    const lookup = organizationId.startsWith("sbx_")
+      ? options.simulated?.lookupProvider()
+      : demo.lookupProvider();
+    if (!lookup) throw new Error("NO_LOOKUP_PROVIDER");
+    return lookup;
+  });
 
   /** The Sandbox "Keyboard Authority": $100, one new keyboard, the demo merchant, 24h. */
   function sampleMandate(
@@ -328,7 +362,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
 
   /** Operator-only. Creates a Sandbox "Keyboard Authority" ($100, one keyboard, demo merchant). */
   async function provisionSampleAuthority(
-    request: RestRequest,
+    _request: RestRequest,
+    actor: { kind: "OPERATOR" } | { kind: "MEMBER"; member: Member },
   ): Promise<RestResponse> {
     const requestId = `req_${randomUUID()}`;
     const headers = {
@@ -336,17 +371,6 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       "x-payflow-request-id": requestId,
       "cache-control": "no-store",
     };
-    try {
-      authenticateAdmin!(request.authorization);
-    } catch (error) {
-      if (error instanceof AdminAuthError)
-        return {
-          status: 401,
-          headers,
-          body: { requestId, reason: "ADMIN_AUTH_REQUIRED" },
-        };
-      throw error;
-    }
     const now = clock();
     const mandate = sampleMandate(options.principalId, options.agentId, now);
     await repo.saveMandate(mandate);
@@ -358,8 +382,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     await audit.append({
       organizationId: options.organizationId,
       environment: SANDBOX,
-      actorKind: "ADMIN",
-      actorId: "admin-token",
+      ...actorOf(actor),
       action: "AUTHORITY_PROVISIONED",
       subjectKind: "AUTHORITY",
       subjectId: mandate.id,
@@ -384,88 +407,173 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     };
   }
 
-  /** Admin-only organization views and approvals. Tenant and environment come from the admin. */
+  type Actor = { kind: "OPERATOR" } | { kind: "MEMBER"; member: Member };
+  const actorOf = (actor: Actor) =>
+    actor.kind === "OPERATOR"
+      ? ({ actorKind: "OPERATOR", actorId: "platform-operator" } as const)
+      : ({ actorKind: "MEMBER", actorId: actor.member.memberId } as const);
+
+  const adminHeaders = (requestId: string) => ({
+    "content-type": "application/json",
+    "x-payflow-request-id": requestId,
+    "cache-control": "no-store",
+  });
+  const reply = (
+    requestId: string,
+    status: number,
+    body: object,
+  ): RestResponse => ({
+    status,
+    headers: adminHeaders(requestId),
+    body: { requestId, ...body },
+  });
+
+  /**
+   * Resolves WHO is calling an administrative route. An operator token and a member token are
+   * different principals. The operator holds no organization role.
+   */
+  async function resolveActor(
+    request: RestRequest,
+  ): Promise<Actor | "UNAUTHENTICATED"> {
+    try {
+      authenticateAdmin!(request.authorization);
+      return { kind: "OPERATOR" };
+    } catch (error) {
+      if (!(error instanceof AdminAuthError)) throw error;
+    }
+    try {
+      return {
+        kind: "MEMBER",
+        member: await members.authenticate(request.authorization, iso()),
+      };
+    } catch (error) {
+      if (error instanceof MemberAuthError) return "UNAUTHENTICATED";
+      throw error;
+    }
+  }
+
+  /**
+   * Server-side authorization for a member action. Returns the member, or the exact refusal.
+   * Denied attempts are written to the audit trail under the member's own organization.
+   */
+  async function requireMember(
+    requestId: string,
+    actor: Actor | "UNAUTHENTICATED",
+    permission: Permission,
+    target: string,
+  ): Promise<{ member: Member } | RestResponse> {
+    if (actor === "UNAUTHENTICATED")
+      return reply(requestId, 401, {
+        reason: "MEMBER_AUTH_REQUIRED",
+        nextAction: "USE_A_MEMBER_CREDENTIAL",
+      });
+    if (actor.kind === "OPERATOR")
+      return reply(requestId, 403, {
+        reason: "OPERATOR_TOKEN_HAS_NO_ORGANIZATION_ROLE",
+        nextAction: "USE_A_MEMBER_CREDENTIAL",
+      });
+    if (!can(actor.member.role, permission)) {
+      await audit.append({
+        organizationId: actor.member.organizationId,
+        environment: actor.member.environment,
+        actorKind: "MEMBER",
+        actorId: actor.member.memberId,
+        action: "PERMISSION_DENIED",
+        subjectKind: "ROUTE",
+        subjectId: target.slice(0, 120),
+        detail: { permission, role: actor.member.role },
+        occurredAt: iso(),
+      });
+      return reply(requestId, 403, {
+        reason: "PERMISSION_DENIED",
+        requiredPermission: permission,
+        recoverable: false,
+        humanSummary: "Your role does not allow this action. Nothing changed.",
+        nextAction: "ASK_AN_ORGANIZATION_OWNER",
+      });
+    }
+    return { member: actor.member };
+  }
+
+  const VIEW_PERMISSION: Readonly<Record<string, Permission>> = {
+    agents: "view:agents",
+    finance: "view:finance",
+    security: "view:security",
+    authorities: "view:authorities",
+    decisions: "view:decisions",
+    unknown: "view:unknown",
+    funnel: "view:funnel",
+    audit: "view:audit",
+  };
+
+  /** Organization views, approvals, members, pauses. Tenant and environment come from the MEMBER. */
   async function orgRoute(request: RestRequest): Promise<RestResponse | null> {
     const m = request.path.match(
       /^\/v1\/admin\/(org\/(?:agents|finance|security|audit|authorities|decisions|unknown|funnel)|decisions\/([A-Za-z0-9-]{1,64})\/(approve|reject))$/u,
     );
     if (!m) return null;
     const requestId = `req_${randomUUID()}`;
-    const headers = {
-      "content-type": "application/json",
-      "x-payflow-request-id": requestId,
-      "cache-control": "no-store",
-    };
-    try {
-      authenticateAdmin!(request.authorization);
-    } catch {
-      return {
-        status: 401,
-        headers,
-        body: { requestId, reason: "ADMIN_AUTH_REQUIRED" },
-      };
-    }
-    const org = options.organizationId;
-    const now = iso();
-    const ok = (body: object) => ({
-      status: 200,
-      headers,
-      body: { requestId, ...body },
-    });
     const view = m[1]!.replace("org/", "");
-    if (request.method === "GET") {
+    const receiptId = m[2];
+    const decide = receiptId && m[3] ? (m[3] as "approve" | "reject") : null;
+    const gate = await requireMember(
+      requestId,
+      await resolveActor(request),
+      decide ? (`decision:${decide}` as Permission) : VIEW_PERMISSION[view]!,
+      request.path,
+    );
+    if (!("member" in gate)) return gate;
+    const org = gate.member.organizationId;
+    const env = gate.member.environment;
+    const now = iso();
+    const ok = (body: object) => reply(requestId, 200, body);
+    if (request.method === "GET" && !decide) {
       if (view === "agents")
-        return ok({ agents: await agentInventory(sql, org, SANDBOX, now) });
+        return ok({ agents: await agentInventory(sql, org, env, now) });
       if (view === "finance")
-        return ok({ finance: await financeHome(sql, org, SANDBOX, now) });
+        return ok({ finance: await financeHome(sql, org, env, now) });
       if (view === "security")
-        return ok({ agents: await securityHome(sql, org, SANDBOX, now) });
+        return ok({ agents: await securityHome(sql, org, env, now) });
       if (view === "authorities")
         return ok({
-          authorities: await authorityExposures(sql, org, SANDBOX, now),
+          authorities: await authorityExposures(sql, org, env, now),
         });
-      if (view === "audit")
-        return ok({ events: await audit.list(org, SANDBOX) });
+      if (view === "audit") return ok({ events: await audit.list(org, env) });
       if (view === "funnel")
-        return ok({ funnel: await developerFunnel(sql, org, SANDBOX) });
+        return ok({ funnel: await developerFunnel(sql, org, env) });
       if (view === "unknown")
         return ok({
-          operations: await unknownOperations(sql, org, SANDBOX, now),
+          operations: await unknownOperations(sql, org, env, now),
           note: "Observation only. Nothing here is re-executed.",
         });
       if (view === "decisions")
-        return ok({ decisions: await pendingDecisions(sql, org, SANDBOX) });
+        return ok({ decisions: await pendingDecisions(sql, org, env) });
     }
-    const receiptId = m[2];
-    if (request.method === "POST" && receiptId && m[3]) {
-      const pending = (await pendingDecisions(sql, org, SANDBOX)).find(
+    if (request.method === "POST" && receiptId && decide) {
+      const pending = (await pendingDecisions(sql, org, env)).find(
         (d) => d.receiptId === receiptId,
       );
       // Another tenant's receipt, an already-decided one or an unknown id are indistinguishable.
       if (!pending)
-        return {
-          status: 404,
-          headers,
-          body: {
-            requestId,
-            reason: "DECISION_NOT_FOUND",
-            recoverable: false,
-            humanSummary: "No pending decision with that id.",
-            nextAction: "LIST_PENDING_DECISIONS",
-          },
-        };
-      if (m[3] === "reject") {
+        return reply(requestId, 404, {
+          reason: "DECISION_NOT_FOUND",
+          recoverable: false,
+          humanSummary: "No pending decision with that id.",
+          nextAction: "LIST_PENDING_DECISIONS",
+        });
+      if (decide === "reject") {
         await audit.append({
           organizationId: org,
-          environment: SANDBOX,
-          actorKind: "ADMIN",
-          actorId: "admin-token",
+          environment: env,
+          actorKind: "MEMBER",
+          actorId: gate.member.memberId,
           action: "APPROVAL_REJECTED",
           subjectKind: "RECEIPT",
           subjectId: receiptId,
           detail: {
             proposalId: pending.proposalId,
             amountMinor: pending.amountMinor,
+            role: gate.member.role,
           },
           occurredAt: now,
         });
@@ -475,15 +583,15 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         await sql`select principal_id from mandates where id = ${pending.authorityId}`;
       try {
         // The approval is recorded under the Authority owner's principal by an authenticated
-        // administrator. The agent has no scope or route that can do this.
+        // member whose role allows it. The agent has no scope or route that can do this.
         const done = await new DurableAuthorizationService(
           repo,
         ).approveEscalation(receiptId, String(owner[0]!.principal_id), now);
         await audit.append({
           organizationId: org,
-          environment: SANDBOX,
-          actorKind: "ADMIN",
-          actorId: "admin-token",
+          environment: env,
+          actorKind: "MEMBER",
+          actorId: gate.member.memberId,
           action: "APPROVAL_RECORDED",
           subjectKind: "RECEIPT",
           subjectId: receiptId,
@@ -491,6 +599,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
             proposalId: pending.proposalId,
             amountMinor: pending.amountMinor,
             reservationId: done.reservation.id,
+            role: gate.member.role,
           },
           occurredAt: now,
         });
@@ -501,24 +610,270 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           note: "Authority is reserved. Completing the payment still needs the payer-present resume.",
         });
       } catch (error) {
-        return {
-          status: 409,
-          headers,
-          body: {
-            requestId,
-            reason:
-              String((error as Error).message)
-                .split(":")[0]!
-                .replace(/[^A-Z_]/g, "") || "APPROVAL_REFUSED",
-            recoverable: false,
-            humanSummary:
-              "The approval could not be recorded. Nothing was reserved.",
-            nextAction: "REVIEW_DECISION",
-          },
-        };
+        return reply(requestId, 409, {
+          reason:
+            String((error as Error).message)
+              .split(":")[0]!
+              .replace(/[^A-Z_]/g, "") || "APPROVAL_REFUSED",
+          recoverable: false,
+          humanSummary:
+            "The approval could not be recorded. Nothing was reserved.",
+          nextAction: "REVIEW_DECISION",
+        });
       }
     }
     return null;
+  }
+
+  /** Members, credentials, org pause, and platform operations. */
+  async function controlRoute(
+    request: RestRequest,
+  ): Promise<RestResponse | null> {
+    const path = request.path;
+    const requestId = `req_${randomUUID()}`;
+    const memberPath = path.match(
+      /^\/v1\/admin\/members(?:\/(pfm_[a-f0-9]{24})\/revoke)?$/u,
+    );
+    const credPath =
+      /^\/v1\/admin\/credentials(\/pfc_[a-f0-9]{24}\/revoke)?$/u.exec(path);
+    const pausePath = /^\/v1\/admin\/org\/(pause|resume)$/u.exec(path);
+    const opsPath = /^\/v1\/admin\/ops\/(.+)$/u.exec(path);
+    if (!memberPath && !credPath && !pausePath && !opsPath) return null;
+    const actor = await resolveActor(request);
+
+    // ---- platform operator routes: the operator token only, never a member role.
+    if (opsPath) {
+      if (actor === "UNAUTHENTICATED")
+        return reply(requestId, 401, { reason: "ADMIN_AUTH_REQUIRED" });
+      if (actor.kind !== "OPERATOR")
+        return reply(requestId, 403, {
+          reason: "PLATFORM_OPERATOR_ONLY",
+          nextAction: "ASK_THE_PLATFORM_OPERATOR",
+        });
+      const now = iso();
+      const op = opsPath[1]!;
+      if (request.method === "GET" && op === "reconciliation")
+        return reply(requestId, 200, {
+          metrics: await reconciliationMetrics(sql, now),
+          note: "Observation only. Reconciliation never creates or repeats a provider effect.",
+        });
+      if (request.method === "GET" && op === "alerts")
+        return reply(requestId, 200, { alerts: await alerts.list() });
+      // GET is accepted so a plain scheduler (cron, a hosted cron service) can call it. A tick is
+      // safe to repeat: it only observes and records.
+      if (op === "reconcile/tick") {
+        const tick = await reconciler.tick(now);
+        const evaluated = await alerts.evaluate(now);
+        return reply(requestId, 200, { tick, alerts: evaluated });
+      }
+      const alertAction = /^alerts\/(alr_[a-f0-9]{24})\/(ack|resolve)$/u.exec(
+        op,
+      );
+      if (request.method === "POST" && alertAction) {
+        const done =
+          alertAction[2] === "ack"
+            ? await alerts.acknowledge(
+                alertAction[1]!,
+                "platform-operator",
+                now,
+              )
+            : await alerts.resolve(alertAction[1]!, now);
+        return reply(requestId, done ? 200 : 404, {
+          result: done ? "OK" : "NOT_FOUND",
+        });
+      }
+      return reply(requestId, 404, { reason: "ROUTE_NOT_FOUND" });
+    }
+
+    // ---- bootstrap: the operator may create the FIRST owner of an existing organization.
+    if (memberPath && !memberPath[1] && request.method === "POST") {
+      if (actor !== "UNAUTHENTICATED" && actor.kind === "OPERATOR") {
+        const b = (request.body ?? {}) as Record<string, unknown>;
+        const orgId =
+          typeof b.organizationId === "string" ? b.organizationId : "";
+        const environment =
+          b.environment === "PRODUCTION" ? "PRODUCTION" : "SANDBOX";
+        const exists =
+          await sql`select 1 from organizations where id = ${orgId}`;
+        if (!exists[0] || b.role !== "OWNER")
+          return reply(requestId, 400, {
+            reason:
+              "BOOTSTRAP_ONLY_CREATES_AN_OWNER_OF_AN_EXISTING_ORGANIZATION",
+            nextAction: "FIX_REQUEST",
+          });
+        const issued = await members.issue(
+          orgId,
+          environment,
+          "platform-operator",
+          { displayName: b.displayName, role: "OWNER" },
+          iso(),
+        );
+        await audit.append({
+          organizationId: orgId,
+          environment,
+          actorKind: "OPERATOR",
+          actorId: "platform-operator",
+          action: "OWNER_BOOTSTRAPPED",
+          subjectKind: "MEMBER",
+          subjectId: issued.member.memberId,
+          occurredAt: iso(),
+        });
+        return reply(requestId, 201, {
+          member: issued.member,
+          token: issued.token,
+          notice: "Store this token now. It cannot be retrieved again.",
+        });
+      }
+    }
+
+    // ---- everything below needs a member whose role carries the permission.
+    const needed: Permission =
+      memberPath && memberPath[1]
+        ? "member:manage"
+        : memberPath
+          ? request.method === "GET"
+            ? "view:members"
+            : "member:manage"
+          : credPath && credPath[1]
+            ? "credential:revoke"
+            : credPath
+              ? request.method === "GET"
+                ? "view:credentials"
+                : "credential:issue"
+              : pausePath![1] === "pause"
+                ? "org:pause"
+                : "org:resume";
+    const gate = await requireMember(requestId, actor, needed, path);
+    if (!("member" in gate)) return gate;
+    const { member } = gate;
+    const now = iso();
+    const ctx = {
+      organizationId: member.organizationId,
+      environment: member.environment,
+    };
+    const log = (
+      action: string,
+      subjectKind: string,
+      subjectId: string,
+      detail: Record<string, string | number | boolean | null> = {},
+    ) =>
+      audit.append({
+        organizationId: member.organizationId,
+        environment: member.environment,
+        actorKind: "MEMBER",
+        actorId: member.memberId,
+        action,
+        subjectKind,
+        subjectId,
+        detail: { role: member.role, ...detail },
+        occurredAt: now,
+      });
+
+    if (memberPath) {
+      if (memberPath[1]) {
+        const result = await members.revoke(
+          ctx.organizationId,
+          ctx.environment,
+          memberPath[1],
+          now,
+        );
+        if (result === "REVOKED")
+          await log("MEMBER_REVOKED", "MEMBER", memberPath[1]);
+        return reply(
+          requestId,
+          result === "REVOKED" ? 200 : result === "LAST_OWNER" ? 409 : 404,
+          { result },
+        );
+      }
+      if (request.method === "GET")
+        return reply(requestId, 200, {
+          members: await members.list(ctx.organizationId, ctx.environment),
+        });
+      const requestedRole = (request.body as { role?: unknown } | undefined)
+        ?.role;
+      if (!ROLES.includes(requestedRole as never))
+        return reply(requestId, 400, {
+          reason: "REQUEST_MALFORMED",
+          nextAction: "FIX_REQUEST",
+        });
+      try {
+        const issued = await members.issue(
+          ctx.organizationId,
+          ctx.environment,
+          member.memberId,
+          request.body,
+          now,
+        );
+        await log("MEMBER_ADDED", "MEMBER", issued.member.memberId, {
+          newRole: issued.member.role,
+        });
+        return reply(requestId, 201, {
+          member: issued.member,
+          token: issued.token,
+          notice: "Store this token now. It cannot be retrieved again.",
+        });
+      } catch {
+        return reply(requestId, 400, {
+          reason: "REQUEST_MALFORMED",
+          nextAction: "FIX_REQUEST",
+        });
+      }
+    }
+
+    if (credPath) {
+      const handler = createCredentialAdminHandler(store, {
+        authenticateAdmin: () => ctx,
+        now: iso,
+      });
+      const out = await handler(request);
+      const body = out.body as {
+        credential?: {
+          credentialId?: string;
+          agentId?: string;
+          scopes?: string[];
+        };
+      };
+      if (out.status === 201 && body.credential?.credentialId)
+        await log(
+          "CREDENTIAL_ISSUED",
+          "CREDENTIAL",
+          body.credential.credentialId,
+          {
+            agentId: body.credential.agentId ?? null,
+            scopes: (body.credential.scopes ?? []).join(","),
+          },
+        );
+      if (out.status === 200 && credPath[1])
+        await log(
+          "CREDENTIAL_REVOKED",
+          "CREDENTIAL",
+          credPath[1].split("/")[1]!,
+        );
+      return out;
+    }
+
+    // org pause / resume: writes only the ORG scope of the member's own organization.
+    const scope = `ORG:${ctx.organizationId}`;
+    if (pausePath![1] === "pause") {
+      const reasonRaw = (request.body as { reason?: unknown } | undefined)
+        ?.reason;
+      const reason =
+        typeof reasonRaw === "string" && reasonRaw.trim()
+          ? reasonRaw.trim().slice(0, 200)
+          : "paused by organization";
+      await sql`insert into execution_controls (scope, disabled, reason, updated_at)
+        values (${scope}, true, ${reason}, ${now})
+        on conflict (scope) do update set disabled = true, reason = excluded.reason, updated_at = excluded.updated_at`;
+      await log("ORG_EXECUTION_PAUSED", "SCOPE", scope);
+      return reply(requestId, 200, {
+        result: "PAUSED",
+        scope,
+        effect: "NEW_EXECUTIONS_REFUSED",
+      });
+    }
+    await sql`update execution_controls set disabled = false, updated_at = ${now} where scope = ${scope}`;
+    await log("ORG_EXECUTION_RESUMED", "SCOPE", scope);
+    return reply(requestId, 200, { result: "RESUMED", scope });
   }
 
   return async function handle(
@@ -680,7 +1035,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       return true;
     }
     if (path.startsWith("/v1/admin/")) {
-      if (!admin) {
+      if (!authenticateAdmin) {
         send(res, {
           status: 404,
           headers: { "content-type": "application/json" },
@@ -688,56 +1043,72 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         });
         return true;
       }
-      const org = await orgRoute(request);
-      if (org) {
-        send(res, org);
+      const planeReply =
+        (await orgRoute(request)) ?? (await controlRoute(request));
+      if (planeReply) {
+        send(res, planeReply);
         return true;
       }
-      const reply =
-        path === "/v1/admin/sandbox/authority" && method === "POST"
-          ? await provisionSampleAuthority(request)
-          : await admin(request);
-      // Audit credential lifecycle after the fact (identifiers only; the token is never recorded).
-      const body = reply.body as {
-        credential?: {
-          credentialId?: string;
-          agentId?: string;
-          scopes?: string[];
-        };
-      };
-      if (reply.status === 201 && body.credential?.credentialId)
-        await audit.append({
-          organizationId: options.organizationId,
-          environment: SANDBOX,
-          actorKind: "ADMIN",
-          actorId: "admin-token",
-          action: "CREDENTIAL_ISSUED",
-          subjectKind: "CREDENTIAL",
-          subjectId: body.credential.credentialId,
-          detail: {
-            agentId: body.credential.agentId ?? null,
-            scopes: (body.credential.scopes ?? []).join(","),
-          },
-          occurredAt: iso(),
-        });
-      const revoked = path.match(
-        /^\/v1\/admin\/credentials\/(pfc_[a-f0-9]{24})\/revoke$/u,
-      );
-      if (reply.status === 200 && revoked?.[1])
-        await audit.append({
-          organizationId: options.organizationId,
-          environment: SANDBOX,
-          actorKind: "ADMIN",
-          actorId: "admin-token",
-          action: "CREDENTIAL_REVOKED",
-          subjectKind: "CREDENTIAL",
-          subjectId: revoked[1],
-          occurredAt: iso(),
-        });
-      send(res, reply);
+      if (path === "/v1/admin/sandbox/authority" && method === "POST") {
+        const requestId = `req_${randomUUID()}`;
+        const actor = await resolveActor(request);
+        // The operator may seed the sandbox Authority; a member needs authority:provision.
+        const allowed =
+          actor !== "UNAUTHENTICATED" && actor.kind === "OPERATOR"
+            ? ({ actor } as const)
+            : await requireMember(
+                requestId,
+                actor,
+                "authority:provision",
+                path,
+              );
+        if ("actor" in allowed || "member" in allowed) {
+          send(
+            res,
+            await provisionSampleAuthority(
+              request,
+              "actor" in allowed
+                ? allowed.actor
+                : { kind: "MEMBER", member: allowed.member },
+            ),
+          );
+        } else send(res, allowed);
+        return true;
+      }
+      send(res, {
+        status: 404,
+        headers: { "content-type": "application/json" },
+        body: { reason: "ROUTE_NOT_FOUND" },
+      });
       return true;
     }
-    send(res, await executing(request));
+    const reply = await executing(request);
+    // Funnel: a Proof read is the step after a first action. Identifiers only; never the token.
+    if (
+      reply.status === 200 &&
+      request.method === "GET" &&
+      /^\/v1\/proofs\//u.test(path)
+    ) {
+      const credentialId = request.authorization?.match(
+        /^Bearer pf_(?:sbx|live)_(pfc_[a-f0-9]{24})\./u,
+      )?.[1];
+      const owner = credentialId ? await ownerOf(credentialId) : null;
+      if (owner)
+        await audit
+          .append({
+            organizationId: owner.organizationId,
+            environment: owner.environment,
+            actorKind: "AGENT_CREDENTIAL",
+            actorId: credentialId!,
+            action: "PROOF_READ",
+            subjectKind: "PROOF",
+            subjectId: path.split("/")[3]!.slice(0, 64),
+            detail: { portable: path.endsWith("/portable") },
+            occurredAt: iso(),
+          })
+          .catch(() => undefined); // measurement must never change the response
+    }
+    send(res, reply);
     return true;
   };
 }

@@ -24,17 +24,18 @@ Template file: `crm-template.csv`. It lists the 20 prospects from PROSPECTS.md a
 
 ## Stages
 
-| Stage                | Entry criteria                                               | Exit criteria                                                  |
-| -------------------- | ------------------------------------------------------------ | -------------------------------------------------------------- |
-| TARGET               | Company plausibly fits an ICP segment                        | Public evidence of agent/economic use case recorded            |
-| RESEARCHED           | Evidence URL opened and logged; use case hypothesis written  | First outreach approved by a human and sent                    |
-| CONTACTED            | One approved message sent; date logged                       | Reply received, or no reply after one follow-up (then NURTURE) |
-| REPLIED              | Contact answered                                             | Discovery call scheduled, or contact declines (LOST/NURTURE)   |
-| DISCOVERY            | A discovery conversation held and logged in the evidence log | Pain and economic exposure confirmed or refuted                |
-| TECHNICAL_EVALUATION | Contact's engineer evaluates sandbox/SDK                     | Evaluation findings recorded; go/no-go                         |
-| PILOT_PROPOSED       | Written pilot scope sent (PILOT-PACK.md)                     | Signed or explicit written agreement, or decline               |
-| PILOT                | Agreement in place and sandbox workspace provisioned         | Pilot ends with outcome recorded                               |
-| LOST                 | Explicit decline or fit refuted                              | Terminal; record reason                                        |
-| NURTURE              | No reply after one follow-up, or "not now"                   | Re-engage on a stated trigger date or inbound interest         |
+| Stage          | Entry criteria                                                          | Exit criteria                                                  |
+| -------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------- |
+| TARGET         | Company plausibly fits an ICP segment                                   | Public evidence of agent/economic use case recorded            |
+| RESEARCHED     | Evidence URL opened and logged; use case hypothesis written             | First outreach approved by a human and sent                    |
+| CONTACTED      | One approved message sent; date logged                                  | Reply received, or no reply after one follow-up (then NURTURE) |
+| REPLIED        | Contact answered                                                        | Discovery call scheduled, or contact declines (LOST/NURTURE)   |
+| DISCOVERY      | A discovery conversation held and logged in the evidence log            | Pain and economic exposure confirmed or refuted                |
+| TECHNICAL      | Contact's engineer evaluates sandbox/SDK                                | Evaluation findings recorded; go/no-go                         |
+| PILOT_PROPOSED | Written pilot scope sent (PILOT-PACK.md)                                | Signed or explicit written agreement, or decline               |
+| PILOT          | Agreement in place and sandbox workspace provisioned                    | Pilot ends with outcome recorded                               |
+| WON            | Written agreement to continue past the pilot, with the outcome recorded | Terminal; record what was agreed and what evidence supports it |
+| LOST           | Explicit decline or fit refuted                                         | Terminal; record reason                                        |
+| NURTURE        | No reply after one follow-up, or "not now"                              | Re-engage on a stated trigger date or inbound interest         |
 
 Rules: do not skip stages. Stages move only on logged evidence. Opt-out requests move the account to LOST immediately with reason `opted out`, and no further contact.

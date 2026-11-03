@@ -20,6 +20,13 @@ Two reconciliation implementations exist and they are **not** equivalent:
 
 Operator consequence: your own investigation is strictly read-only (SQL SELECTs and PayPal GET). The owner-authenticated nudge `POST /api/demo-agent/reconcile` runs implementation 1 and may therefore perform the narrow same-ID resubmission described above. Treat that nudge as "ask the system to finish what it already started", never as a retry tool. If you want a guaranteed observation-only pass, do not use the nudge; use the manual procedure below and escalate. A code change that adds an observation-only mode is recommended in SECURITY-ENGINEERING-REVIEW.md (F-08).
 
+### Update 2026-11-03: a scheduled, observation-only reconciler now exists
+
+`src/network/unknown-reconciler.ts` is a third piece and the one to use for routine watching. It reads the provider (`getOrder`
+only), records the result in `reconciliation_lookups`, backs off between looks, and raises alerts by age. It cannot create, capture
+or resubmit anything and never writes `payment_attempts`. This closes recommendation F-08 for scheduled watching; the owner-authenticated
+nudge above is unchanged. See `M14-OPERATIONS.md`. It is implemented and tested locally; no scheduler trigger is configured on any deployment.
+
 ## When is an attempt UNKNOWN
 
 `payment_attempts.status` values (migration 003 check constraint): `NOT_STARTED, ORDER_CREATING, ORDER_CREATE_UNKNOWN, ORDER_CREATED, PAYER_ACTION_REQUIRED, CAPTURE_PENDING, CAPTURE_IN_FLIGHT, CAPTURE_UNKNOWN, CAPTURE_PENDING_PROVIDER, CAPTURED, FAILED, CANCELLED`.

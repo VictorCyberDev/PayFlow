@@ -1,4 +1,5 @@
 import { truncateTenantData } from "./helpers/reset.js";
+import { ownerFactory } from "./helpers/owner.js";
 import {
   afterAll,
   afterEach,
@@ -54,19 +55,31 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       PAYFLOW_GATEWAY_ADMIN_TOKEN: adminToken,
       ...over,
     });
-    const admin = (
+    const owner = ownerFactory(
+      () => origin,
+      () => repo.sql,
+      adminToken,
+    );
+    const admin = async (
       path: string,
       body?: unknown,
-      token: string | null = adminToken,
-    ) =>
-      fetch(origin + path, {
+      token: string | null | undefined = undefined,
+    ) => {
+      const t =
+        token === undefined
+          ? path === "/v1/admin/sandbox/authority"
+            ? adminToken
+            : await owner.token()
+          : token;
+      return fetch(origin + path, {
         method: body === undefined ? "GET" : "POST",
         headers: {
           "content-type": "application/json",
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(t ? { authorization: `Bearer ${t}` } : {}),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
+    };
     async function sandbox() {
       const a = (await (
         await admin("/v1/admin/sandbox/authority", {})
@@ -124,6 +137,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     });
     beforeEach(async () => {
+      owner.reset();
       await truncateTenantData(
         repo.sql,
         "replay_keys,agent_credentials,organizations,organization_agents,principals,evidence_events,commerce_merchant_bindings",

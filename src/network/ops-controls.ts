@@ -67,7 +67,8 @@ export class ExecutionControls {
 export interface AuditEvent {
   readonly organizationId: string;
   readonly environment: Environment;
-  readonly actorKind: "ADMIN" | "AGENT_CREDENTIAL" | "SYSTEM" | "OPERATOR";
+  readonly actorKind:
+    "ADMIN" | "AGENT_CREDENTIAL" | "SYSTEM" | "OPERATOR" | "MEMBER";
   readonly actorId: string;
   readonly action: string;
   readonly subjectKind: string;

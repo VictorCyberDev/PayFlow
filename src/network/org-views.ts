@@ -346,6 +346,10 @@ export interface DeveloperFunnel {
   readonly denied: number;
   readonly unresolved: number;
   /** Stages with no server-side signal yet, stated so nobody reads them as zero. */
+  /** Proof reads with the organization's credentials (each read counts). */
+  readonly proofsRead: number;
+  /** Distinct calendar days (UTC) with at least one evaluated action. 2 or more is repeat use. */
+  readonly activeDays: number;
   readonly notMeasuredServerSide: readonly string[];
 }
 
@@ -361,7 +365,7 @@ export async function developerFunnel(
   const a = await sql`
     select action, count(*)::int c from organization_audit_events
     where organization_id = ${organizationId} and environment = ${environment}
-      and action in ('CREDENTIAL_ISSUED','AUTHORITY_PROVISIONED')
+      and action in ('CREDENTIAL_ISSUED','AUTHORITY_PROVISIONED','PROOF_READ')
     group by action`;
   const by = new Map(a.map((r) => [String(r.action), Number(r.c)]));
   const u = await sql`
@@ -369,7 +373,8 @@ export async function developerFunnel(
       count(*) filter (where metadata->>'status' = 'COMPLETED')::int paid,
       count(*) filter (where metadata->>'status' = 'DENIED')::int denied,
       count(*) filter (where metadata->>'status' = 'UNRESOLVED')::int unresolved,
-      min(occurred_at) first_at
+      min(occurred_at) first_at,
+      count(distinct (occurred_at at time zone 'UTC')::date)::int days
     from usage_events
     where organization_id = ${organizationId} and environment = ${environment} and meter = 'GOVERNED_ACTION'`;
   const r = u[0]!;
@@ -383,13 +388,15 @@ export async function developerFunnel(
     allowedAndPaid: Number(r.paid),
     denied: Number(r.denied),
     unresolved: Number(r.unresolved),
+    proofsRead: by.get("PROOF_READ") ?? 0,
+    activeDays: Number(r.days),
     notMeasuredServerSide: [
       "visit",
       "docs",
       "sandbox page",
-      "proof read",
+      // Verify runs offline in the browser or the CLI and never contacts PayFlow. That is a
+      // privacy property, so it cannot be counted.
       "first verify",
-      "return usage",
       "partner inquiry",
     ],
   };

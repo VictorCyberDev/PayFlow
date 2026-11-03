@@ -12,7 +12,7 @@ export interface ExecutingRestDependencies {
     proposalId: string,
   ): Promise<object | "NOT_ISSUABLE" | null>;
   /** Public verification keys. Public by design: they verify, they cannot sign. */
-  publicKeys?(): object;
+  publicKeys?(): object | Promise<object>;
   readProof?(
     access: ExternalAgentAccess,
     proposalId: string,
@@ -48,8 +48,25 @@ export function createExecutingRestHandler(
       request.method === "GET" &&
       request.path === "/v1/keys" &&
       deps.publicKeys
-    )
-      return json(200, requestId, { requestId, ...deps.publicKeys() });
+    ) {
+      try {
+        return json(200, requestId, {
+          requestId,
+          ...(await deps.publicKeys()),
+        });
+      } catch {
+        // Fail closed: if the key registry refuses (a reused key id, a revoked key), publish
+        // nothing rather than a verification document that does not match what is being signed.
+        return json(500, requestId, {
+          requestId,
+          reason: "SIGNING_KEY_UNAVAILABLE",
+          recoverable: false,
+          humanSummary:
+            "Verification keys are unavailable. No Proof can be trusted until this is fixed.",
+          nextAction: "CONTACT_THE_OPERATOR",
+        });
+      }
+    }
     const portableMatch = request.path.match(
       /^\/v1\/proofs\/([A-Za-z0-9._:-]{1,128})\/portable$/u,
     );

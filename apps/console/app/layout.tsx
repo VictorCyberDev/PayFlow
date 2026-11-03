@@ -1,3 +1,4 @@
+import { SITE_URL } from "../lib/site";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./commercial.css";
@@ -6,7 +7,7 @@ import "./company.css";
 import { BRAND } from "../lib/brand";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://payflow-one-kappa.vercel.app"),
+  metadataBase: new URL(SITE_URL),
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",

@@ -21,7 +21,7 @@ Legend: [H] = hypothesis. [F] = fact about PayFlow from repo docs.
 - Likely objection [H]: "We built this" / sandbox-only PayPal is irrelevant to our rails.
 - Required proof: working rail adapter for their payment path, design-partner pilot with measured denial/replay/UNKNOWN handling.
 
-## 2. Accounts-payable automation
+## 2. Accounts-payable automation (autonomous AP)
 
 - First buyer [H]: product/risk leader; controller as stakeholder.
 - Technical user [H]: payments engineering.
@@ -80,6 +80,30 @@ Legend: [H] = hypothesis. [F] = fact about PayFlow from repo docs.
 - Why PayFlow [H]: scoped authority and evidence.
 - Objection [H]: our agents do not move money directly.
 - Proof: discovery confirms money-moving actions exist; otherwise drop the segment.
+
+## 7. Commerce agents (agent shopping and checkout)
+
+- First buyer [H]: product lead for an agent that buys on a person's or company's behalf.
+- Technical user [H]: the engineer who connects the agent to merchants and a payment rail.
+- Problem [H]: the agent's spend limit lives in a prompt or in one wallet, and a wrong merchant, price or duplicate checkout is a direct loss.
+- Alternative [H]: prompt rules, wallet limits, human confirmation of every purchase.
+- Consequence [H]: wrong purchases, chargebacks, users who stop trusting autonomy.
+- Why now [H]: agent checkout products are shipping.
+- Why PayFlow [H]: the amount and merchant are checked against a trusted quote, replay and UNKNOWN are handled, and the receipt is verifiable.
+- Objection [H]: the wallet or network will add limits itself; one more dependency in the checkout path.
+- Proof: the Sandbox purchase with ALLOW, DENY ($0 moved) and an offline-verified Proof.
+
+## 8. Marketplaces and platforms that host other people's agents
+
+- First buyer [H]: trust and safety or payments lead.
+- Technical user [H]: platform engineer who issues agent credentials.
+- Problem [H]: many third-party agents act under the platform's rails and the platform needs per-agent limits, revocation and an audit trail.
+- Alternative [H]: per-integration rules and manual review.
+- Consequence [H]: one compromised agent can cost the platform money and trust.
+- Why now [H]: agent ecosystems are forming on top of existing platforms.
+- Why PayFlow [H]: scoped credentials, per-agent Authority, containment (pause, revoke) and an organization audit trail.
+- Objection [H]: building tenant isolation and limits in house is manageable at small scale.
+- Proof: a two-organization sandbox showing isolation, a credential revoked mid-run, and the audit trail.
 
 ## Prioritization (hypothesis)
 

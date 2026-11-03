@@ -4,7 +4,7 @@ Status: DRAFT, 2026-11-02. Developer preview, Neon Postgres behind a Vercel-host
 
 ## Restore status (read this first)
 
-**No restore has been rehearsed.** The repository contains no record of a restore test, restore drill, or restored-database verification. The only backup-type action recorded is one **snapshot branch taken before the M7 migrations** (below). Taking a snapshot is not evidence that it can be restored. Until a rehearsal is recorded under the evidence requirement at the end of this page, treat every statement about restoring as an untested procedure, and do not state a recovery time or recovery point to anyone.
+**Two restore rehearsals were recorded on 2026-11-03** (`docs/evidence/ops/restore-rehearsal-2026-11-03.json`, details in `M14-OPERATIONS.md` section 5): a real `pg_dump`/`pg_restore` into an isolated database, and a Neon copy-on-write branch of the accepted database. Both verified table counts, constraint validity and the append-only audit triggers, and the accepted M6/M7 evidence counts were unchanged. **Still not done:** a point-in-time restore of the accepted branch, a measured recovery time or recovery point, and post-restore provider reconciliation. Do not state a recovery time or recovery point to anyone.
 
 ## What exists
 

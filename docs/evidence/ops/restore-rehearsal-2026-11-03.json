@@ -1,0 +1,79 @@
+{
+  "title": "M14 restore rehearsal",
+  "date": "2026-11-03",
+  "note": "No connection strings or credentials in this file. The accepted database was only read; migration 023 was applied to a copy-on-write branch.",
+  "local_dump_restore": {
+    "startedAt": "2026-11-03T12:50:18.152Z",
+    "steps": [
+      {
+        "name": "source counted",
+        "tables": 73,
+        "rows": 62
+      },
+      {
+        "name": "dumped"
+      },
+      {
+        "name": "restored into an isolated database"
+      },
+      {
+        "name": "row counts compared",
+        "tablesCompared": 73,
+        "mismatched": [],
+        "missing": []
+      },
+      {
+        "name": "constraints validated",
+        "unvalidated": 0
+      },
+      {
+        "name": "append-only audit triggers present",
+        "found": [
+          "organization_audit_events_no_truncate",
+          "organization_audit_events_no_update"
+        ]
+      },
+      {
+        "name": "restored audit log still refuses UPDATE",
+        "auditRows": 4,
+        "immutable": true
+      },
+      {
+        "name": "rehearsal database dropped"
+      }
+    ],
+    "ok": true,
+    "finishedAt": "2026-11-03T12:50:20.442Z"
+  },
+  "neon_branch_rehearsal": {
+    "method": "copy-on-write branch of the accepted branch, then additive migration 023 applied on the branch only",
+    "parent_branch_untouched": true,
+    "before": {
+      "tables": 69,
+      "capturedPayments": 2,
+      "evidenceEvents": 120,
+      "mandates": 16,
+      "unvalidatedConstraints": 0,
+      "auditTriggers": 2
+    },
+    "after_migration_023_on_branch": {
+      "tables": 73,
+      "capturedPayments": 2,
+      "evidenceEvents": 120,
+      "mandates": 16,
+      "unvalidatedConstraints": 0,
+      "auditTriggers": 2
+    },
+    "parent_after": {
+      "tables": 69,
+      "capturedPayments": 2,
+      "evidenceEvents": 120,
+      "mandates": 16
+    },
+    "branchLeftInPlace": "rehearsal-restore-2026-11-03 (br-morning-pond-b8kh9ukx). Deleting a branch is destructive and was not done without the owner's say-so."
+  },
+  "not_rehearsed": [
+    "a point-in-time restore of the accepted branch itself",
+    "restore time objective (not measured)"
+  ]
+}
