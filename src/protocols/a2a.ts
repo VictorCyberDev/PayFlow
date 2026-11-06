@@ -3,9 +3,12 @@ import { FinancialActionKindSchema } from "../network/financial-action.js";
 
 export const A2A_PROTOCOL_VERSION = "1.0" as const;
 
-export function createPayFlowAgentCard(baseUrl: string) {
+export function createPayFlowAgentCard(baseUrl: string, basePath = "/a2a/v1") {
   const root = new URL(baseUrl);
-  if (root.protocol !== "https:" && root.hostname !== "localhost") {
+  if (
+    root.protocol !== "https:" &&
+    !["localhost", "127.0.0.1"].includes(root.hostname)
+  ) {
     throw new Error("A2A_HTTPS_REQUIRED");
   }
   return {
@@ -14,7 +17,7 @@ export function createPayFlowAgentCard(baseUrl: string) {
       "Deterministic bounded financial Authority, verification, Proof, and reconciliation for autonomous systems.",
     supportedInterfaces: [
       {
-        url: new URL("/a2a/v1", root).toString(),
+        url: new URL(basePath, root).toString(),
         protocolBinding: "HTTP+JSON",
         protocolVersion: A2A_PROTOCOL_VERSION,
       },

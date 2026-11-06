@@ -55,6 +55,8 @@ import { ProofReader } from "./proof-read.js";
 import { createExecutingRestHandler } from "./rest-execution.js";
 import { createMcpHttpHandler } from "../protocols/mcp-http.js";
 import { protectedResourceMetadata } from "../protocols/chatgpt-app.js";
+import { createA2AHttpHandler } from "../protocols/a2a-http.js";
+import { PostgresDelegationRegistry } from "./delegation.js";
 import { createGatewayMcpServices } from "../protocols/mcp-gateway.js";
 import type { RestRequest, RestResponse } from "./rest.js";
 
@@ -294,6 +296,47 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           }),
         // The hosted per-credential rate limit above already ran for this request.
         rateLimit: () => Promise.resolve(true),
+      })
+    : undefined;
+  const a2aBase = "/v1/a2a";
+  const a2a = options.mcpResource
+    ? createA2AHttpHandler({
+        baseUrl: new URL(options.mcpResource).origin,
+        basePath: a2aBase,
+        audience: GATEWAY_AUDIENCE,
+        authenticate: async (request) => {
+          try {
+            const access = await store.authenticate(
+              request.headers.get("authorization") ?? undefined,
+              iso(),
+            );
+            return { subject: access.clientId, scopes: access.scopes, access };
+          } catch {
+            return null;
+          }
+        },
+        servicesFor: (identity) =>
+          createGatewayMcpServices({
+            gateway,
+            access: identity.access,
+            now: iso,
+            issuePortableProof: async (access, id) => {
+              await ensureKeys();
+              return portable.issue(access, id, iso());
+            },
+            publicKeys: publishedKeys,
+            ...(options.mcpProfile === "verify-only"
+              ? { verifyOnly: true }
+              : {}),
+          }),
+        rateLimit: () => Promise.resolve(true),
+        replayStore: {
+          claimNonce: (scope, nonce) => repo.claimReplay(scope, nonce),
+        },
+        // Inline (peer-presented) delegations are never trusted on the hosted host; stored chains are.
+        parentFor: () => Promise.resolve(null),
+        delegations: new PostgresDelegationRegistry(sql),
+        now: iso,
       })
     : undefined;
   const authenticateAdmin = options.adminToken
@@ -1114,6 +1157,21 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           documentation: new URL("/docs/", options.mcpResource).href,
         }),
       });
+      return true;
+    }
+    if (a2a && (path === a2aBase || path.startsWith(`${a2aBase}/`))) {
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(req.headers))
+        if (typeof value === "string") headers.set(name, value);
+      const reply = await a2a(
+        new Request(new URL(path, options.mcpResource), {
+          method,
+          headers,
+          ...(method === "POST" ? { body: JSON.stringify(body ?? null) } : {}),
+        }),
+      );
+      res.writeHead(reply.status, Object.fromEntries(reply.headers.entries()));
+      res.end(Buffer.from(await reply.arrayBuffer()));
       return true;
     }
     if (path === "/v1/mcp" && mcp) {

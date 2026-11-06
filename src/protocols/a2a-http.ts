@@ -14,6 +14,8 @@ import {
 } from "./mcp.js";
 import type { ProtocolAuthenticator, ProtocolIdentity } from "./http-auth.js";
 import { readBoundedJson } from "./mcp-http.js";
+import { McpToolError } from "./mcp.js";
+import type { DelegationSpend, ReserveRefusal } from "../network/delegation.js";
 
 const command = z
   .object({
@@ -41,7 +43,55 @@ const send = z
   })
   .strict();
 
+/** The durable delegation ledger the handler needs. `PostgresDelegationRegistry` implements it. */
+export interface DelegationLedger {
+  reserve(
+    leafId: string,
+    spend: DelegationSpend,
+  ): Promise<{ ok: true } | { ok: false; reason: ReserveRefusal }>;
+  release(leafId: string, amountMinor: number): Promise<void>;
+}
+
+const delegationRef = z
+  .object({ delegationId: z.string().regex(/^dlg_[a-f0-9]{24}$/u) })
+  .strict();
+
+/**
+ * What a payment tool call would spend, read from its arguments. If it cannot be read exactly the call is refused:
+ * a delegation never guesses an amount. Only the one purchase shape the Gateway executes is understood.
+ */
+export function delegatedSpendFacts(
+  tool: PayFlowMcpToolName,
+  args: Record<string, unknown>,
+): Omit<DelegationSpend, "agentId" | "now"> | null {
+  if (tool !== "request_authorized_action") return null;
+  const action = args.action;
+  if (action === null || typeof action !== "object") return null;
+  const a = action as {
+    action?: unknown;
+    amount?: { minor?: unknown; currency?: unknown };
+    merchant?: { id?: unknown };
+  };
+  if (
+    a.action !== "purchase" ||
+    typeof a.amount?.minor !== "number" ||
+    typeof a.amount.currency !== "string" ||
+    typeof a.merchant?.id !== "string"
+  )
+    return null;
+  return {
+    actionKind: "PURCHASE",
+    currency: a.amount.currency,
+    counterpartyId: a.merchant.id,
+    amountMinor: a.amount.minor,
+  };
+}
+
 export interface A2AHttpOptions {
+  /** Where the interface lives under the base URL. Default "/a2a/v1". */
+  readonly basePath?: string;
+  /** When set, `delegation: { delegationId }` refers to a stored chain whose budget is shared and conserved. */
+  readonly delegations?: DelegationLedger;
   readonly baseUrl: string;
   readonly audience: string;
   readonly authenticate: ProtocolAuthenticator;
@@ -56,7 +106,8 @@ export interface A2AHttpOptions {
 }
 /** v1.0 synchronous HTTP+JSON profile. No streaming/push/task persistence is advertised. */
 export function createA2AHttpHandler(options: A2AHttpOptions) {
-  const card = createPayFlowAgentCard(options.baseUrl);
+  const basePath = options.basePath ?? "/a2a/v1";
+  const card = createPayFlowAgentCard(options.baseUrl, basePath);
   return async (request: Request): Promise<Response> => {
     const path = new URL(request.url).pathname;
     const headers = {
@@ -71,9 +122,13 @@ export function createA2AHttpHandler(options: A2AHttpOptions) {
           headers: { ...headers, "Content-Type": "application/problem+json" },
         },
       );
-    if (path === "/.well-known/agent-card.json" && request.method === "GET")
+    if (
+      (path === "/.well-known/agent-card.json" ||
+        path === `${basePath}/agent-card.json`) &&
+      request.method === "GET"
+    )
       return Response.json(card, { headers });
-    if (path !== "/a2a/v1/message:send")
+    if (path !== `${basePath}/message:send`)
       return problem("not-found", "Not found", 404);
     if (request.method !== "POST")
       return problem("method-not-allowed", "POST required", 405);
@@ -109,7 +164,30 @@ export function createA2AHttpHandler(options: A2AHttpOptions) {
         "One structured PayFlow command required",
       );
     const at = options.now?.() ?? new Date().toISOString();
-    if (input.data.delegation !== undefined) {
+    let charged: { leafId: string; amountMinor: number } | undefined;
+    const stored = delegationRef.safeParse(input.data.delegation);
+    if (stored.success && options.delegations) {
+      const facts = delegatedSpendFacts(input.data.tool, input.data.arguments);
+      if (!facts)
+        return problem(
+          "invalid-request",
+          "A delegation can only accompany an exact purchase request",
+        );
+      const reserved = await options.delegations.reserve(
+        stored.data.delegationId,
+        { ...facts, agentId: identity.access.agentId, now: at },
+      );
+      if (!reserved.ok)
+        return problem(
+          "authorization-failed",
+          `Delegation ${reserved.reason}`,
+          403,
+        );
+      charged = {
+        leafId: stored.data.delegationId,
+        amountMinor: facts.amountMinor,
+      };
+    } else if (input.data.delegation !== undefined) {
       const parent = await options.parentFor(identity);
       if (!parent || parent.childAgentId !== identity.subject)
         return problem(
@@ -136,12 +214,16 @@ export function createA2AHttpHandler(options: A2AHttpOptions) {
         `a2a-message:${identity.access.principalId}:${identity.subject}`,
         parsed.data.message.messageId,
       ))
-    )
+    ) {
+      // A replay never reaches the tool, so nothing was spent: give back what this duplicate just reserved.
+      if (charged)
+        await options.delegations?.release(charged.leafId, charged.amountMinor);
       return problem(
         "invalid-request",
         "Message already processed; reconcile original action",
         409,
       );
+    }
     try {
       const result = await invokePayFlowMcpTool(
         input.data.tool,
@@ -154,6 +236,13 @@ export function createA2AHttpHandler(options: A2AHttpOptions) {
         },
         options.servicesFor(identity),
       );
+      // Budget goes back only when the outcome is KNOWN to be zero effect. UNKNOWN and completed keep the charge.
+      if (
+        charged &&
+        (result.structuredContent as { effectCount?: unknown } | null)
+          ?.effectCount === 0
+      )
+        await options.delegations?.release(charged.leafId, charged.amountMinor);
       return Response.json(
         {
           message: {
@@ -164,7 +253,16 @@ export function createA2AHttpHandler(options: A2AHttpOptions) {
         },
         { headers: { ...headers, "Content-Type": "application/a2a+json" } },
       );
-    } catch {
+    } catch (error) {
+      // Refused by the MCP front door (bad arguments, missing scope) before any service ran: zero effect.
+      const frontDoor =
+        error instanceof Error && /^MCP_[A-Z_]+$/u.test(error.message);
+      if (
+        charged &&
+        (frontDoor ||
+          (error instanceof McpToolError && error.structured.effectCount === 0))
+      )
+        await options.delegations?.release(charged.leafId, charged.amountMinor);
       return problem(
         "authorization-failed",
         "Tool refused; no new Authority was granted",

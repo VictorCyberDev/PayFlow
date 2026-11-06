@@ -6,7 +6,8 @@ Status: 2026-11-06. Written before the first deployment. Nothing here has been e
 
 1. `docs/OWNER-ACTIONS.md` steps 1 to 5 are done: `svc_public_app` removed, `scripts/verify-runtime-role.mjs` printed `RUNTIME ROLE VERIFIED`, secrets set Production-only and Sensitive.
 2. `node --import tsx scripts/public-readiness.mjs --envs <names.json>` prints `"ready": true` (the file lists variable **names, targets and types** from Vercel, never values).
-3. The source to deploy is `main` at a SHA whose CI is green. Never a feature branch, never `cd5c427`, never the acceptance project.
+3. The public database has every migration in `db/migrations` applied. Migrations are additive and the host does not run them. As of M18 that includes `024_m18_delegation_chains.sql` (table `delegations`); the public Neon database was last migrated through 023. Apply the missing ones as the owner/migrator role, then re-run `db/roles/least-privilege.sql` so `payflow_runtime` can use the new table. Skipping this leaves `/v1/a2a` failing closed on delegated requests only.
+4. The source to deploy is `main` at a SHA whose CI is green. Never a feature branch, never `cd5c427`, never the acceptance project.
 
 A deployment without the secrets is refused by design: the host answers `503 {"status":"UNAVAILABLE"}` and logs the fixed token `M6_HOST_CONFIGURATION_INVALID` when its configuration is invalid. That is the fail-closed behaviour, not something to ship.
 
