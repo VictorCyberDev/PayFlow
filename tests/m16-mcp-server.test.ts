@@ -58,6 +58,7 @@ describe("M16 MCP server (JSON-RPC handler)", () => {
       "check_financial_authority",
       "verify_authority",
       "verify_financial_proof",
+      "reconcile_financial_action",
     ]);
   });
 
