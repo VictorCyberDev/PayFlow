@@ -192,6 +192,15 @@ export function buildStatusList(
   return { ...list, sig: sign(D.status, list, issuerPrivateKey) };
 }
 
+/** True only if `list` was signed by `issuerJwk`. Callers that cache lists must check this before storing one. */
+export function verifyStatusListSignature(
+  list: StatusList,
+  issuerJwk: JsonWebKey,
+): boolean {
+  const { sig, ...body } = list;
+  return typeof sig === "string" && check(D.status, body, sig, issuerJwk);
+}
+
 // ---------------------------------------------------------------- verification
 export interface IssuerTrust {
   /** Trusted issuer ids and what they may vouch for (same bounds as the federation trust profile). */
