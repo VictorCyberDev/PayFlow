@@ -142,3 +142,9 @@ jobs:
       - name: Gate A accessibility acceptance
         run: node scripts/a11y-acceptance.mjs
         working-directory: .
+
+      # Offline and secret-free: derives the environment contract from the code, validates vercel.json and the
+      # static export (ten public routes, canonical origin). Fails if the owner checklist could drift from the code.
+      - name: Public deployment readiness
+        run: node --import tsx scripts/public-readiness.mjs
+        working-directory: .
