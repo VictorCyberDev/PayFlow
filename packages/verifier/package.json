@@ -6,5 +6,8 @@
   "bin": {
     "payflow-verify": "./src/cli.ts"
   },
-  "exports": "./src/index.ts"
+  "exports": {
+    ".": "./src/index.ts",
+    "./authority": "./src/authority.ts"
+  }
 }
