@@ -111,6 +111,24 @@ type ToolResult = {
         arguments: { action: act },
       })) as ToolResult;
 
+    const startHost = (over: Record<string, string> = {}) => {
+      host = createHostedConsole(
+        parseHostedConfig({
+          PAYFLOW_M5_DEMO: "true",
+          DATABASE_URL: url,
+          PAYFLOW_M5_PRINCIPAL_ID: "p",
+          PAYFLOW_M5_AGENT_ID: "a",
+          PAYFLOW_M5_BOOTSTRAP_KEY: bootstrap,
+          PAYFLOW_M5_ORIGIN: "http://127.0.0.1",
+          PAYFLOW_M6_DEMO_AGENT: "true",
+          PAYFLOW_M6_SIGNING_KEY: pem,
+          PAYFLOW_GATEWAY_ADMIN_TOKEN: adminToken,
+          ...over,
+        }),
+        { clock, paymentProvider: provider },
+      );
+    };
+
     beforeAll(async () => {
       repo = PostgresTrustRepository.connect(url!);
       await repo.sql`drop schema public cascade`;
@@ -144,20 +162,7 @@ type ToolResult = {
         status: "ACTIVE",
         capabilities,
       });
-      host = createHostedConsole(
-        parseHostedConfig({
-          PAYFLOW_M5_DEMO: "true",
-          DATABASE_URL: url,
-          PAYFLOW_M5_PRINCIPAL_ID: "p",
-          PAYFLOW_M5_AGENT_ID: "a",
-          PAYFLOW_M5_BOOTSTRAP_KEY: bootstrap,
-          PAYFLOW_M5_ORIGIN: "http://127.0.0.1",
-          PAYFLOW_M6_DEMO_AGENT: "true",
-          PAYFLOW_M6_SIGNING_KEY: pem,
-          PAYFLOW_GATEWAY_ADMIN_TOKEN: adminToken,
-        }),
-        { clock, paymentProvider: provider },
-      );
+      startHost();
     });
     afterEach(async () => {
       for (const client of open.splice(0)) await client.close();
@@ -268,6 +273,47 @@ type ToolResult = {
         effectCount: 0,
       });
       expect(provider.createCalls).toBe(0);
+    });
+
+    it("the verify-only profile removes the payment tool entirely: not listed, and a call is an unknown tool with no provider contact", async () => {
+      await host?.close();
+      startHost({ PAYFLOW_MCP_PROFILE: "verify-only" });
+      const s = await sandbox();
+      const client = await connect(s.token);
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name)).toEqual([
+        "verify_financial_proof",
+      ]);
+      await expect(
+        client.callTool({
+          name: "request_authorized_action",
+          arguments: { action: action(s.authority) },
+        }),
+      ).rejects.toThrow(/Unknown tool/u);
+      expect(provider.createCalls + provider.captureCalls).toBe(0);
+    });
+
+    it("tells ChatGPT where the protected-resource metadata is, and publishes it without inventing an authorization server", async () => {
+      const unauthenticated = await fetch(`${origin}/v1/mcp`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+      });
+      expect(unauthenticated.status).toBe(401);
+      expect(unauthenticated.headers.get("www-authenticate")).toBe(
+        // The canonical origin comes from PAYFLOW_M5_ORIGIN, not from the request.
+        'Bearer resource_metadata="http://127.0.0.1/v1/oauth-protected-resource"',
+      );
+      const document = await fetch(`${origin}/v1/oauth-protected-resource`);
+      expect(document.status).toBe(200);
+      expect(await document.json()).toMatchObject({
+        resource: "http://127.0.0.1/v1/mcp",
+        authorization_servers: [],
+        bearer_methods_supported: ["header"],
+      });
     });
 
     it("rejects a missing or corrupted credential before any tool runs", async () => {

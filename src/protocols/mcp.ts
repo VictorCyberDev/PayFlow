@@ -132,6 +132,15 @@ export const PAYFLOW_MCP_TOOLS: readonly PayFlowMcpToolDescriptor[] = [
   },
 ] as const;
 
+/** The one scope each tool needs. The server enforces it on every call; the model never decides access. */
+export const MCP_TOOL_SCOPES: Readonly<Record<PayFlowMcpToolName, string>> = {
+  check_financial_authority: "authority:read",
+  request_authorized_action: "action:request",
+  verify_authority: "verify:read",
+  verify_financial_proof: "proof:read",
+  reconcile_financial_action: "reconcile:request",
+};
+
 export interface McpInvocationContext {
   readonly authenticated: boolean;
   readonly requestId: string;
@@ -195,13 +204,7 @@ export async function invokePayFlowMcpTool(
   services: McpAuthorityServices,
 ): Promise<{ structuredContent: unknown }> {
   if (!context.authenticated) throw new Error("MCP_AUTHENTICATION_REQUIRED");
-  const requiredScopes: Record<PayFlowMcpToolName, string> = {
-    check_financial_authority: "authority:read",
-    request_authorized_action: "action:request",
-    verify_authority: "verify:read",
-    verify_financial_proof: "proof:read",
-    reconcile_financial_action: "reconcile:request",
-  };
+  const requiredScopes = MCP_TOOL_SCOPES;
   if (!requiredScopes[name]) throw new Error("MCP_UNKNOWN_TOOL");
   if (context.scopes && !context.scopes.includes(requiredScopes[name]))
     throw new Error("MCP_SCOPE_DENIED");

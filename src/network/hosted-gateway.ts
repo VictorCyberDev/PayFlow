@@ -54,6 +54,7 @@ import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
 import { createExecutingRestHandler } from "./rest-execution.js";
 import { createMcpHttpHandler } from "../protocols/mcp-http.js";
+import { protectedResourceMetadata } from "../protocols/chatgpt-app.js";
 import { createGatewayMcpServices } from "../protocols/mcp-gateway.js";
 import type { RestRequest, RestResponse } from "./rest.js";
 
@@ -79,6 +80,10 @@ export interface HostedGatewayOptions {
    * over the same Gateway: it uses the caller's own Gateway credential and the same single decision path.
    */
   readonly mcpResource?: string;
+  /** Issuers of OAuth authorization servers for MCP clients. Empty until one is commissioned; never invented. */
+  /** "verify-only" removes every tool that can start a payment from the MCP surface. Default "full". */
+  readonly mcpProfile?: "full" | "verify-only";
+  readonly mcpAuthorizationServers?: readonly string[];
   /** One alert webhook. When absent, alerts are persisted and visible but not delivered anywhere. */
   readonly alertWebhookUrl?: string;
   /** Test seam for alert delivery. */
@@ -260,6 +265,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     ? createMcpHttpHandler({
         resource: options.mcpResource,
         audience: GATEWAY_AUDIENCE,
+        resourceMetadataPath: "/v1/oauth-protected-resource",
         allowedOrigins: [],
         authenticate: async (request) => {
           try {
@@ -282,6 +288,9 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
               return portable.issue(access, id, iso());
             },
             publicKeys: publishedKeys,
+            ...(options.mcpProfile === "verify-only"
+              ? { verifyOnly: true }
+              : {}),
           }),
         // The hosted per-credential rate limit above already ran for this request.
         rateLimit: () => Promise.resolve(true),
@@ -1091,6 +1100,21 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         );
         return true;
       }
+    }
+    if (method === "GET" && path === "/v1/oauth-protected-resource" && mcp) {
+      send(res, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "public, max-age=300",
+        },
+        body: protectedResourceMetadata({
+          resource: options.mcpResource as string,
+          authorizationServers: options.mcpAuthorizationServers ?? [],
+          documentation: new URL("/docs/", options.mcpResource).href,
+        }),
+      });
+      return true;
     }
     if (path === "/v1/mcp" && mcp) {
       const headers = new Headers();

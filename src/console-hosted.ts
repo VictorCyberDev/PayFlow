@@ -78,6 +78,8 @@ export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
   cronSecret?: string;
   /** One alert webhook (https). When absent, alerts are persisted but not delivered. Never logged. */
   alertWebhookUrl?: string;
+  /** MCP tool profile: "full" (default) or "verify-only", which never offers a tool that can start a payment. */
+  mcpProfile?: "full" | "verify-only";
   /** Enables self-serve /v1/sandbox/start on a clearly labelled SIMULATED rail. Off by default. */
   publicSandbox?: boolean;
   demoAgent?: z.infer<typeof DemoAgentSchema>;
@@ -123,8 +125,12 @@ export function parseHostedConfig(
     !/^https:\/\/[^\s]+$/u.test(alertWebhookUrl)
   )
     throw new Error("PAYFLOW_ALERT_WEBHOOK_URL_MUST_BE_HTTPS");
+  const profile = env.PAYFLOW_MCP_PROFILE;
+  if (profile !== undefined && profile !== "full" && profile !== "verify-only")
+    throw new Error("PAYFLOW_MCP_PROFILE_INVALID");
   return {
     ...base,
+    ...(profile ? { mcpProfile: profile } : {}),
     ...(adminToken ? { gatewayAdminToken: adminToken } : {}),
     ...(cronSecret ? { cronSecret } : {}),
     ...(alertWebhookUrl ? { alertWebhookUrl } : {}),
@@ -292,6 +298,7 @@ export function createHostedConsole(
         agentId: config.PAYFLOW_M5_AGENT_ID,
         ...(simulated ? { simulated } : {}),
         ...mcpResourceFor(config.PAYFLOW_M5_ORIGIN),
+        ...(config.mcpProfile ? { mcpProfile: config.mcpProfile } : {}),
         organizationId: "payflow-sandbox",
         ...(config.gatewayAdminToken
           ? { adminToken: config.gatewayAdminToken }

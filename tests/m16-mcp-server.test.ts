@@ -164,7 +164,7 @@ describe("M16 MCP server (JSON-RPC handler)", () => {
     )) as { error: { code: number } };
     expect(unknownTool.error.code).toBe(-32602);
     const unknownMethod = (await handleMcpMessage(
-      { jsonrpc: "2.0", id: 4, method: "resources/list" },
+      { jsonrpc: "2.0", id: 4, method: "prompts/list" },
       { services, authenticated: true },
     )) as { error: { code: number } };
     expect(unknownMethod.error.code).toBe(-32601);

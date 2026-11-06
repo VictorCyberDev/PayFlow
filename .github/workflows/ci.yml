@@ -143,6 +143,11 @@ jobs:
         run: node scripts/a11y-acceptance.mjs
         working-directory: .
 
+      # M17: renders the real ChatGPT/MCP Apps result card in Chromium (outcome wording, injection, overflow, axe).
+      - name: ChatGPT result card acceptance
+        run: node --import tsx scripts/chatgpt-widget-check.mjs
+        working-directory: .
+
       # Offline and secret-free: derives the environment contract from the code, validates vercel.json and the
       # static export (ten public routes, canonical origin). Fails if the owner checklist could drift from the code.
       - name: Public deployment readiness
