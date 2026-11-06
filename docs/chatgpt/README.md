@@ -61,3 +61,14 @@ reviewers for a fully featured demo account. PayFlow's payment tool executes pay
 The tools take: an Authority id, an agent id, an amount, a merchant id and a nonce, or a signed Proof. They do not
 take conversation history, location, card numbers, passwords or API keys. Responses omit secrets by construction
 (`assertSafeOutput`). Requests are logged with a request id and the credential's client id.
+
+## How to reproduce the local checks
+
+```bash
+npm run build --if-present
+npx vitest run tests/m17-chatgpt-app.test.ts tests/m16-mcp-gateway.integration.test.ts   # needs TEST_DATABASE_URL
+PLAYWRIGHT_CHROMIUM=/path/to/chromium node --import tsx scripts/chatgpt-widget-check.mjs  # result-card acceptance
+```
+
+The result-card check fails if an UNKNOWN outcome is rendered as `$0` or if tool output is inserted as markup; both
+were confirmed by deliberately introducing those faults.
