@@ -52,6 +52,7 @@ import { enforceRateLimit } from "./reliability.js";
 import { PostgresNetworkStore } from "./postgres-adapters.js";
 import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
+import { verifyProofRequest } from "./hosted-verify.js";
 import { createExecutingRestHandler } from "./rest-execution.js";
 import { createMcpHttpHandler } from "../protocols/mcp-http.js";
 import { protectedResourceMetadata } from "../protocols/chatgpt-app.js";
@@ -1187,6 +1188,73 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       );
       res.writeHead(reply.status, Object.fromEntries(reply.headers.entries()));
       res.end(Buffer.from(await reply.arrayBuffer()));
+      return true;
+    }
+    if (method === "POST" && path === "/v1/verify/proofs") {
+      // Public and read-only, so it is rate limited per address AND globally, and it fails closed: no working limiter
+      // means no anonymous verification, never unmetered verification.
+      const ip =
+        String(req.headers["x-forwarded-for"] ?? "")
+          .split(",")[0]
+          ?.trim() || "unknown";
+      let limited = false;
+      try {
+        const perIp = await enforceRateLimit(limiter, {
+          bucket: "verify-proofs",
+          subject: ip,
+          limit: 30,
+          windowSeconds: 60,
+          now: iso(),
+        });
+        const global = await enforceRateLimit(limiter, {
+          bucket: "verify-proofs-all",
+          subject: "all",
+          limit: 1200,
+          windowSeconds: 60,
+          now: iso(),
+        });
+        limited = !perIp.allowed || !global.allowed;
+      } catch {
+        send(res, {
+          status: 503,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "no-store",
+            "retry-after": "30",
+          },
+          body: { reason: "VERIFY_TEMPORARILY_UNAVAILABLE" },
+        });
+        return true;
+      }
+      if (limited) {
+        send(res, {
+          status: 429,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "no-store",
+            "retry-after": "60",
+          },
+          body: {
+            reason: "VERIFY_RATE_LIMITED",
+            humanSummary:
+              "Too many verifications from here. Nothing was checked. Try again in a minute.",
+          },
+        });
+        return true;
+      }
+      const reply = await verifyProofRequest(body, {
+        issuer: options.organizationId,
+        keys: publishedKeys,
+        now: iso,
+      });
+      send(res, {
+        status: reply.status,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+        },
+        body: reply.body,
+      });
       return true;
     }
     if (method === "POST" && path === "/v1/sandbox/start") {
