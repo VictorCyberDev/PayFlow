@@ -12,6 +12,8 @@ import type { ProtocolAuthenticator, ProtocolIdentity } from "./http-auth.js";
 export const SUPPORTED_MCP_VERSIONS = MCP_SUPPORTED_VERSIONS;
 export interface McpHttpOptions {
   readonly resource: string;
+  /** Audience a credential must carry. Defaults to `resource` (OAuth); the Gateway's own credentials use its fixed audience. */
+  readonly audience?: string;
   readonly allowedOrigins: readonly string[];
   readonly authenticate: ProtocolAuthenticator;
   /** Must construct services bound to this verified tenant/agent. Never use arguments as identity. */
@@ -94,7 +96,10 @@ export function createMcpHttpHandler(options: McpHttpOptions) {
     } catch {
       identity = null;
     }
-    if (!identity || identity.access.audience !== options.resource)
+    if (
+      !identity ||
+      identity.access.audience !== (options.audience ?? options.resource)
+    )
       return json({ error: "AUTHENTICATION_REQUIRED" }, 401, {
         "WWW-Authenticate": `Bearer resource_metadata="${resource.origin}/.well-known/oauth-protected-resource"`,
       });
@@ -167,6 +172,16 @@ export function createMcpHttpHandler(options: McpHttpOptions) {
         );
     } else {
       const header = request.headers.get("MCP-Protocol-Version");
+      // The modern header must be matched by the same version in the body's `_meta`.
+      if (header === SUPPORTED_MCP_VERSIONS[0])
+        return json(
+          rpcError(
+            message.id,
+            MCP_ERROR.headerMismatch,
+            "Header mismatch: the body does not carry the same protocol version in _meta",
+          ),
+          400,
+        );
       // A legacy header names a legacy revision we speak (or is absent); anything else is refused, not guessed.
       if (
         header &&

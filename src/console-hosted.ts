@@ -33,6 +33,16 @@ import {
   StoredPayPalPaymentProvider,
 } from "./paypal-vault-bootstrap.js";
 
+/**
+ * `POST /v1/mcp` is the same Gateway behind a protocol adapter. It needs a TLS (or loopback) resource URL, so on any
+ * other origin it is left disabled rather than failing the whole host.
+ */
+function mcpResourceFor(origin: string): { mcpResource?: string } {
+  const url = new URL("/v1/mcp", origin);
+  const loopback = ["127.0.0.1", "localhost"].includes(url.hostname);
+  return url.protocol === "https:" || loopback ? { mcpResource: url.href } : {};
+}
+
 /** Hosted NON-PRODUCTION demo configuration. Every value is operator-supplied privately; none
  * is ever logged, rendered or returned. */
 const HostedConfigSchema = z.object({
@@ -281,6 +291,7 @@ export function createHostedConsole(
         principalId: config.PAYFLOW_M5_PRINCIPAL_ID,
         agentId: config.PAYFLOW_M5_AGENT_ID,
         ...(simulated ? { simulated } : {}),
+        ...mcpResourceFor(config.PAYFLOW_M5_ORIGIN),
         organizationId: "payflow-sandbox",
         ...(config.gatewayAdminToken
           ? { adminToken: config.gatewayAdminToken }

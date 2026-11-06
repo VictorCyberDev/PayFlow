@@ -180,6 +180,7 @@ describe("HTTP MCP security and actual clients", () => {
         )
       ).status,
     ).toBe(400);
+    // A modern header with a body that does not repeat the version in _meta is a header mismatch.
     expect(
       (
         await make()(
@@ -187,6 +188,24 @@ describe("HTTP MCP security and actual clients", () => {
             "MCP-Protocol-Version": "2026-07-28",
             "Mcp-Method": "tools/list",
           }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await make()(
+          req(
+            rpc("tools/list", {
+              _meta: {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientCapabilities": {},
+              },
+            }),
+            {
+              "MCP-Protocol-Version": "2026-07-28",
+              "Mcp-Method": "tools/list",
+            },
+          ),
         )
       ).status,
     ).toBe(200);
