@@ -206,6 +206,10 @@ export async function invokePayFlowMcpTool(
   if (!context.authenticated) throw new Error("MCP_AUTHENTICATION_REQUIRED");
   const requiredScopes = MCP_TOOL_SCOPES;
   if (!requiredScopes[name]) throw new Error("MCP_UNKNOWN_TOOL");
+  // The one choke point every protocol adapter (MCP, A2A, ...) goes through: a tool this surface does not offer
+  // cannot be called by naming it, whatever the transport lists.
+  if (services.supports && !services.supports.has(name))
+    throw new Error("MCP_UNKNOWN_TOOL");
   if (context.scopes && !context.scopes.includes(requiredScopes[name]))
     throw new Error("MCP_SCOPE_DENIED");
   const descriptor = PAYFLOW_MCP_TOOLS.find((t) => t.name === name)!;

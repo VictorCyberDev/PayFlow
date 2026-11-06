@@ -319,6 +319,39 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       expect(provider.captureCalls).toBe(1);
     });
 
+    it("the verify-only profile removes the payment tool from A2A too, with or without a delegation", async () => {
+      await host?.close();
+      host = createHostedConsole(
+        parseHostedConfig({
+          PAYFLOW_M5_DEMO: "true",
+          DATABASE_URL: url,
+          PAYFLOW_M5_PRINCIPAL_ID: "p",
+          PAYFLOW_M5_AGENT_ID: "a",
+          PAYFLOW_M5_BOOTSTRAP_KEY: bootstrap,
+          PAYFLOW_M5_ORIGIN: "http://127.0.0.1",
+          PAYFLOW_M6_DEMO_AGENT: "true",
+          PAYFLOW_M6_SIGNING_KEY: pem,
+          PAYFLOW_GATEWAY_ADMIN_TOKEN: adminToken,
+          PAYFLOW_MCP_PROFILE: "verify-only",
+        }),
+        { clock, paymentProvider: provider },
+      );
+      registry = new PostgresDelegationRegistry(repo.sql);
+      const s = await sandbox();
+      const c = await chain(10_000, 10_000);
+      const plain = await send(s.token, { action: action(s.authority) });
+      expect(plain.status).toBe(403);
+      const delegated = await send(
+        s.token,
+        { action: action(s.authority) },
+        { delegationId: c.leaf },
+      );
+      expect(delegated.status).toBe(403);
+      expect(provider.createCalls + provider.captureCalls).toBe(0);
+      // A refused tool call is not a payment: the delegated attempt gave its budget back.
+      expect(await registry.remaining(c.root)).toBe(10_000);
+    });
+
     it("a delegation cannot be borrowed: another agent's credential, a made-up id and an inline scope all fail closed", async () => {
       registry = new PostgresDelegationRegistry(repo.sql);
       const s = await sandbox();
