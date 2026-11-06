@@ -24,6 +24,8 @@ export interface GatewayMcpDependencies {
     access: ExternalAgentAccess,
     proposalId: string,
   ) => Promise<object | "NOT_ISSUABLE" | null>;
+  /** Offer only tools that cannot start a payment. The payment tool is then absent, not merely refused. */
+  readonly verifyOnly?: boolean;
   /** Public verification keys (public by design). */
   readonly publicKeys?: () => object | Promise<object>;
 }
@@ -43,7 +45,7 @@ export function createGatewayMcpServices(
   deps: GatewayMcpDependencies,
 ): McpAuthorityServices {
   const supports = new Set<PayFlowMcpToolName>([
-    "request_authorized_action",
+    ...(deps.verifyOnly ? [] : (["request_authorized_action"] as const)),
     ...(deps.publicKeys ? (["verify_financial_proof"] as const) : []),
   ]);
   const unsupported = () =>

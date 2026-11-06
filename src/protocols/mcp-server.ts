@@ -1,4 +1,10 @@
 import {
+  DECISION_WIDGET_HTML,
+  DECISION_WIDGET_URI,
+  MCP_APP_MIME,
+  toolPresentation,
+} from "./chatgpt-app.js";
+import {
   MCP_LEGACY_VERSIONS,
   MCP_PROTOCOL_VERSION,
   MCP_SUPPORTED_VERSIONS,
@@ -184,7 +190,10 @@ export async function handleMcpMessage(
       : MCP_LEGACY_VERSIONS[0];
     return success(id, "legacy", {
       protocolVersion: negotiated,
-      capabilities: { tools: { listChanged: false } },
+      capabilities: {
+        tools: { listChanged: false },
+        resources: { listChanged: false },
+      },
       serverInfo: SERVER_INFO,
       instructions: PAYFLOW_MCP_SERVER_INFO.instructions,
     });
@@ -226,7 +235,10 @@ export async function handleMcpMessage(
     case "server/discover":
       return success(id, "modern", {
         supportedVersions: [...MCP_SUPPORTED_VERSIONS],
-        capabilities: { tools: { listChanged: false } },
+        capabilities: {
+          tools: { listChanged: false },
+          resources: { listChanged: false },
+        },
         serverInfo: SERVER_INFO,
         instructions: PAYFLOW_MCP_SERVER_INFO.instructions,
       });
@@ -236,6 +248,7 @@ export async function handleMcpMessage(
       return success(id, era, {
         tools: visibleTools(options.services).map((tool) => ({
           name: tool.name,
+          ...toolPresentation(tool.name),
           description: tool.description,
           inputSchema: tool.inputSchema,
           annotations: tool.annotations,
@@ -243,6 +256,32 @@ export async function handleMcpMessage(
         // The set varies with the caller's authorization, so it is never shared between callers.
         ...(era === "modern" ? { ttlMs: 0, cacheScope: "private" } : {}),
       });
+    case "resources/list":
+      return success(id, era, {
+        resources: [
+          {
+            uri: DECISION_WIDGET_URI,
+            name: "payflow-decision",
+            title: "PayFlow Authority result card",
+            mimeType: MCP_APP_MIME,
+          },
+        ],
+        ...(era === "modern" ? { ttlMs: 0, cacheScope: "public" } : {}),
+      });
+    case "resources/read": {
+      if (params?.uri !== DECISION_WIDGET_URI)
+        return rpcError(id, MCP_ERROR.invalidParams, "Unknown resource");
+      return success(id, era, {
+        contents: [
+          {
+            uri: DECISION_WIDGET_URI,
+            mimeType: MCP_APP_MIME,
+            text: DECISION_WIDGET_HTML,
+            _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] } } },
+          },
+        ],
+      });
+    }
     case "tools/call": {
       const visible = new Set<string>(
         visibleTools(options.services).map((tool) => tool.name),

@@ -319,10 +319,10 @@ describe("M16 official MCP SDK client over Streamable HTTP", () => {
         {
           jsonrpc: "2.0",
           id: 8,
-          method: "resources/list",
+          method: "prompts/list",
           params: { _meta: meta() },
         },
-        modernHeaders("resources/list"),
+        modernHeaders("prompts/list"),
       );
       expect(missing.status).toBe(404);
       const unknown = await post(

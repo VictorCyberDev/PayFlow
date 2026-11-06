@@ -14,6 +14,8 @@ export interface McpHttpOptions {
   readonly resource: string;
   /** Audience a credential must carry. Defaults to `resource` (OAuth); the Gateway's own credentials use its fixed audience. */
   readonly audience?: string;
+  /** Where the RFC 9728 metadata for this resource is served (path on the resource origin). */
+  readonly resourceMetadataPath?: string;
   readonly allowedOrigins: readonly string[];
   readonly authenticate: ProtocolAuthenticator;
   /** Must construct services bound to this verified tenant/agent. Never use arguments as identity. */
@@ -101,7 +103,7 @@ export function createMcpHttpHandler(options: McpHttpOptions) {
       identity.access.audience !== (options.audience ?? options.resource)
     )
       return json({ error: "AUTHENTICATION_REQUIRED" }, 401, {
-        "WWW-Authenticate": `Bearer resource_metadata="${resource.origin}/.well-known/oauth-protected-resource"`,
+        "WWW-Authenticate": `Bearer resource_metadata="${resource.origin}${options.resourceMetadataPath ?? "/.well-known/oauth-protected-resource"}"`,
       });
     if (request.method !== "POST")
       return json({ error: "METHOD_NOT_ALLOWED" }, 405, { Allow: "POST" });
