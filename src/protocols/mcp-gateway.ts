@@ -57,6 +57,9 @@ export function createGatewayMcpServices(
     verifyAuthority: unsupported,
     reconcileFinancialAction: unsupported,
     requestAuthorizedAction: async (args) => {
+      // Defence in depth: the verify-only profile must never reach the payment path even if a caller bypasses
+      // the tool filter.
+      if (deps.verifyOnly) throw new McpToolError("MCP_TOOL_NOT_SUPPORTED", {});
       try {
         const response = await deps.gateway.requestPurchase(
           deps.access,
