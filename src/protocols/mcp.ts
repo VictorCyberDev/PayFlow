@@ -1,4 +1,31 @@
+/** Newest revision: stateless, every request declares its version in `_meta`, `server/discover` is mandatory. */
 export const MCP_PROTOCOL_VERSION = "2026-07-28" as const;
+/** Revisions that use the `initialize` handshake. The newest published official SDK speaks only these. */
+export const MCP_LEGACY_VERSIONS = [
+  "2025-11-25",
+  "2025-06-18",
+  "2025-03-26",
+] as const;
+/** Every revision this server answers, newest first. */
+export const MCP_SUPPORTED_VERSIONS = [
+  MCP_PROTOCOL_VERSION,
+  ...MCP_LEGACY_VERSIONS,
+] as const;
+
+/**
+ * A tool failure that carries structured, model-correctable detail (decision, effectCount, reason, nextAction)
+ * instead of a bare code. It is still a tool RESULT with isError, never a protocol error. `structured` must never
+ * contain a secret; it passes the same output filter as a success.
+ */
+export class McpToolError extends Error {
+  constructor(
+    readonly code: string,
+    readonly structured: Readonly<Record<string, unknown>>,
+  ) {
+    super(code);
+    this.name = "McpToolError";
+  }
+}
 
 export type PayFlowMcpToolName =
   | "check_financial_authority"
@@ -13,8 +40,10 @@ export interface PayFlowMcpToolDescriptor {
   readonly inputSchema: Readonly<Record<string, unknown>>;
   readonly annotations: {
     readonly readOnlyHint: boolean;
-    readonly destructiveHint: false;
-    readonly openWorldHint: false;
+    /** True when the tool can cause an irreversible effect (it can move money). Clients use this to ask a human. */
+    readonly destructiveHint: boolean;
+    /** True when the tool reaches outside PayFlow (a payment provider). */
+    readonly openWorldHint: boolean;
   };
 }
 
@@ -53,8 +82,9 @@ export const PAYFLOW_MCP_TOOLS: readonly PayFlowMcpToolDescriptor[] = [
     inputSchema: objectSchema({ action: { type: "object" } }, ["action"]),
     annotations: {
       readOnlyHint: false,
-      destructiveHint: false,
-      openWorldHint: false,
+      // On a surface backed by a payment rail this can move money, once, irreversibly.
+      destructiveHint: true,
+      openWorldHint: true,
     },
   },
   {
@@ -94,7 +124,8 @@ export const PAYFLOW_MCP_TOOLS: readonly PayFlowMcpToolDescriptor[] = [
       "attemptId",
     ]),
     annotations: {
-      readOnlyHint: false,
+      // Observation only: it reads provider truth and never creates, captures or resubmits.
+      readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: false,
     },
@@ -109,6 +140,11 @@ export interface McpInvocationContext {
 }
 
 export interface McpAuthorityServices {
+  /**
+   * The tools this surface really implements. `tools/list` shows only these and a call to any other is "Unknown
+   * tool", so a client never sees a tool that can only fail. Absent means all five (the sandbox).
+   */
+  readonly supports?: ReadonlySet<PayFlowMcpToolName>;
   checkFinancialAuthority(
     args: unknown,
     context: McpInvocationContext,
@@ -134,7 +170,7 @@ export interface McpAuthorityServices {
 const forbiddenOutputKey =
   /(?:secret|password|private[_-]?key|access[_-]?token|payment[_-]?credential)/iu;
 
-function assertSafeOutput(value: unknown, path = "result"): void {
+export function assertSafeOutput(value: unknown, path = "result"): void {
   if (Array.isArray(value)) {
     value.forEach((entry, index) =>
       assertSafeOutput(entry, `${path}[${index}]`),

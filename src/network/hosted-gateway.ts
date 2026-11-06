@@ -32,6 +32,7 @@ import {
 } from "./unknown-reconciler.js";
 import { CredentialStore } from "./credentials.js";
 import { ExecutingGateway } from "./gateway-execution.js";
+import { GATEWAY_AUDIENCE } from "./gateway.js";
 import { DurableAuthorizationService } from "../durable-service.js";
 import {
   agentInventory,
@@ -52,6 +53,8 @@ import { PostgresNetworkStore } from "./postgres-adapters.js";
 import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
 import { createExecutingRestHandler } from "./rest-execution.js";
+import { createMcpHttpHandler } from "../protocols/mcp-http.js";
+import { createGatewayMcpServices } from "../protocols/mcp-gateway.js";
 import type { RestRequest, RestResponse } from "./rest.js";
 
 export interface HostedGatewayOptions {
@@ -71,6 +74,11 @@ export interface HostedGatewayOptions {
    * observation-only `GET /v1/admin/ops/reconcile/tick`, and nothing else. It is not an operator token.
    */
   readonly cronSecret?: string;
+  /**
+   * Public https URL of `POST /v1/mcp`. When absent the MCP endpoint is disabled (404). MCP is a protocol adapter
+   * over the same Gateway: it uses the caller's own Gateway credential and the same single decision path.
+   */
+  readonly mcpResource?: string;
   /** One alert webhook. When absent, alerts are persisted and visible but not delivered anywhere. */
   readonly alertWebhookUrl?: string;
   /** Test seam for alert delivery. */
@@ -241,6 +249,44 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     authenticate: (authorization) => store.authenticate(authorization, iso()),
     readProof: (access, id) => proofs.read(access, id, iso()),
   });
+  const publishedKeys = async () => {
+    await ensureKeys();
+    return {
+      issuer: options.organizationId,
+      keys: await registry.published(options.organizationId),
+    };
+  };
+  const mcp = options.mcpResource
+    ? createMcpHttpHandler({
+        resource: options.mcpResource,
+        audience: GATEWAY_AUDIENCE,
+        allowedOrigins: [],
+        authenticate: async (request) => {
+          try {
+            const access = await store.authenticate(
+              request.headers.get("authorization") ?? undefined,
+              iso(),
+            );
+            return { subject: access.clientId, scopes: access.scopes, access };
+          } catch {
+            return null;
+          }
+        },
+        servicesFor: (identity) =>
+          createGatewayMcpServices({
+            gateway,
+            access: identity.access,
+            now: iso,
+            issuePortableProof: async (access, id) => {
+              await ensureKeys();
+              return portable.issue(access, id, iso());
+            },
+            publicKeys: publishedKeys,
+          }),
+        // The hosted per-credential rate limit above already ran for this request.
+        rateLimit: () => Promise.resolve(true),
+      })
+    : undefined;
   const authenticateAdmin = options.adminToken
     ? staticAdminAuthenticator({
         token: options.adminToken,
@@ -1045,6 +1091,21 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         );
         return true;
       }
+    }
+    if (path === "/v1/mcp" && mcp) {
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(req.headers))
+        if (typeof value === "string") headers.set(name, value);
+      const reply = await mcp(
+        new Request(`${options.mcpResource}`, {
+          method,
+          headers,
+          ...(method === "POST" ? { body: JSON.stringify(body ?? null) } : {}),
+        }),
+      );
+      res.writeHead(reply.status, Object.fromEntries(reply.headers.entries()));
+      res.end(Buffer.from(await reply.arrayBuffer()));
+      return true;
     }
     if (method === "POST" && path === "/v1/sandbox/start") {
       if (!options.simulated) {

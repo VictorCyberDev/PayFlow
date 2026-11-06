@@ -1,15 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { handleMcpMessage } from "./mcp-server.js";
-import type { McpAuthorityServices } from "./mcp.js";
+import {
+  MCP_ERROR,
+  classifyMcpMessage,
+  handleMcpMessage,
+  mcpHttpStatus,
+  rpcError,
+} from "./mcp-server.js";
+import { MCP_SUPPORTED_VERSIONS, type McpAuthorityServices } from "./mcp.js";
 import type { ProtocolAuthenticator, ProtocolIdentity } from "./http-auth.js";
 
-export const SUPPORTED_MCP_VERSIONS = [
-  "2026-07-28",
-  "2025-11-25",
-  "2025-03-26",
-] as const;
+export const SUPPORTED_MCP_VERSIONS = MCP_SUPPORTED_VERSIONS;
 export interface McpHttpOptions {
   readonly resource: string;
+  /** Audience a credential must carry. Defaults to `resource` (OAuth); the Gateway's own credentials use its fixed audience. */
+  readonly audience?: string;
   readonly allowedOrigins: readonly string[];
   readonly authenticate: ProtocolAuthenticator;
   /** Must construct services bound to this verified tenant/agent. Never use arguments as identity. */
@@ -61,6 +65,12 @@ export async function readBoundedJson(
   }
 }
 
+/** `Mcp-Name` may be sent as `=?base64?<value>?=` when it is not header-safe. */
+function decodeMcpName(value: string | null): string | null {
+  const match = value?.match(/^=\?base64\?([A-Za-z0-9+/=]*)\?=$/);
+  return match ? Buffer.from(match[1] ?? "", "base64").toString("utf8") : value;
+}
+
 export function createMcpHttpHandler(options: McpHttpOptions) {
   const resource = new URL(options.resource);
   if (
@@ -86,7 +96,10 @@ export function createMcpHttpHandler(options: McpHttpOptions) {
     } catch {
       identity = null;
     }
-    if (!identity || identity.access.audience !== options.resource)
+    if (
+      !identity ||
+      identity.access.audience !== (options.audience ?? options.resource)
+    )
       return json({ error: "AUTHENTICATION_REQUIRED" }, 401, {
         "WWW-Authenticate": `Bearer resource_metadata="${resource.origin}/.well-known/oauth-protected-resource"`,
       });
@@ -117,36 +130,76 @@ export function createMcpHttpHandler(options: McpHttpOptions) {
           : 400,
       );
     }
-    const message = body as {
+    const message = (body !== null && typeof body === "object" ? body : {}) as {
+      id?: unknown;
       method?: unknown;
-      params?: { protocolVersion?: unknown };
-    } | null;
-    const requested =
-      message?.method === "initialize"
-        ? message.params?.protocolVersion
-        : request.headers.get("MCP-Protocol-Version");
-    const version =
-      typeof requested === "string" &&
-      (SUPPORTED_MCP_VERSIONS as readonly string[]).includes(requested)
-        ? requested
-        : message?.method === "initialize"
-          ? "2026-07-28"
-          : null;
-    if (
-      version === "2026-07-28" &&
-      message?.method !== "initialize" &&
-      typeof message?.method === "string" &&
-      !message.method.startsWith("notifications/")
-    ) {
-      const named = message as { method: string; params?: { name?: unknown } };
+      params?: { name?: unknown };
+    };
+    const { era, version } = classifyMcpMessage(body);
+    if (era === "modern") {
+      // 2026-07-28: every POST repeats the version and method in headers, and they must agree with the body.
+      const fail = (
+        code: number,
+        text: string,
+        data?: Record<string, unknown>,
+      ) => json(rpcError(message.id, code, text, data), 400);
+      if (version !== SUPPORTED_MCP_VERSIONS[0])
+        return fail(
+          MCP_ERROR.unsupportedProtocolVersion,
+          "Unsupported protocol version",
+          {
+            supported: [...SUPPORTED_MCP_VERSIONS],
+            requested: version,
+          },
+        );
+      if (request.headers.get("MCP-Protocol-Version") !== version)
+        return fail(
+          MCP_ERROR.headerMismatch,
+          "Header mismatch: MCP-Protocol-Version is missing or does not match the request body",
+        );
+      if (request.headers.get("Mcp-Method") !== message.method)
+        return fail(
+          MCP_ERROR.headerMismatch,
+          "Header mismatch: Mcp-Method is missing or does not match the request body",
+        );
       if (
-        request.headers.get("Mcp-Method") !== named.method ||
-        (named.method === "tools/call" &&
-          request.headers.get("Mcp-Name") !== named.params?.name)
+        message.method === "tools/call" &&
+        decodeMcpName(request.headers.get("Mcp-Name")) !== message.params?.name
       )
-        return json({ error: "MCP_METADATA_HEADER_MISMATCH" }, 400);
+        return fail(
+          MCP_ERROR.headerMismatch,
+          "Header mismatch: Mcp-Name is missing or does not match the request body",
+        );
+    } else {
+      const header = request.headers.get("MCP-Protocol-Version");
+      // The modern header must be matched by the same version in the body's `_meta`.
+      if (header === SUPPORTED_MCP_VERSIONS[0])
+        return json(
+          rpcError(
+            message.id,
+            MCP_ERROR.headerMismatch,
+            "Header mismatch: the body does not carry the same protocol version in _meta",
+          ),
+          400,
+        );
+      // A legacy header names a legacy revision we speak (or is absent); anything else is refused, not guessed.
+      if (
+        header &&
+        !(SUPPORTED_MCP_VERSIONS as readonly string[]).includes(header)
+      )
+        return json(
+          rpcError(
+            message.id,
+            MCP_ERROR.unsupportedProtocolVersion,
+            "Unsupported protocol version",
+            {
+              supported: [...SUPPORTED_MCP_VERSIONS],
+              requested: header,
+            },
+          ),
+          400,
+        );
     }
-    if (!version) return json({ error: "MCP_VERSION_UNSUPPORTED" }, 400);
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const result = await Promise.race([
@@ -156,7 +209,6 @@ export function createMcpHttpHandler(options: McpHttpOptions) {
           scopes: identity.scopes,
           subject: identity.subject,
           requestId,
-          protocolVersion: version,
         }),
         new Promise<never>((_, reject) => {
           timer = setTimeout(
@@ -167,7 +219,7 @@ export function createMcpHttpHandler(options: McpHttpOptions) {
       ]);
       return result === null
         ? new Response(null, { status: 202, headers })
-        : json(result);
+        : json(result, mcpHttpStatus(result, era));
     } catch {
       // A timed-out mutation may still finish. Never retry it here or claim $0 moved.
       return json(
