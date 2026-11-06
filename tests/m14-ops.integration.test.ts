@@ -9,6 +9,7 @@ import {
   it,
 } from "vitest";
 import { createPrivateKey, generateKeyPairSync } from "node:crypto";
+import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { readFile, readdir } from "node:fs/promises";
@@ -1201,6 +1202,54 @@ const at = (offsetSeconds: number) =>
         } finally {
           await ro.end();
         }
+      });
+
+      it("the runtime-role validator passes the runtime login, fails the read-only login and a superuser, and never prints the connection string", async () => {
+        await roles();
+        const runIt = (login: string, password: string, expected: string) =>
+          new Promise<{ code: number | null; out: string }>((done) => {
+            const u = new URL(url!);
+            u.username = login;
+            u.password = password;
+            const child = spawn(
+              process.execPath,
+              ["scripts/verify-runtime-role.mjs"],
+              {
+                stdio: ["ignore", "pipe", "pipe"],
+                env: {
+                  ...process.env,
+                  DATABASE_URL: u.toString(),
+                  EXPECTED_ROLE: expected,
+                },
+              },
+            );
+            let out = "";
+            child.stdout.on("data", (d: Buffer) => (out += d.toString()));
+            child.stderr.on("data", (d: Buffer) => (out += d.toString()));
+            child.on("close", (code) => done({ code, out }));
+          });
+        const good = await runIt("t_runtime", "pw_t_runtime", "t_runtime");
+        expect(good.out).toContain("RUNTIME ROLE VERIFIED");
+        expect(good.code).toBe(0);
+        expect(good.out.match(/^PASS/gmu)!.length).toBeGreaterThanOrEqual(18);
+        const readOnly = await runIt(
+          "t_readonly",
+          "pw_t_readonly",
+          "t_readonly",
+        );
+        expect(readOnly.out).toContain("RUNTIME ROLE NOT VERIFIED");
+        expect(readOnly.code).toBe(1);
+        const admin = new URL(url!);
+        const superuser = await runIt(
+          decodeURIComponent(admin.username),
+          decodeURIComponent(admin.password),
+          decodeURIComponent(admin.username),
+        );
+        expect(superuser.out).toContain("RUNTIME ROLE NOT VERIFIED");
+        expect(superuser.out).toMatch(/FAIL {2}not superuser/u);
+        // Nothing sensitive is ever printed.
+        for (const text of [good.out, readOnly.out, superuser.out])
+          expect(text).not.toMatch(/postgres:\/\/|pw_t_|payflow_test/u);
       });
 
       it("the migrator can change schema; the app cannot, and the whole hosted gateway runs on the runtime role alone", async () => {

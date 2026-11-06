@@ -30,7 +30,7 @@ needs no wallet. Real organisations can never reach the simulated provider.
 - **Isolated database created:** Neon project `withered-rice-68056451` (branch `br-steep-glade-bdsyx5v5`, PostgreSQL 17), separate from the accepted
   evidence project. Migrations `001`–`023` and the three NOLOGIN roles are applied; its schema fingerprint equals the accepted database's. It holds no data.
 - **Public Vercel project created, empty:** `payflow-public` (`prj_BDxFuhwF0AcvRJaGWehd3eZSIYWm`), root `hosting/m6`, Node 22, **no Git connection** (nothing deploys by itself), **no deployment**,
-  Vercel Authentication off (nothing is reachable because nothing is deployed). Non-secret variables already set (Production and Preview): `PAYFLOW_M5_DEMO`, `PAYFLOW_M6_DEMO_AGENT`,
+  Vercel Authentication off (nothing is reachable because nothing is deployed). Non-secret variables already set (Production only, Sensitive): `PAYFLOW_M5_DEMO`, `PAYFLOW_M6_DEMO_AGENT`,
   `PAYFLOW_PUBLIC_SANDBOX`, `PAYFLOW_M5_PRINCIPAL_ID=public-sandbox-owner`, `PAYFLOW_M5_AGENT_ID=public-sandbox-agent`, `PAYFLOW_M6_SIGNING_KID=public-2026-11`, `PAYFLOW_M5_ORIGIN=https://payflow-public.vercel.app`
   (correct that last value if the real origin differs). No PayPal variable exists on it.
 - **Evidence environment protected:** Vercel Authentication was found OFF on `payflow-m6-acceptance` and is now ON for that whole project.
@@ -43,27 +43,18 @@ needs no wallet. Real organisations can never reach the simulated provider.
 - **Sandbox principal provisioned:** one principal, one agent passport (valid to 2027-02-01), one activation policy. No accepted history was copied.
 - **Scheduler, alert channel, canonical URL, acceptance scripts:** merged in this pass. `CRON_SECRET` can call only `GET /v1/admin/ops/reconcile/tick`; `PAYFLOW_ALERT_WEBHOOK_URL` delivers P0/P1/P2 alerts;
   `POST /v1/admin/ops/alerts/test` proves the channel with a labelled synthetic alert. `/developers` redirects to `/docs/`.
-- **A mistake to fix:** to make a login I called Neon's role API, which returned a generated password into this session and gave that role `neon_superuser`. I could not alter or drop it
-  (the owner is refused), so I made it harmless by revoking its `CONNECT`; it cannot open a session on the application database. **Delete the role `svc_public_app` in the Neon console.**
+- **A mistake, and why my first mitigation was not enough:** to make a login I called Neon's role API, which returned a generated password into a session and gave that role
+  `neon_superuser`, CREATEDB, CREATEROLE and BYPASSRLS. I revoked its `CONNECT` on the application database; an independent inspection on 2026-11-06 showed it can still connect to the
+  `postgres` and `template1` system databases. It is a privileged, exposed credential and must be **removed**, not contained. The procedure, and the dependency check showing a clean removal, are in
+  `docs/OWNER-ACTIONS.md`. Never create roles through that API again.
 
-## Why I stopped (the one boundary)
+## What remains
 
-Putting a database password, an operator token, a signing key and a scheduler secret into Vercel means those values pass through a tool call in this session. The environment's safety layer refused to let me
-generate and print one, and your standing rule is never to print credentials. I did not work around that. Everything that needs no secret is done.
+Everything left is in **`docs/OWNER-ACTIONS.md`** (removal of the privileged role, the private password for `svc_public_rt`, the Production-only Sensitive Vercel secrets, a security contact, and the word "deploy").
+Deployment, live acceptance and rollback are in **`docs/ops/PUBLIC-DEPLOY-RUNBOOK.md`**. Deployment readiness is checked offline by `scripts/public-readiness.mjs`; the runtime login is checked by `scripts/verify-runtime-role.mjs`,
+which the owner runs with their own `DATABASE_URL` and which prints only pass/fail.
 
-## The minimal owner steps
-
-1. **Neon console → project `payflow-public-sandbox` → Roles → `svc_public_rt` → Reset password.** Copy the connection string for database `neondb`. (Also delete `svc_public_app`.)
-2. **Vercel → project `payflow-public` → Environment Variables** (Production and Preview, tick _Sensitive_):
-   - `DATABASE_URL` = the `svc_public_rt` connection string from step 1;
-   - `PAYFLOW_GATEWAY_ADMIN_TOKEN`, `PAYFLOW_M5_BOOTSTRAP_KEY`, `CRON_SECRET` = three different random strings of 32+ characters (`openssl rand -base64 48 | tr -dc A-Za-z0-9 | cut -c1-48`);
-   - `PAYFLOW_M6_SIGNING_KEY` = a new Ed25519 key (`openssl genpkey -algorithm ed25519`, paste the whole PEM). **Not** the acceptance key;
-   - optional `PAYFLOW_ALERT_WEBHOOK_URL` = an https Slack/Discord/other incoming-webhook URL. Without it, alerts are persisted and visible but not delivered.
-3. **Say "go".** I then deploy `main` once to `payflow-public`, run `scripts/public-acceptance.mjs <url>` and `A11Y_ORIGIN=<url> node scripts/a11y-acceptance.mjs`, exercise the scheduler and the synthetic alert,
-   prove the app is connecting as `svc_public_rt`, record the result, and flip Gate A.
-4. **A real, monitored security contact address**, which I will place in `SECURITY.md`, `security.txt` and the Security page.
-
-Do not turn Vercel Authentication on for `payflow-public`, and do not touch `payflow-m6-acceptance` (Authentication stays on).
+Secrets are set by the owner in Neon and Vercel. They are not requested in chat and they do not pass through this assistant. An earlier suggestion to let them appear in a session transcript and rotate afterwards was wrong and is withdrawn.
 
 ## Security contact
 
