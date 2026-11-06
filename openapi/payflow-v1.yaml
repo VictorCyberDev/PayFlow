@@ -209,6 +209,46 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PublicKeys" }
+  /v1/verify/proofs:
+    post:
+      operationId: verifyProof
+      summary: Verify a signed PayFlow Proof. Anonymous, read-only, rate limited.
+      description: >-
+        Checks the signature of a portable Proof against the public keys this host publishes and reports what the Proof
+        says, including whether money moved (`effectCount` is null when the outcome is UNKNOWN, never 0). Optional
+        `expect` compares the Proof's signed facts with what the relying party expects and names each mismatch. Only the
+        issuer this host publishes keys for is trusted; any other issuer is `UNKNOWN_ISSUER`. It reads no tenant data
+        and writes nothing. Limited per address and globally; if the limiter is unavailable it answers 503 rather than
+        verifying unmetered. Bodies over 16 KB are refused.
+      x-hosted-only: true
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [proof]
+              properties:
+                proof: { type: object }
+                expect:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    issuer: { type: string }
+                    agentId: { type: string }
+                    authorityId: { type: string }
+                    amountMinor: { type: integer, minimum: 0 }
+                    currency: { type: string, pattern: "^[A-Z]{3}$" }
+                    merchantId: { type: string }
+                maxAgeSeconds: { type: integer, minimum: 60, maximum: 31536000 }
+      responses:
+        "200":
+          description: A verdict. `verified` is false for any Proof that is not authentic or does not match `expect`.
+        "400": { description: The request is malformed; nothing was checked }
+        "429": { description: Rate limited; see Retry-After }
+        "503": { description: Rate limiting is unavailable; retry later }
   /v1/sandbox/start:
     post:
       operationId: startSandbox
