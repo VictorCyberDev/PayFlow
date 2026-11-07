@@ -86,15 +86,18 @@ const chromePath = [
         "missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
     });
     const require_ = createRequire(import.meta.url);
-    const axeSource = readFileSync(
-      require_.resolve("../apps/console/node_modules/axe-core/axe.min.js"),
-      "utf8",
-    );
+    // Loaded in beforeAll, not while the file is collected: the root job has no apps/console/node_modules, and the file must
+    // still load there (its tests skip).
+    let axeSource = "";
     let site: Server;
     let siteOrigin = "";
     let browser: Browser;
 
     beforeAll(async () => {
+      axeSource = readFileSync(
+        require_.resolve("../apps/console/node_modules/axe-core/axe.min.js"),
+        "utf8",
+      );
       site = createServer((req, res) => {
         try {
           const u = new URL(req.url ?? "/", "http://x");
