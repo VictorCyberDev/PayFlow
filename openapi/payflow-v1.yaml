@@ -249,6 +249,114 @@ paths:
         "400": { description: The request is malformed; nothing was checked }
         "429": { description: Rate limited; see Retry-After }
         "503": { description: Rate limiting is unavailable; retry later }
+  /v1/admin/org/authorities/{authorityId}/credentials:
+    post:
+      operationId: issuePortableCredential
+      summary: Issue a portable Authority credential from a STORED Authority. Member API; needs authority:attest.
+      description: >-
+        The server reads the stored Authority (it must belong to the member's tenant and environment, be unrevoked, unexpired,
+        have an enumerable merchant scope and an agent that is not suspended or retired) and signs a credential that says
+        exactly what it allows: the stored agent, principal, currency, merchants and the autonomous per-action limit. The
+        request can only NARROW (a smaller amount, a subset of merchants, an audience list, a shorter lifetime up to 24 h and
+        never beyond the Authority's expiry). Currency, action kind, scope, subject and expiry cannot be supplied; unknown
+        fields are refused. The same `idempotencyKey` and request return the same credential; a different request with that
+        key is 409. Every issuance is written to the organization's audit trail. The response contains only public material.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: authorityId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [holder, idempotencyKey]
+              properties:
+                holder:
+                  type: object
+                  additionalProperties: false
+                  required: [kty, crv, x]
+                  properties:
+                    kty: { const: OKP }
+                    crv: { const: Ed25519 }
+                    x: { type: string }
+                idempotencyKey: { type: string, minLength: 16, maxLength: 128 }
+                audience:
+                  {
+                    type: array,
+                    items: { type: string, format: uri },
+                    minItems: 1,
+                    maxItems: 10,
+                  }
+                counterpartyIds:
+                  { type: array, items: { type: string }, minItems: 1 }
+                maxAmountMinor: { type: integer, minimum: 1 }
+                ttlSeconds: { type: integer, minimum: 60, maximum: 86400 }
+                maxDepth: { type: integer, minimum: 0, maximum: 2 }
+      responses:
+        "201": { description: Issued }
+        "200":
+          { description: Idempotent replay of an earlier identical request }
+        "400":
+          { description: Malformed request or a field that may not be supplied }
+        "403":
+          {
+            description: "Role not allowed, or a refusal such as AMOUNT_ABOVE_AUTHORITY, COUNTERPARTY_NOT_IN_AUTHORITY, AUTHORITY_REVOKED, AUTHORITY_EXPIRED, AGENT_NOT_ACTIVE, AUTHORITY_INTEGRITY_FAILED, MERCHANT_SCOPE_NOT_ENUMERABLE",
+          }
+        "404": { description: No such Authority in this tenant }
+        "409": { description: IDEMPOTENCY_KEY_REUSED }
+        "503": { description: This host has no credential issuer configured }
+    get:
+      operationId: listAuthorityCredentials
+      summary: List credentials issued from one Authority.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: authorityId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          {
+            description: Credentials with status ACTIVE,
+            REVOKED,
+            EXPIRED or AUTHORITY_REVOKED,
+          }
+  /v1/admin/org/credentials/{credentialId}/revoke:
+    post:
+      operationId: revokePortableCredential
+      summary: Withdraw a portable credential. Idempotent; needs authority:attest_revoke.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: credentialId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          {
+            description: Revoked (or already revoked); verifiers learn at their next status-list fetch,
+          }
+        "404": { description: No such credential in this tenant }
+  /v1/issuer/status:
+    get:
+      operationId: issuerStatusList
+      summary: The issuer's signed revocation list. Public.
+      description: >-
+        Lists credentials that were revoked, and credentials whose source Authority was revoked, until they would have
+        expired. Signed by the issuer key published at /v1/keys; valid for 15 minutes. A verifier must authenticate it and
+        treat a missing, forged or stale list as "unknown", not as "not revoked".
+      x-hosted-only: true
+      security: []
+      responses:
+        "200": { description: Signed status list }
   /v1/sandbox/start:
     post:
       operationId: startSandbox
