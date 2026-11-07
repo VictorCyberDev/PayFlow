@@ -113,7 +113,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       owner.reset();
       await truncateTenantData(
         repo.sql,
-        "replay_keys,agent_credentials,organizations,organization_agents,principals,evidence_events,commerce_merchant_bindings",
+        "replay_keys,agent_credentials,organizations,organization_agents,principals,evidence_events,commerce_merchant_bindings,portable_credentials",
       );
       provider = new VerticalProvider();
       provider.payer = false;
