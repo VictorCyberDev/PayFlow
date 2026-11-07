@@ -384,6 +384,16 @@ const asPlan = (status: number, json: Record<string, unknown>): PlanResult =>
           : {}),
       };
 
+// ------------------------------------------------------------------------- sourcing (V3 M35)
+export interface SourcingRunInput {
+  demand: { sku: string; quantity: number }[];
+  quoteIds?: string[];
+  maxSurplusUnits?: number;
+  allowExtras?: boolean;
+  requireQualified?: boolean;
+  idempotencyKey: string;
+}
+
 // ------------------------------------------------------------------------- quotes (V3 M34)
 export type QuoteMoney =
   { basis: "STATED" | "ESTIMATED"; minor: number } | { basis: "UNKNOWN" };
@@ -804,6 +814,25 @@ export class PayFlowAgentMissionClient {
       { idempotencyKey },
     );
     return [r.status, r.json] as const;
+  }
+  /**
+   * Ask which recorded quotes to rely on to cover a demand at the least landed cost (needs COMPARE). A recommendation only:
+   * optimal for the quotes on file and the constraints given, and it commits nothing.
+   */
+  async sourcingRun(missionId: string, input: SourcingRunInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/sourcing/runs`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  async sourcingRuns(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/sourcing/runs`,
+    );
+    return r.json;
   }
   async ledgerView(missionId: string) {
     const r = await this.call(
@@ -1336,6 +1365,41 @@ export class PayFlowMemberClient {
       const r = await this.call(
         "POST",
         `/v1/admin/org/quotes/${encodeURIComponent(quoteId)}/ledger`,
+        { idempotencyKey },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Sourcing runs: recommendations, and a person's adoption of one. */
+  readonly sourcing = {
+    run: async (missionId: string, input: SourcingRunInput) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/sourcing/runs`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/sourcing/runs`,
+      );
+      return r.json;
+    },
+    get: async (runId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/sourcing/runs/${encodeURIComponent(runId)}`,
+      );
+      return r.json;
+    },
+    /** Put the chosen quotes in the budget as QUOTED items. Idempotent; recorded as adopted only when every quote went in. */
+    adopt: async (runId: string, idempotencyKey: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/sourcing/runs/${encodeURIComponent(runId)}/adopt`,
         { idempotencyKey },
       );
       return [r.status, r.json] as const;

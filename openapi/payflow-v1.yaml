@@ -1273,6 +1273,93 @@ paths:
         - { in: path, name: quoteId, required: true, schema: { type: string } }
       responses:
         "201": { description: Created }
+  /v1/admin/org/missions/{missionId}/sourcing/runs:
+    get:
+      operationId: listSourcingRuns
+      summary: Recorded sourcing recommendations for the mission.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Runs }
+    post:
+      operationId: runSourcing
+      summary: Choose the set of whole, usable quotes that covers a demand at the least landed cost. Exhaustive, so optimal for the recorded quotes only. Recommends; commits nothing.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded (OPTIMAL, or INFEASIBLE with reasons) }
+        "422":
+          {
+            description: More eligible quotes than can be searched exhaustively; narrow with quoteIds,
+          }
+  /v1/admin/org/sourcing/runs/{runId}:
+    get:
+      operationId: getSourcingRun
+      summary: One run with its demand, constraints, snapshot of considered quotes and result.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: runId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Run }
+  /v1/admin/org/sourcing/runs/{runId}/adopt:
+    post:
+      operationId: adoptSourcingRun
+      summary: Put the chosen quotes in the budget as QUOTED items (a person's act; idempotent).
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: runId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Items, or the same items on replay }
+        "409":
+          {
+            description: Run has no recommendation,
+            or a chosen quote is no longer usable,
+          }
+  /v1/agent/missions/{missionId}/sourcing/runs:
+    get:
+      operationId: agentSourcingRuns
+      summary: Sourcing runs for the mission (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Runs }
+    post:
+      operationId: agentRunSourcing
+      summary: Ask for a sourcing recommendation (needs COMPARE). An agent cannot adopt one.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem
