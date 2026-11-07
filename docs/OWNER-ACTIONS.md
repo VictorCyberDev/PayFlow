@@ -15,6 +15,23 @@ Live state when this was written (re-verified, not assumed):
 | `svc_public_rt` (runtime login)            | `LOGIN`, not superuser, no CREATEDB/CREATEROLE/BYPASSRLS, member of `payflow_runtime`; **password not set** (login attempt: "required password")             |
 | `svc_public_app` (**privileged, exposed**) | `LOGIN`, `neon_superuser`, CREATEDB, CREATEROLE, BYPASSRLS. Cannot connect to `neondb`; **can still connect to `postgres` and `template1`**. Must be removed |
 
+## 0. What changed since this page was written (2026-11-07)
+
+`main` is now `9c810b1b4ac54cf42a51b1dcdb1648a1a2424394`. Merged and verified locally only (nothing is deployed): portable credential issuance (M22), the
+published issuer directory and status (M24), the tenant delegation API (M18), shared durable merchant stores (M23), and the
+end-to-end developer journey tests. Consequences for the owner:
+
+- **Five more migrations are pending on the public Neon database** (it is still at 023; re-checked read-only today):
+  `024`–`027` and `029` for PayFlow (`028` is the merchant's own database). Apply them with the migrator role, then re-run
+  `db/roles/least-privilege.sql`, **before** the first deploy of this version. See `docs/ops/PUBLIC-DEPLOY-RUNBOOK.md` step 3.
+- **Optional, off by default:** `PAYFLOW_MCP_ANONYMOUS_VERIFY=true` (only with `PAYFLOW_MCP_PROFILE=verify-only`) and
+  `PAYFLOW_OAUTH_ISSUER` + `PAYFLOW_OAUTH_JWKS_URL`. Neither is needed for Gate A. No OAuth provider is chosen
+  (`docs/chatgpt/OAUTH-PROVIDER-EVALUATION.md`), and choosing one is a decision and an account for you.
+- **Issuer signing key:** credentials and the directory are signed by the same key as Proofs. Rotation and revocation steps are
+  in `docs/authority-credential/DIRECTORY.md`. No alert fires on `DIRECTORY_UNAVAILABLE` yet.
+- Items 1–6 below are unchanged and still owner-gated: removing `svc_public_app`, setting the `svc_public_rt` password,
+  supplying the secrets, the security contact, and the word "deploy".
+
 ## 1. Remove the privileged role `svc_public_app` (needs your approval)
 
 Its password appeared in a tool result in an earlier session, so treat it as compromised. Revoking `CONNECT` on `neondb` was a mitigation, not a fix:
