@@ -985,6 +985,33 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** Add a reminder (a renewal, a payment due, or a note with a date). It moves no money; a person closes it. Needs READ. */
+  async addObligation(
+    missionId: string,
+    obligation: {
+      kind?: "CUSTOM" | "RENEWAL" | "PAYMENT_DUE";
+      title: string;
+      dueDate: string;
+      amountMinor?: number;
+      orderId?: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/obligations`,
+      obligation,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Obligations with computed urgency (overdue, due soon, upcoming). Needs READ. */
+  async obligations(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/obligations`,
+    );
+    return [r.status, r.json] as const;
+  }
   /** Open a dispute on your order. The ground must be one the computed fulfillment outcome supports; a person resolves it. */
   async openDispute(
     orderId: string,
@@ -1855,6 +1882,56 @@ export class PayFlowMemberClient {
         `/v1/admin/org/messages/${encodeURIComponent(messageId)}/events`,
       );
       return (r.json.events ?? []) as unknown[];
+    },
+  };
+
+  /** Dates the mission must not forget. Derived dates start from verified facts only. */
+  readonly obligations = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/obligations`,
+      );
+      return r.json;
+    },
+    /** Derive delivery deadline, return window and warranty end from the quote's terms and the verified delivery date. Safe to repeat. */
+    derive: async (orderId: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/orders/${encodeURIComponent(orderId)}/obligations/derive`,
+        {},
+      );
+      return [r.status, r.json] as const;
+    },
+    add: async (
+      missionId: string,
+      obligation: {
+        kind?: "CUSTOM" | "RENEWAL" | "PAYMENT_DUE";
+        title: string;
+        dueDate: string;
+        amountMinor?: number;
+        orderId?: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/obligations`,
+        obligation,
+      );
+      return [r.status, r.json] as const;
+    },
+    resolve: async (
+      obligationId: string,
+      outcome: "DONE" | "WAIVED",
+      note = "",
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/obligations/${encodeURIComponent(obligationId)}/resolve`,
+        { outcome, note },
+      );
+      return [r.status, r.json] as const;
     },
   };
 

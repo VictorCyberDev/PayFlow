@@ -4,11 +4,15 @@ import { activeMission, contract, idemKey } from "./mission-fixtures.js";
 
 /** Shared setup for M41+: an active mission, a qualified supplier, an accepted quote and a purchase order, optionally paid and reconciled. */
 export const TRUNCATE =
-  "missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates,connector_installs,connector_calls,mission_candidates,mission_candidate_marks,mission_suppliers,mission_supplier_facts,mission_qualification_policy,mission_quotes,mission_quote_ledger,mission_sourcing_runs,mission_sourcing_adoptions,mission_negotiations,mission_negotiation_versions,mission_supplier_contacts,mission_messages,mission_message_events,mission_acceptances,mission_escalations,mission_purchase_orders,mission_purchase_reconciliations,mission_orders,mission_order_events,mission_shipments,mission_receipts,mission_disputes,mission_dispute_events";
+  "missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates,connector_installs,connector_calls,mission_candidates,mission_candidate_marks,mission_suppliers,mission_supplier_facts,mission_qualification_policy,mission_quotes,mission_quote_ledger,mission_sourcing_runs,mission_sourcing_adoptions,mission_negotiations,mission_negotiation_versions,mission_supplier_contacts,mission_messages,mission_message_events,mission_acceptances,mission_escalations,mission_purchase_orders,mission_purchase_reconciliations,mission_orders,mission_order_events,mission_shipments,mission_receipts,mission_disputes,mission_dispute_events,mission_obligations";
 
 export async function settledPurchase(
   h: Harness,
-  opts: { pay?: boolean; total?: number } = {},
+  opts: {
+    pay?: boolean;
+    total?: number;
+    terms?: Record<string, number>;
+  } = {},
 ) {
   const total = opts.total ?? 8_400;
   const post = (t: string, p: string, b: unknown = {}) =>
@@ -68,7 +72,7 @@ export async function settledPurchase(
       duties: { basis: "STATED", minor: 0 },
       fees: { basis: "STATED", minor: 0 },
       discount: { basis: "STATED", minor: 0 },
-      terms: {},
+      terms: opts.terms ?? {},
     },
     source: { kind: "SUPPLIER_STATED", ref: "email" },
     idempotencyKey: idemKey("q"),
