@@ -283,12 +283,7 @@ describe("M40 reconciliation classification (pure)", () => {
           };
       const from = pick(stages);
       const { classification, problems } = classify(po(), t);
-      const steps = ledgerSteps(
-        from,
-        classification,
-        t,
-        "prop-1",
-      );
+      const steps = ledgerSteps(from, classification, t, "prop-1");
       let at = from;
       for (const s of steps) {
         expect(canMove(at, s.to), `${at}->${s.to}`).toBe(true);
