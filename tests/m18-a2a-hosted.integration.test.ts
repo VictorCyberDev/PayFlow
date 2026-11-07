@@ -164,16 +164,38 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       nonce: `a2a-deleg-nonce-${String(++seq).padStart(8, "0")}`,
     });
     /** orchestrator → "a" (the credential's agent), with the given caps at each hop. */
-    async function chain(rootCap: number, leafCap: number) {
+    /** The tenant a delegation is bound to is read from the stored Authority's own ownership row. */
+    async function tenantOf(authority: string, n: number) {
+      const [o] = await repo.sql`
+        select organization_id, environment from authority_ownership where mandate_id = ${authority}`;
+      if (!o) throw new Error("authority has no owner");
+      return {
+        organizationId: String(o.organization_id),
+        environment: o.environment as "SANDBOX" | "PRODUCTION",
+        authorityId: authority,
+        createdBy: "test",
+        createdByKind: "MEMBER" as const,
+        idempotencyKey:
+          `m18-test-key-${String(n).padStart(8, "0")}-${authority}`.slice(
+            0,
+            120,
+          ),
+        requestDigest: "d".repeat(64),
+      };
+    }
+    /** orchestrator → "a" (the credential's agent), with the given caps at each hop. */
+    async function chain(rootCap: number, leafCap: number, authority: string) {
       const root = await registry.issueRoot(
         scope("principal", "orchestrator", rootCap),
         NOW,
+        await tenantOf(authority, ++seq),
       );
       if (!root.ok) throw new Error(root.reason);
       const leaf = await registry.delegate(
         root.delegationId,
         scope("orchestrator", "a", leafCap),
         NOW,
+        await tenantOf(authority, ++seq),
       );
       if (!leaf.ok) throw new Error(leaf.reason);
       return { root: root.delegationId, leaf: leaf.delegationId };
@@ -226,7 +248,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
     it("a delegated purchase pays once, charges the whole chain, and the next one is refused by the shared budget", async () => {
       registry = new PostgresDelegationRegistry(repo.sql);
       const s = await sandbox();
-      const c = await chain(10_000, 10_000);
+      const c = await chain(10_000, 10_000, s.authority);
       const first = await send(
         s.token,
         { action: action(s.authority) },
@@ -252,7 +274,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
     it("a known-zero-effect DENY gives the budget back; an UNKNOWN outcome keeps it", async () => {
       registry = new PostgresDelegationRegistry(repo.sql);
       const s = await sandbox();
-      const c = await chain(50_000, 50_000);
+      const c = await chain(50_000, 50_000, s.authority);
       const denied = await send(
         s.token,
         {
@@ -283,7 +305,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
     it("revocation stops the next delegated request before the Gateway or the provider is touched", async () => {
       registry = new PostgresDelegationRegistry(repo.sql);
       const s = await sandbox();
-      const c = await chain(10_000, 10_000);
+      const c = await chain(10_000, 10_000, s.authority);
       await registry.revoke(c.root, "orchestrator compromised", NOW);
       const refused = await send(
         s.token,
@@ -298,7 +320,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
     it("a replayed message id is a 409 and is not charged twice", async () => {
       registry = new PostgresDelegationRegistry(repo.sql);
       const s = await sandbox();
-      const c = await chain(50_000, 50_000);
+      const c = await chain(50_000, 50_000, s.authority);
       const body = { action: action(s.authority) };
       const once = await send(
         s.token,
@@ -338,7 +360,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       );
       registry = new PostgresDelegationRegistry(repo.sql);
       const s = await sandbox();
-      const c = await chain(10_000, 10_000);
+      const c = await chain(10_000, 10_000, s.authority);
       const plain = await send(s.token, { action: action(s.authority) });
       expect(plain.status).toBe(403);
       const delegated = await send(
@@ -358,12 +380,14 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       const root = await registry.issueRoot(
         scope("principal", "orchestrator", 10_000),
         NOW,
+        await tenantOf(s.authority, ++seq),
       );
       if (!root.ok) throw new Error(root.reason);
       const notMine = await registry.delegate(
         root.delegationId,
         scope("orchestrator", "someone-else", 10_000),
         NOW,
+        await tenantOf(s.authority, ++seq),
       );
       if (!notMine.ok) throw new Error(notMine.reason);
       const borrowed = await send(

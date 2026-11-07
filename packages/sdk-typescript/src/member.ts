@@ -37,6 +37,142 @@ export type IssueCredentialResult =
       readonly reason: string;
       readonly recoverable: boolean;
     };
+export interface DelegationView {
+  readonly delegationId: string;
+  readonly authorityId: string | null;
+  readonly parentId: string | null;
+  readonly rootId: string;
+  readonly depth: number;
+  readonly parentAgentId: string;
+  readonly childAgentId: string;
+  readonly status:
+    "ACTIVE" | "REVOKED" | "EXPIRED" | "ANCESTOR_REVOKED" | "ANCESTOR_EXPIRED";
+  readonly own: {
+    readonly actionKinds: readonly string[];
+    readonly currencies: readonly string[];
+    readonly counterpartyIds: readonly string[];
+    readonly maxAmountMinor: number;
+    readonly spentMinor: number;
+    readonly expiresAt: string;
+  };
+  /** What this agent can actually do: the intersection of every hop above it. */
+  readonly effective: {
+    readonly actionKinds: readonly string[];
+    readonly currencies: readonly string[];
+    readonly counterpartyIds: readonly string[];
+    readonly perActionMaxMinor: number;
+    readonly remainingBudgetMinor: number;
+    readonly expiresAt: string;
+  };
+  readonly lineage: readonly {
+    readonly delegationId: string;
+    readonly childAgentId: string;
+    readonly depth: number;
+    readonly revoked: boolean;
+  }[];
+  readonly childIds: readonly string[];
+}
+export interface RootDelegationInput {
+  readonly childAgentId: string;
+  /** Cannot exceed the stored Authority's cumulative limit. Currency, action and merchants come from storage. */
+  readonly budgetMinor: number;
+  readonly counterpartyIds?: readonly string[];
+  readonly ttlSeconds?: number;
+  readonly idempotencyKey: string;
+}
+export interface HopDelegationInput {
+  readonly childAgentId: string;
+  /** Every field is optional and can only NARROW the parent; omitted fields inherit it. */
+  readonly maxAmountMinor?: number;
+  readonly counterpartyIds?: readonly string[];
+  readonly currencies?: readonly string[];
+  readonly actionKinds?: readonly string[];
+  readonly ttlSeconds?: number;
+  readonly idempotencyKey: string;
+}
+export type DelegationResult =
+  | {
+      readonly ok: true;
+      readonly replayed: boolean;
+      readonly delegationId: string;
+      readonly delegation: DelegationView;
+    }
+  | {
+      readonly ok: false;
+      readonly httpStatus: number;
+      readonly reason: string;
+      readonly recoverable: boolean;
+    };
+const asDelegation = (
+  status: number,
+  json: Record<string, unknown>,
+): DelegationResult =>
+  status === 200 || status === 201
+    ? {
+        ok: true,
+        replayed: json.replayed === true,
+        delegationId: String(json.delegationId),
+        delegation: json.delegation as DelegationView,
+      }
+    : {
+        ok: false,
+        httpStatus: status,
+        reason: typeof json.reason === "string" ? json.reason : "UNKNOWN",
+        recoverable: json.recoverable === true,
+      };
+
+/**
+ * A delegating AGENT's client: it authenticates with the agent's own credential and can extend only a delegation it
+ * holds, and only by narrowing it.
+ */
+export class PayFlowAgentDelegationClient {
+  private readonly doFetch: typeof globalThis.fetch;
+  constructor(
+    private readonly options: {
+      baseUrl: string;
+      agentToken: string;
+      fetch?: typeof globalThis.fetch;
+    },
+  ) {
+    this.doFetch = options.fetch ?? fetch;
+  }
+  private async call(method: "GET" | "POST", path: string, body?: unknown) {
+    const response = await this.doFetch(new URL(path, this.options.baseUrl), {
+      method,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${this.options.agentToken}`,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    return {
+      status: response.status,
+      json: (await response.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >,
+    };
+  }
+  async delegate(
+    parentId: string,
+    input: HopDelegationInput,
+  ): Promise<DelegationResult> {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/delegations/${encodeURIComponent(parentId)}/hops`,
+      input,
+    );
+    return asDelegation(r.status, r.json);
+  }
+  async inspect(delegationId: string): Promise<DelegationView | null> {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/delegations/${encodeURIComponent(delegationId)}`,
+    );
+    return r.status === 200 ? (r.json.delegation as DelegationView) : null;
+  }
+}
+
 export interface CredentialSummary {
   readonly credentialId: string;
   readonly authorityId: string;
@@ -123,6 +259,61 @@ export class PayFlowMemberClient {
       return {
         found: status === 200,
         alreadyRevoked: json.alreadyRevoked === true,
+      };
+    },
+  };
+
+  readonly delegations = {
+    /** Root a delegation chain in a STORED Authority. The budget can never exceed what the Authority already allows. */
+    createRoot: async (
+      authorityId: string,
+      input: RootDelegationInput,
+    ): Promise<DelegationResult> => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/authorities/${encodeURIComponent(authorityId)}/delegations`,
+        input,
+      );
+      return asDelegation(r.status, r.json);
+    },
+    /** Extend a delegation on behalf of the organization. Narrowing only. */
+    delegate: async (
+      parentId: string,
+      input: HopDelegationInput,
+    ): Promise<DelegationResult> => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/delegations/${encodeURIComponent(parentId)}/hops`,
+        input,
+      );
+      return asDelegation(r.status, r.json);
+    },
+    inspect: async (delegationId: string): Promise<DelegationView | null> => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/delegations/${encodeURIComponent(delegationId)}`,
+      );
+      return r.status === 200 ? (r.json.delegation as DelegationView) : null;
+    },
+    list: async (authorityId: string): Promise<readonly DelegationView[]> => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/authorities/${encodeURIComponent(authorityId)}/delegations`,
+      );
+      return (r.json.delegations ?? []) as DelegationView[];
+    },
+    revoke: async (
+      delegationId: string,
+      reason: string,
+    ): Promise<{ found: boolean; alreadyRevoked: boolean }> => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/delegations/${encodeURIComponent(delegationId)}/revoke`,
+        { reason },
+      );
+      return {
+        found: r.status === 200,
+        alreadyRevoked: r.json.alreadyRevoked === true,
       };
     },
   };
