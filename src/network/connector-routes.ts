@@ -24,7 +24,7 @@ export interface ConnectorRouteDeps {
   readonly agent: (request: RestRequest) => Promise<MissionCaller | null>;
   readonly paused: (caller: MissionCaller) => Promise<boolean>;
 }
-const STATUS: Record<ConnectorRefusal, number> = {
+export const CONNECTOR_STATUS: Record<ConnectorRefusal, number> = {
   MALFORMED: 400,
   NOT_FOUND: 404,
   CONNECTOR_NOT_FOUND: 404,
@@ -55,7 +55,7 @@ export function createConnectorRoutes(deps: ConnectorRouteDeps) {
     requestId: string,
     r: Extract<CResult<unknown>, { ok: false }>,
   ) =>
-    reply(requestId, STATUS[r.refusal], {
+    reply(requestId, CONNECTOR_STATUS[r.refusal], {
       reason: r.refusal,
       ...(r.detail ? { detail: r.detail } : {}),
       recoverable: [

@@ -384,6 +384,72 @@ const asPlan = (status: number, json: Record<string, unknown>): PlanResult =>
           : {}),
       };
 
+// ------------------------------------------------------------------------- quotes (V3 M34)
+export type QuoteMoney =
+  { basis: "STATED" | "ESTIMATED"; minor: number } | { basis: "UNKNOWN" };
+export interface QuoteInput {
+  supplierId: string;
+  currency: string;
+  validUntil: string;
+  document: {
+    lines: {
+      description: string;
+      sku?: string;
+      quantity: number;
+      unitPrice: QuoteMoney;
+    }[];
+    shipping: QuoteMoney;
+    tax: QuoteMoney;
+    duties: QuoteMoney;
+    fees: QuoteMoney;
+    discount: QuoteMoney;
+    terms?: {
+      paymentTerms?: string;
+      deliveryDays?: number;
+      returnWindowDays?: number;
+      warrantyMonths?: number;
+    };
+  };
+  source: {
+    kind:
+      "CONNECTOR_CALL" | "DOCUMENT_REF" | "SUPPLIER_STATED" | "OWNER_REPORTED";
+    ref?: string;
+  };
+  supersedes?: string;
+  idempotencyKey: string;
+}
+
+// ------------------------------------------------------------------------- supplier qualification (V3 M33)
+export interface SupplierFactInput {
+  criterion: string;
+  status: "CLAIMED" | "VERIFIED" | "FAILED" | "UNKNOWN";
+  value?: Record<string, string | number | boolean>;
+  evidenceKind?:
+    "NONE" | "CONNECTOR_CALL" | "DOCUMENT_REF" | "OWNER_ATTESTATION";
+  evidenceRef?: string;
+  note?: string;
+  idempotencyKey: string;
+}
+
+// ------------------------------------------------------------------------- discovery (V3 M32)
+export interface DiscoverInput {
+  connectorId: string;
+  query: { text?: string; recordId?: string; limit?: number };
+  requirements?: {
+    maxUnitPriceMinor?: number;
+    currency?: string;
+    minQuantity?: number;
+    maxAgeMinutes?: number;
+    claims?: Record<string, string | number | boolean>;
+  };
+  idempotencyKey: string;
+}
+export interface CandidateMarkInput {
+  decision: "SHORTLIST" | "REJECT" | "CLEAR";
+  reason?: string;
+  idempotencyKey: string;
+}
+
 // ------------------------------------------------------------------------- connectors (V3 M31)
 export interface ConnectorSummary {
   connectorId: string;
@@ -629,6 +695,113 @@ export class PayFlowAgentMissionClient {
       "POST",
       `/v1/agent/missions/${encodeURIComponent(missionId)}/connectors/invoke`,
       input,
+    );
+    return [r.status, r.json] as const;
+  }
+  /**
+   * Search through a connector and keep what was observed as candidates, ranked against the requirements you state.
+   * Observations are never quotes. Reuse the key to replay without searching again.
+   */
+  async discover(missionId: string, input: DiscoverInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/discovery/search`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  async candidates(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/candidates`,
+    );
+    return r.json;
+  }
+  async compareCandidates(missionId: string, candidateIds: string[]) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/candidates/compare`,
+      { candidateIds },
+    );
+    return [r.status, r.json] as const;
+  }
+  /** SHORTLIST, REJECT or CLEAR a candidate. A working note, not an approval. */
+  async markCandidate(candidateId: string, input: CandidateMarkInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/candidates/${encodeURIComponent(candidateId)}/mark`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Add a supplier to the mission's qualification list (needs READ). Idempotent by merchant reference. */
+  async addSupplier(
+    missionId: string,
+    input: {
+      externalRef?: string;
+      displayName?: string;
+      fromCandidateId?: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/suppliers`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  async suppliers(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/suppliers`,
+    );
+    return r.json;
+  }
+  /**
+   * Record a CLAIMED, UNKNOWN or FAILED fact about a supplier (needs VERIFY). An agent can never mark a fact VERIFIED, attest,
+   * or weaken a person's verification.
+   */
+  async recordSupplierFact(supplierId: string, input: SupplierFactInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/suppliers/${encodeURIComponent(supplierId)}/facts`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  /**
+   * Record what a supplier STATED (needs COMPARE). Each money part is STATED, ESTIMATED or UNKNOWN; the total is only claimed
+   * when nothing is unknown. A quote is not an acceptance and PayFlow cannot make it binding.
+   */
+  async recordQuote(missionId: string, input: QuoteInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/quotes`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  async quotes(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/quotes`,
+    );
+    return r.json;
+  }
+  async compareQuotes(missionId: string, quoteIds?: string[]) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/quotes/compare`,
+      quoteIds ? { quoteIds } : {},
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Put a current, complete quote in the budget as ONE QUOTED item (holds nothing until a person approves it). Idempotent. */
+  async quoteToLedger(quoteId: string, idempotencyKey: string) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/quotes/${encodeURIComponent(quoteId)}/ledger`,
+      { idempotencyKey },
     );
     return [r.status, r.json] as const;
   }
@@ -1031,6 +1204,141 @@ export class PayFlowMemberClient {
         `/v1/admin/org/connector-calls${missionId ? `?missionId=${encodeURIComponent(missionId)}` : ""}`,
       );
       return (r.json.calls ?? []) as unknown[];
+    },
+  };
+
+  /** Discovered candidates: ranked against requirements passed as query parameters, compared, and marked by people. */
+  readonly discovery = {
+    candidates: async (
+      missionId: string,
+      requirements: {
+        maxUnitPriceMinor?: number;
+        currency?: string;
+        minQuantity?: number;
+        maxAgeMinutes?: number;
+        claims?: Record<string, string>;
+      } = {},
+    ) => {
+      const q = new URLSearchParams();
+      for (const k of [
+        "maxUnitPriceMinor",
+        "currency",
+        "minQuantity",
+        "maxAgeMinutes",
+      ] as const)
+        if (requirements[k] !== undefined) q.set(k, String(requirements[k]));
+      for (const [k, v] of Object.entries(requirements.claims ?? {}))
+        q.set(`claim.${k}`, v);
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/candidates${q.size ? `?${q}` : ""}`,
+      );
+      return r.json;
+    },
+    compare: async (missionId: string, candidateIds: string[]) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/candidates/compare`,
+        { candidateIds },
+      );
+      return [r.status, r.json] as const;
+    },
+    mark: async (candidateId: string, input: CandidateMarkInput) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/candidates/${encodeURIComponent(candidateId)}/mark`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Supplier dossiers. Only a person's VERIFIED fact on acceptable evidence qualifies a supplier. */
+  readonly suppliers = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/suppliers`,
+      );
+      return r.json;
+    },
+    add: async (
+      missionId: string,
+      input: {
+        externalRef?: string;
+        displayName?: string;
+        fromCandidateId?: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/suppliers`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    recordFact: async (supplierId: string, input: SupplierFactInput) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/suppliers/${encodeURIComponent(supplierId)}/facts`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    history: async (supplierId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/suppliers/${encodeURIComponent(supplierId)}/facts`,
+      );
+      return (r.json.facts ?? []) as unknown[];
+    },
+    /** Which criteria a supplier must meet (the contract check is always included). */
+    setPolicy: async (
+      missionId: string,
+      required: string[],
+      idempotencyKey: string,
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/qualification-policy`,
+        { required, idempotencyKey },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Supplier quotes and landed cost. */
+  readonly quotes = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/quotes`,
+      );
+      return r.json;
+    },
+    record: async (missionId: string, input: QuoteInput) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/quotes`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    compare: async (missionId: string, quoteIds?: string[]) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/quotes/compare`,
+        quoteIds ? { quoteIds } : {},
+      );
+      return [r.status, r.json] as const;
+    },
+    toLedger: async (quoteId: string, idempotencyKey: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/quotes/${encodeURIComponent(quoteId)}/ledger`,
+        { idempotencyKey },
+      );
+      return [r.status, r.json] as const;
     },
   };
 

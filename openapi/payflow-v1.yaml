@@ -907,6 +907,372 @@ paths:
           { description: Connector failed or returned something unsafe to show }
         "503": { description: Connector circuit open after repeated failures }
         "504": { description: Connector timed out }
+  /v1/agent/missions/{missionId}/discovery/search:
+    post:
+      operationId: agentDiscover
+      summary: Search through a connector (all connector gates apply) and keep what was observed as candidates, ranked against the stated requirements. Observations are never quotes.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          { description: Ranked candidates (or the stored ones, on replay) }
+        "403":
+          {
+            description: Mission does not grant SEARCH,
+            or provider type not approved,
+          }
+        "409":
+          {
+            description: Connector not installed/disabled,
+            or idempotency key reused,
+          }
+  /v1/agent/missions/{missionId}/candidates:
+    get:
+      operationId: agentCandidates
+      summary: Candidates found for this mission, ranked against optional requirements given as query parameters (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          {
+            description: Candidates with checks,
+            marks and fit against the contract and ledger,
+          }
+  /v1/agent/missions/{missionId}/candidates/compare:
+    post:
+      operationId: agentCompareCandidates
+      summary: Side-by-side of 2-5 candidates showing exactly what differs. No totals or landed cost (needs COMPARE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Comparison rows }
+  /v1/agent/candidates/{candidateId}/mark:
+    post:
+      operationId: agentMarkCandidate
+      summary: SHORTLIST, REJECT or CLEAR a candidate (append-only; the latest mark wins). A working note, not an approval (needs COMPARE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: candidateId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Recorded or replayed }
+        "409": { description: Idempotency key reused }
+  /v1/admin/org/missions/{missionId}/candidates:
+    get:
+      operationId: listCandidates
+      summary: The same candidate list for people.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Candidates }
+  /v1/admin/org/missions/{missionId}/candidates/compare:
+    post:
+      operationId: compareCandidates
+      summary: The same comparison for people.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Comparison rows }
+  /v1/admin/org/candidates/{candidateId}/mark:
+    post:
+      operationId: markCandidate
+      summary: A person's SHORTLIST, REJECT or CLEAR (needs the plan permission).
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: candidateId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Recorded or replayed }
+  /v1/admin/org/missions/{missionId}/suppliers:
+    get:
+      operationId: listSuppliers
+      summary: Suppliers with their computed qualification (QUALIFIED, NOT_QUALIFIED or INCOMPLETE) per required criterion. Qualified is not an approval to buy.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          {
+            description: Suppliers,
+            required criteria,
+            criteria catalogue and notice,
+          }
+    post:
+      operationId: addSupplier
+      summary: Add a supplier by merchant reference, or from a discovered candidate that states a merchantId.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Added }
+        "200": { description: Already present (replay) }
+  /v1/admin/org/missions/{missionId}/qualification-policy:
+    post:
+      operationId: setQualificationPolicy
+      summary: Set which criteria are required. The contract check is always included.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Policy in force }
+  /v1/admin/org/suppliers/{supplierId}/facts:
+    get:
+      operationId: supplierFactHistory
+      summary: Every fact ever recorded about the supplier, in order.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: supplierId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Facts }
+    post:
+      operationId: recordSupplierFact
+      summary: Record a fact. A person may mark it VERIFIED with evidence acceptable for the criterion; the latest fact wins and nothing is erased.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: supplierId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded }
+        "403": { description: Evidence not acceptable for verification }
+  /v1/agent/missions/{missionId}/suppliers:
+    get:
+      operationId: agentSuppliers
+      summary: The same supplier view for an agent that can READ.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Suppliers }
+    post:
+      operationId: agentAddSupplier
+      summary: Add a supplier (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Added }
+  /v1/agent/suppliers/{supplierId}/facts:
+    post:
+      operationId: agentRecordSupplierFact
+      summary: Record a CLAIMED, UNKNOWN or FAILED fact (needs VERIFY). An agent cannot verify, attest, or weaken a person's verification.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: supplierId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded }
+        "403":
+          {
+            description: Verification,
+            attestation or erasure by an agent refused,
+          }
+  /v1/admin/org/missions/{missionId}/quotes:
+    get:
+      operationId: listQuotes
+      summary: Recorded supplier quotes with status (CURRENT, EXPIRED, SUPERSEDED) and landed cost. A total is shown only when nothing in it is unknown.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Quotes }
+    post:
+      operationId: recordQuote
+      summary: Record what a supplier stated. Immutable; a newer quote supersedes an older one once.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded }
+        "403": { description: Supplier not allowed by the contract }
+        "409": { description: Expired, superseded, or idempotency key reused }
+  /v1/admin/org/missions/{missionId}/quotes/compare:
+    post:
+      operationId: compareQuotes
+      summary: Rank complete, current quotes in the mission currency by landed cost; list the rest with the reason they were not ranked.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Ranking }
+  /v1/admin/org/quotes/{quoteId}/ledger:
+    post:
+      operationId: quoteToLedger
+      summary: Put a current, complete quote in the budget as one QUOTED item. Holds nothing until a person approves it.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Created }
+        "200": { description: Already in the budget (replay) }
+        "422":
+          {
+            description: Quote incomplete,
+            or currency differs from the mission,
+          }
+  /v1/agent/missions/{missionId}/quotes:
+    get:
+      operationId: agentQuotes
+      summary: Quotes for the mission (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Quotes }
+    post:
+      operationId: agentRecordQuote
+      summary: Record a supplier quote (needs COMPARE). An agent cannot report a quote as the owner's.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded }
+  /v1/agent/missions/{missionId}/quotes/compare:
+    post:
+      operationId: agentCompareQuotes
+      summary: Quote ranking by landed cost (needs COMPARE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Ranking }
+  /v1/agent/quotes/{quoteId}/ledger:
+    post:
+      operationId: agentQuoteToLedger
+      summary: Put a quote in the budget as one QUOTED item (needs COMPARE; ledger rules apply).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Created }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem
