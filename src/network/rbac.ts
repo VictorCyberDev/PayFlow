@@ -52,6 +52,7 @@ export const PERMISSIONS = [
   "mission:ledger",
   "connector:manage",
   "connector:contain",
+  "mission:communicate",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -99,6 +100,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     // Connectors: may install, enable and disable them; suspending is the containment half.
     "connector:manage",
     "connector:contain",
+    // Approving what is said to suppliers, and sending it.
+    "mission:communicate",
   ],
   // Contains blast radius: revoke credentials, pause/resume, see agents and exposure.
   // Cannot widen Authority or approve spend.
