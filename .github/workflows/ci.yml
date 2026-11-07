@@ -143,6 +143,15 @@ jobs:
         run: node scripts/a11y-acceptance.mjs
         working-directory: .
 
+      # V3 M30: the Mission Workspace in Chromium against the real Gateway on PostgreSQL (six widths, axe, numbers match the API).
+      - name: Mission Workspace acceptance
+        run: npx vitest run tests/m30-mission-workspace.browser.test.ts
+        working-directory: .
+        env:
+          TEST_DATABASE_URL: ${{ env.E2E_DATABASE_URL }}
+          REQUIRE_BROWSER: "1"
+          PLAYWRIGHT_CHROMIUM: ""
+
       # M17: renders the real ChatGPT/MCP Apps result card in Chromium (outcome wording, injection, overflow, axe).
       - name: ChatGPT result card acceptance
         run: node --import tsx scripts/chatgpt-widget-check.mjs

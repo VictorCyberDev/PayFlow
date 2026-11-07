@@ -4,6 +4,7 @@ import "./globals.css";
 import "./commercial.css";
 import { Surfaces } from "./ui/surfaces";
 import "./company.css";
+import "./missions.css";
 import { BRAND } from "../lib/brand";
 
 export const metadata: Metadata = {

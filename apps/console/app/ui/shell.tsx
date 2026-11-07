@@ -27,6 +27,12 @@ const items = [
     match: (p: string) => p.startsWith("/authorities"),
   },
   {
+    href: "/missions/",
+    label: "Missions",
+    mobile: false,
+    match: (p: string) => p.startsWith("/missions"),
+  },
+  {
     href: "/activity/",
     label: "Activity",
     mobile: true,
