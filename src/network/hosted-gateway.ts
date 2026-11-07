@@ -54,6 +54,8 @@ import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
 import { verifyProofRequest } from "./hosted-verify.js";
 import { PortableCredentialIssuer } from "./credential-issuance.js";
+import { MissionService, type MissionCaller } from "../missions/service.js";
+import { createMissionRoutes } from "./mission-routes.js";
 import { DelegationService, type Caller } from "./delegation-service.js";
 import type { JWTVerifyGetKey } from "jose";
 import type { ProtocolAuthenticator } from "../protocols/http-auth.js";
@@ -969,6 +971,45 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   }
 
   const delegations = new DelegationService({ sql, repo, audit, now: iso });
+  const missionService = new MissionService({ sql, audit, now: iso });
+  const missionRoutes = createMissionRoutes({
+    service: missionService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
+  /** An authenticated agent credential → its tenant and agent id. Null for anything else. */
+  async function resolveAgentCaller(
+    request: RestRequest,
+  ): Promise<MissionCaller | null> {
+    let access;
+    try {
+      access = await store.authenticate(request.authorization, iso());
+    } catch {
+      return null;
+    }
+    const [c] = await sql`
+      select organization_id, environment, agent_id from agent_credentials where credential_id = ${access.clientId}`;
+    return c
+      ? {
+          organizationId: String(c.organization_id),
+          environment: c.environment as MissionCaller["environment"],
+          id: String(c.agent_id),
+          kind: "AGENT",
+        }
+      : null;
+  }
   const delegationStatus = (r: string): number =>
     r === "AUTHORITY_NOT_FOUND" || r === "DELEGATION_NOT_FOUND"
       ? 404
@@ -1601,6 +1642,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     const request: RestRequest = {
       method,
       path,
+      ...(url.search ? { query: url.search } : {}),
       ...(authorization ? { authorization } : {}),
       ...(body === undefined ? {} : { body }),
     };
@@ -1965,14 +2007,19 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       send(res, await startSandbox());
       return true;
     }
-    if (path.startsWith("/v1/agent/delegations/")) {
+    if (
+      path.startsWith("/v1/agent/delegations/") ||
+      path === "/v1/agent/missions" ||
+      path.startsWith("/v1/agent/missions/")
+    ) {
       send(
         res,
-        (await safely(() => delegationRoute(request))) ?? {
-          status: 404,
-          headers: { "content-type": "application/json" },
-          body: { reason: "ROUTE_NOT_FOUND" },
-        },
+        (await safely(() => delegationRoute(request))) ??
+          (await safely(() => missionRoutes.agent(request))) ?? {
+            status: 404,
+            headers: { "content-type": "application/json" },
+            body: { reason: "ROUTE_NOT_FOUND" },
+          },
       );
       return true;
     }
@@ -1989,6 +2036,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await orgRoute(request)) ??
         (await safely(() => credentialRoute(request))) ??
         (await safely(() => delegationRoute(request))) ??
+        (await safely(() => missionRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {
