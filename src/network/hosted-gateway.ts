@@ -54,6 +54,7 @@ import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
 import { verifyProofRequest } from "./hosted-verify.js";
 import { PortableCredentialIssuer } from "./credential-issuance.js";
+import { DelegationService, type Caller } from "./delegation-service.js";
 import { IssuerDirectoryPublisher } from "./issuer-directory.js";
 import { createExecutingRestHandler } from "./rest-execution.js";
 import { createMcpHttpHandler } from "../protocols/mcp-http.js";
@@ -903,6 +904,172 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     return null;
   }
 
+  const delegations = new DelegationService({ sql, repo, audit, now: iso });
+  const delegationStatus = (r: string): number =>
+    r === "AUTHORITY_NOT_FOUND" || r === "DELEGATION_NOT_FOUND"
+      ? 404
+      : r === "IDEMPOTENCY_KEY_REUSED" || r === "DUPLICATE_NONCE"
+        ? 409
+        : r === "MALFORMED"
+          ? 400
+          : 403;
+  const delegationRefusal = (requestId: string, reason: string) =>
+    reply(requestId, delegationStatus(reason), {
+      reason,
+      recoverable: reason === "MALFORMED",
+      humanSummary:
+        "No delegation was created. A delegation can only narrow what its parent and the stored Authority already allow.",
+      nextAction: "CHECK_THE_PARENT_AND_REQUEST",
+    });
+
+  /** Tenant delegation API. Members use /v1/admin/org/...; a delegating AGENT uses /v1/agent/delegations/... */
+  async function delegationRoute(
+    request: RestRequest,
+  ): Promise<RestResponse | null> {
+    const root =
+      /^\/v1\/admin\/org\/authorities\/([A-Za-z0-9._:-]{1,128})\/delegations$/u.exec(
+        request.path,
+      );
+    const one =
+      /^\/v1\/admin\/org\/delegations\/(dlg_[A-Za-z0-9_-]{8,64})(\/hops|\/revoke)?$/u.exec(
+        request.path,
+      );
+    const agentHop =
+      /^\/v1\/agent\/delegations\/(dlg_[A-Za-z0-9_-]{8,64})(\/hops)?$/u.exec(
+        request.path,
+      );
+    if (!root && !one && !agentHop) return null;
+    const requestId = `req_${randomUUID()}`;
+    if (agentHop) {
+      let access;
+      try {
+        access = await store.authenticate(request.authorization, iso());
+      } catch {
+        return reply(requestId, 401, {
+          reason: "AGENT_AUTH_REQUIRED",
+          recoverable: false,
+          humanSummary: "A valid agent credential is required.",
+          nextAction: "PRESENT_AGENT_CREDENTIAL",
+        });
+      }
+      const [c] = await sql`
+        select organization_id, environment, agent_id from agent_credentials where credential_id = ${access.clientId}`;
+      if (!c)
+        return reply(requestId, 401, {
+          reason: "AGENT_AUTH_REQUIRED",
+          recoverable: false,
+          humanSummary: "A valid agent credential is required.",
+          nextAction: "PRESENT_AGENT_CREDENTIAL",
+        });
+      const caller: Caller = {
+        organizationId: String(c.organization_id),
+        environment: c.environment as Caller["environment"],
+        id: String(c.agent_id),
+        kind: "AGENT",
+      };
+      const o = await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      );
+      if (agentHop[2] === "/hops" && request.method === "POST") {
+        if (o)
+          return reply(requestId, 423, {
+            reason: "ORGANIZATION_PAUSED",
+            recoverable: true,
+            humanSummary: "The organization is paused.",
+            nextAction: "WAIT_FOR_RESUME",
+          });
+        const r = await delegations.createHop(
+          caller,
+          agentHop[1]!,
+          request.body,
+        );
+        return r.ok
+          ? reply(requestId, r.replayed ? 200 : 201, {
+              delegationId: r.delegationId,
+              replayed: r.replayed,
+              delegation: r.view,
+            })
+          : delegationRefusal(requestId, r.refusal);
+      }
+      if (!agentHop[2] && request.method === "GET") {
+        const v = await delegations.inspect(caller, agentHop[1]!);
+        // An agent sees only a delegation it holds or issued.
+        return v &&
+          (v.childAgentId === caller.id || v.parentAgentId === caller.id)
+          ? reply(requestId, 200, { delegation: v })
+          : delegationRefusal(requestId, "DELEGATION_NOT_FOUND");
+      }
+      return null;
+    }
+    const wants: Permission =
+      (root && request.method === "POST") ||
+      (one?.[2] === "/hops" && request.method === "POST")
+        ? "authority:delegate"
+        : one?.[2] === "/revoke"
+          ? "authority:delegate_revoke"
+          : "view:authorities";
+    const gate = await requireMember(
+      requestId,
+      await resolveActor(request),
+      wants,
+      request.path,
+    );
+    if (!("member" in gate)) return gate;
+    const caller: Caller = {
+      organizationId: gate.member.organizationId,
+      environment: gate.member.environment,
+      id: gate.member.memberId,
+      kind: "MEMBER",
+    };
+    if (root && request.method === "POST") {
+      const r = await delegations.createRoot(caller, root[1]!, request.body);
+      return r.ok
+        ? reply(requestId, r.replayed ? 200 : 201, {
+            delegationId: r.delegationId,
+            replayed: r.replayed,
+            delegation: r.view,
+          })
+        : delegationRefusal(requestId, r.refusal);
+    }
+    if (root && request.method === "GET")
+      return reply(requestId, 200, {
+        delegations: await delegations.list(caller, root[1]!),
+      });
+    if (one && one[2] === "/hops" && request.method === "POST") {
+      const r = await delegations.createHop(caller, one[1]!, request.body);
+      return r.ok
+        ? reply(requestId, r.replayed ? 200 : 201, {
+            delegationId: r.delegationId,
+            replayed: r.replayed,
+            delegation: r.view,
+          })
+        : delegationRefusal(requestId, r.refusal);
+    }
+    if (one && !one[2] && request.method === "GET") {
+      const v = await delegations.inspect(caller, one[1]!);
+      return v
+        ? reply(requestId, 200, { delegation: v })
+        : delegationRefusal(requestId, "DELEGATION_NOT_FOUND");
+    }
+    if (one && one[2] === "/revoke" && request.method === "POST") {
+      const reason =
+        typeof (request.body as { reason?: unknown } | undefined)?.reason ===
+        "string"
+          ? String((request.body as { reason: string }).reason)
+          : "REVOKED_BY_MEMBER";
+      const done = await delegations.revoke(caller, one[1]!, reason);
+      return done.found
+        ? reply(requestId, 200, {
+            result: "REVOKED",
+            alreadyRevoked: done.alreadyRevoked,
+            note: "Spending under this delegation and its descendants is refused from now on. Charges already reserved stay counted.",
+          })
+        : delegationRefusal(requestId, "DELEGATION_NOT_FOUND");
+    }
+    return null;
+  }
+
   const cronAuthorized = (authorization: string | undefined): boolean => {
     if (!options.cronSecret) return false;
     const presented = authorization?.startsWith("Bearer ")
@@ -1528,6 +1695,17 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       send(res, await startSandbox());
       return true;
     }
+    if (path.startsWith("/v1/agent/delegations/")) {
+      send(
+        res,
+        (await safely(() => delegationRoute(request))) ?? {
+          status: 404,
+          headers: { "content-type": "application/json" },
+          body: { reason: "ROUTE_NOT_FOUND" },
+        },
+      );
+      return true;
+    }
     if (path.startsWith("/v1/admin/")) {
       if (!authenticateAdmin) {
         send(res, {
@@ -1540,6 +1718,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       const planeReply =
         (await orgRoute(request)) ??
         (await safely(() => credentialRoute(request))) ??
+        (await safely(() => delegationRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {
         send(res, planeReply);

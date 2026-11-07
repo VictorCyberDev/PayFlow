@@ -17,6 +17,8 @@ export type DelegateRefusal =
   | "PARENT_EXPIRED"
   | "DEPTH_EXCEEDED"
   | "DUPLICATE_NONCE"
+  | "IDEMPOTENCY_KEY_REUSED"
+  | "AUTHORITY_MISMATCH"
   | DelegationViolation;
 
 export type ReserveRefusal =
@@ -29,7 +31,8 @@ export type ReserveRefusal =
   | "COUNTERPARTY_NOT_ALLOWED"
   | "AMOUNT_EXCEEDS_CAP"
   | "BUDGET_EXHAUSTED"
-  | "AGENT_MISMATCH";
+  | "AGENT_MISMATCH"
+  | "AUTHORITY_MISMATCH";
 
 export interface DelegationSpend {
   readonly actionKind: string;
@@ -39,7 +42,27 @@ export interface DelegationSpend {
   /** The agent presenting the delegation; it must be the leaf's child agent. */
   readonly agentId: string;
   readonly now: string;
+  /**
+   * The stored Authority the action is for. When given, the delegation must be bound to exactly that Authority; a
+   * delegation bound to another Authority, or to none (a pre-tenancy row), is refused.
+   */
+  readonly authorityId?: string;
 }
+
+/** The tenant a delegation belongs to. Taken from the authenticated caller and the stored Authority, never a request body. */
+export interface DelegationTenant {
+  readonly organizationId: string;
+  readonly environment: "SANDBOX" | "PRODUCTION";
+  readonly authorityId: string;
+  readonly createdBy: string;
+  readonly createdByKind: "MEMBER" | "AGENT";
+  readonly idempotencyKey?: string;
+  readonly requestDigest?: string;
+}
+
+export type IssueOutcome =
+  | { ok: true; delegationId: string; replayed: boolean }
+  | { ok: false; reason: DelegateRefusal };
 
 interface Row {
   delegation_id: string;
@@ -59,6 +82,12 @@ interface Row {
   expires_at: Date;
   nonce: string;
   revoked_at: Date | null;
+  organization_id: string | null;
+  environment: string | null;
+  authority_id: string | null;
+  created_by: string | null;
+  created_by_kind: string | null;
+  revoked_reason: string | null;
 }
 
 const toScope = (row: Row): DelegatedFinancialScope =>
@@ -89,12 +118,11 @@ export class PostgresDelegationRegistry {
   async issueRoot(
     rawScope: unknown,
     now: string,
-  ): Promise<
-    { ok: true; delegationId: string } | { ok: false; reason: DelegateRefusal }
-  > {
+    tenant?: DelegationTenant,
+  ): Promise<IssueOutcome> {
     const parsed = DelegatedFinancialScopeSchema.safeParse(rawScope);
     if (!parsed.success) return { ok: false, reason: "MALFORMED" };
-    return this.insert(this.sql, parsed.data, null, now);
+    return this.insert(this.sql, parsed.data, null, now, tenant);
   }
 
   /** A hop: `parentId` delegates a narrower scope to a child agent. */
@@ -102,15 +130,22 @@ export class PostgresDelegationRegistry {
     parentId: string,
     rawScope: unknown,
     now: string,
-  ): Promise<
-    { ok: true; delegationId: string } | { ok: false; reason: DelegateRefusal }
-  > {
+    tenant?: DelegationTenant,
+  ): Promise<IssueOutcome> {
     const parsed = DelegatedFinancialScopeSchema.safeParse(rawScope);
     if (!parsed.success) return { ok: false, reason: "MALFORMED" };
     return this.sql.begin(async (tx) => {
       const chain = await this.lockedChain(tx, parentId);
       const parent = chain.at(-1);
       if (!parent)
+        return { ok: false as const, reason: "PARENT_NOT_FOUND" as const };
+      // With a tenant, the parent must belong to it AND to the same Authority; anything else looks like "not found".
+      if (
+        tenant &&
+        (parent.organization_id !== tenant.organizationId ||
+          parent.environment !== tenant.environment ||
+          parent.authority_id !== tenant.authorityId)
+      )
         return { ok: false as const, reason: "PARENT_NOT_FOUND" as const };
       if (chain.some((row) => row.revoked_at !== null))
         return { ok: false as const, reason: "PARENT_REVOKED" as const };
@@ -127,7 +162,7 @@ export class PostgresDelegationRegistry {
         return { ok: false as const, reason: violations[0]! };
       if (Date.parse(parsed.data.issuedAt) < parent.issued_at.getTime())
         return { ok: false as const, reason: "PARENT_EXPIRED" as const };
-      return this.insert(tx, parsed.data, parent, now);
+      return this.insert(tx, parsed.data, parent, now, tenant);
     });
   }
 
@@ -161,6 +196,11 @@ export class PostgresDelegationRegistry {
         return { ok: false as const, reason: "NOT_FOUND" as const };
       if (leaf.child_agent_id !== spend.agentId)
         return { ok: false as const, reason: "AGENT_MISMATCH" as const };
+      if (
+        spend.authorityId !== undefined &&
+        leaf.authority_id !== spend.authorityId
+      )
+        return { ok: false as const, reason: "AUTHORITY_MISMATCH" as const };
       const at = Date.parse(spend.now);
       for (const row of chain) {
         if (row.revoked_at !== null)
@@ -228,23 +268,106 @@ export class PostgresDelegationRegistry {
     scope: DelegatedFinancialScope,
     parent: Row | null,
     now: string,
-  ): Promise<
-    { ok: true; delegationId: string } | { ok: false; reason: DelegateRefusal }
-  > {
+    tenant?: DelegationTenant,
+  ): Promise<IssueOutcome> {
     const id = newId();
     // ON CONFLICT instead of catching a unique violation: an error would abort the surrounding transaction.
     const inserted = await q`
       INSERT INTO delegations (delegation_id, root_id, parent_id, depth, principal_id, parent_agent_id, child_agent_id,
-        audience, action_kinds, currencies, counterparty_ids, max_amount_minor, issued_at, expires_at, nonce, created_at)
+        audience, action_kinds, currencies, counterparty_ids, max_amount_minor, issued_at, expires_at, nonce, created_at,
+        organization_id, environment, authority_id, created_by, created_by_kind, idempotency_key, request_digest)
       VALUES (${id}, ${parent ? parent.root_id : id}, ${parent ? parent.delegation_id : null},
         ${parent ? parent.depth + 1 : 0}, ${scope.principalId}, ${scope.parentAgentId}, ${scope.childAgentId},
         ${scope.audience}, ${scope.actionKinds}, ${scope.currencies},
         ${scope.counterpartyIds}, ${scope.maxAmountMinor}, ${scope.issuedAt}, ${scope.expiresAt},
-        ${scope.nonce}, ${now})
-      ON CONFLICT (audience, parent_agent_id, child_agent_id, nonce) DO NOTHING
+        ${scope.nonce}, ${now},
+        ${tenant?.organizationId ?? null}, ${tenant?.environment ?? null}, ${tenant?.authorityId ?? null},
+        ${tenant?.createdBy ?? null}, ${tenant?.createdByKind ?? null}, ${tenant?.idempotencyKey ?? null},
+        ${tenant?.requestDigest ?? null})
+      ON CONFLICT DO NOTHING
       RETURNING delegation_id`;
-    if (inserted.length === 0) return { ok: false, reason: "DUPLICATE_NONCE" };
-    return { ok: true, delegationId: id };
+    if (inserted.length === 0) {
+      // Either the same idempotent request already succeeded (replay), or the nonce collided.
+      if (tenant?.idempotencyKey) {
+        const [prior] = await q`
+          SELECT delegation_id, request_digest FROM delegations
+          WHERE organization_id = ${tenant.organizationId} AND environment = ${tenant.environment}
+            AND idempotency_key = ${tenant.idempotencyKey}`;
+        if (prior)
+          return prior.request_digest === (tenant.requestDigest ?? null)
+            ? {
+                ok: true,
+                delegationId: String(prior.delegation_id),
+                replayed: true,
+              }
+            : { ok: false, reason: "IDEMPOTENCY_KEY_REUSED" };
+      }
+      return { ok: false, reason: "DUPLICATE_NONCE" };
+    }
+    return { ok: true, delegationId: id, replayed: false };
+  }
+
+  // ------------------------------------------------------------------------------------------ tenant views
+  /** A tenant's delegation by id, with its lineage and what it can actually do. Another tenant's id is "not found". */
+  async inspect(
+    tenant: Pick<DelegationTenant, "organizationId" | "environment">,
+    delegationId: string,
+    now: string,
+  ): Promise<DelegationView | null> {
+    const ids = await this.sql<{ delegation_id: string }[]>`
+      WITH RECURSIVE up AS (
+        SELECT delegation_id, parent_id FROM delegations
+        WHERE delegation_id = ${delegationId} AND organization_id = ${tenant.organizationId} AND environment = ${tenant.environment}
+        UNION ALL
+        SELECT d.delegation_id, d.parent_id FROM delegations d JOIN up ON d.delegation_id = up.parent_id
+      )
+      SELECT delegation_id FROM up`;
+    if (ids.length === 0) return null;
+    const chain = await this.sql<Row[]>`
+      SELECT * FROM delegations WHERE delegation_id IN ${this.sql(ids.map((r) => r.delegation_id))} ORDER BY depth ASC`;
+    const children = await this.sql<{ delegation_id: string }[]>`
+      SELECT delegation_id FROM delegations WHERE parent_id = ${delegationId} ORDER BY created_at, delegation_id`;
+    return buildView(
+      chain,
+      children.map((c) => c.delegation_id),
+      now,
+    );
+  }
+
+  async listForAuthority(
+    tenant: Pick<DelegationTenant, "organizationId" | "environment">,
+    authorityId: string,
+    now: string,
+  ): Promise<readonly DelegationView[]> {
+    const ids = await this.sql<{ delegation_id: string }[]>`
+      SELECT delegation_id FROM delegations
+      WHERE organization_id = ${tenant.organizationId} AND environment = ${tenant.environment} AND authority_id = ${authorityId}
+      ORDER BY depth, created_at, delegation_id LIMIT 500`;
+    const views: DelegationView[] = [];
+    for (const { delegation_id } of ids) {
+      const v = await this.inspect(tenant, delegation_id, now);
+      if (v) views.push(v);
+    }
+    return views;
+  }
+
+  /** Revoke within a tenant. Another tenant's id is indistinguishable from a missing one. */
+  async revokeFor(
+    tenant: Pick<DelegationTenant, "organizationId" | "environment">,
+    delegationId: string,
+    reason: string,
+    now: string,
+  ): Promise<{ found: boolean; alreadyRevoked: boolean }> {
+    const rows = await this.sql`
+      UPDATE delegations SET revoked_at = ${now}, revoked_reason = ${reason.slice(0, 200)}
+      WHERE delegation_id = ${delegationId} AND organization_id = ${tenant.organizationId}
+        AND environment = ${tenant.environment} AND revoked_at IS NULL
+      RETURNING delegation_id`;
+    if (rows.length === 1) return { found: true, alreadyRevoked: false };
+    const [exists] = await this.sql`
+      SELECT 1 FROM delegations WHERE delegation_id = ${delegationId} AND organization_id = ${tenant.organizationId}
+        AND environment = ${tenant.environment}`;
+    return { found: !!exists, alreadyRevoked: !!exists };
   }
 
   /**
@@ -266,4 +389,123 @@ export class PostgresDelegationRegistry {
       ORDER BY depth ASC
       FOR UPDATE`;
   }
+}
+
+export interface DelegationView {
+  readonly delegationId: string;
+  readonly authorityId: string | null;
+  readonly parentId: string | null;
+  readonly rootId: string;
+  readonly depth: number;
+  readonly parentAgentId: string;
+  readonly childAgentId: string;
+  readonly createdBy: string | null;
+  readonly createdByKind: string | null;
+  readonly status:
+    "ACTIVE" | "REVOKED" | "EXPIRED" | "ANCESTOR_REVOKED" | "ANCESTOR_EXPIRED";
+  readonly own: {
+    readonly actionKinds: readonly string[];
+    readonly currencies: readonly string[];
+    readonly counterpartyIds: readonly string[];
+    readonly maxAmountMinor: number;
+    readonly spentMinor: number;
+    readonly notBefore: string;
+    readonly expiresAt: string;
+  };
+  /** What this agent can actually do: the intersection of every hop above it. */
+  readonly effective: {
+    readonly actionKinds: readonly string[];
+    readonly currencies: readonly string[];
+    readonly counterpartyIds: readonly string[];
+    readonly perActionMaxMinor: number;
+    /** The smallest remaining budget on the path: the shared budget is bounded by its tightest ancestor. */
+    readonly remainingBudgetMinor: number;
+    readonly notBefore: string;
+    readonly expiresAt: string;
+  };
+  readonly lineage: readonly {
+    readonly delegationId: string;
+    readonly childAgentId: string;
+    readonly depth: number;
+    readonly revoked: boolean;
+  }[];
+  readonly childIds: readonly string[];
+}
+
+const intersect = (a: readonly string[], b: readonly string[]) =>
+  a.filter((x) => b.includes(x));
+
+function buildView(
+  chain: Row[],
+  childIds: readonly string[],
+  now: string,
+): DelegationView {
+  const leaf = chain.at(-1)!;
+  const at = Date.parse(now);
+  let kinds = chain[0]!.action_kinds;
+  let currencies = chain[0]!.currencies;
+  let counterparties = chain[0]!.counterparty_ids;
+  let perAction = Number.POSITIVE_INFINITY;
+  let remaining = Number.POSITIVE_INFINITY;
+  let notBefore = 0;
+  let expires = Number.POSITIVE_INFINITY;
+  for (const r of chain) {
+    kinds = intersect(kinds, r.action_kinds);
+    currencies = intersect(currencies, r.currencies);
+    counterparties = intersect(counterparties, r.counterparty_ids);
+    perAction = Math.min(perAction, Number(r.max_amount_minor));
+    remaining = Math.min(
+      remaining,
+      Number(r.max_amount_minor) - Number(r.spent_minor),
+    );
+    notBefore = Math.max(notBefore, r.issued_at.getTime());
+    expires = Math.min(expires, r.expires_at.getTime());
+  }
+  const ancestors = chain.slice(0, -1);
+  const status: DelegationView["status"] = leaf.revoked_at
+    ? "REVOKED"
+    : ancestors.some((r) => r.revoked_at)
+      ? "ANCESTOR_REVOKED"
+      : at >= leaf.expires_at.getTime()
+        ? "EXPIRED"
+        : ancestors.some((r) => at >= r.expires_at.getTime())
+          ? "ANCESTOR_EXPIRED"
+          : "ACTIVE";
+  return {
+    delegationId: leaf.delegation_id,
+    authorityId: leaf.authority_id,
+    parentId: leaf.parent_id,
+    rootId: leaf.root_id,
+    depth: leaf.depth,
+    parentAgentId: leaf.parent_agent_id,
+    childAgentId: leaf.child_agent_id,
+    createdBy: leaf.created_by,
+    createdByKind: leaf.created_by_kind,
+    status,
+    own: {
+      actionKinds: leaf.action_kinds,
+      currencies: leaf.currencies,
+      counterpartyIds: leaf.counterparty_ids,
+      maxAmountMinor: Number(leaf.max_amount_minor),
+      spentMinor: Number(leaf.spent_minor),
+      notBefore: leaf.issued_at.toISOString(),
+      expiresAt: leaf.expires_at.toISOString(),
+    },
+    effective: {
+      actionKinds: kinds,
+      currencies,
+      counterpartyIds: counterparties,
+      perActionMaxMinor: perAction,
+      remainingBudgetMinor: Math.max(0, remaining),
+      notBefore: new Date(notBefore).toISOString(),
+      expiresAt: new Date(expires).toISOString(),
+    },
+    lineage: chain.map((r) => ({
+      delegationId: r.delegation_id,
+      childAgentId: r.child_agent_id,
+      depth: r.depth,
+      revoked: r.revoked_at !== null,
+    })),
+    childIds,
+  };
 }
