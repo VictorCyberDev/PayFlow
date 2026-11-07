@@ -58,6 +58,17 @@ Official rules: https://paypalaihackathon.devpost.com/rules
 | Public self-serve judge environment | \`docs/OWNER-ACTIONS.md\` says not commissioned; privileged DB role must be removed | No public-use claim before verified safe access |
 | Security certification, customers, paid users, pilot outcomes | None | Never imply they exist |
 
+## New product capabilities worth pursuing (do not silently widen authority)
+1. **Explain-and-resolve:** when a purchase fails, show the exact difference (old/new merchant, quoted price, remaining budget) in ordinary language; propose a permitted next step. A new authority or escalation requires an authenticated human owner, never the agent or model.
+2. **Policy-by-conversation, owner-signed:** let an LLM turn "this assistant can buy up to $100 of office supplies from this supplier" into a DRAFT policy. Validate schema and display exact terms; the human explicitly approves before it has any effect. Preserve the existing kernel as the sole authorization path.
+3. **Spend Desk control tower:** "Authorized", "Needs your approval", "Denied before PayPal", "Provider status unknown", "Completed in PayPal Sandbox" with linked audit evidence. No invented 'money saved' metric.
+4. **Merchant Verify card:** a read-only receipt of which authority applied and the observed provider outcome, scoped to the verifier. Never let a signed 'authorized' presentation claim that funds settled unless actual provider evidence confirms it.
+5. **Proof-driven support:** surface the original order/capture references and an unresolved-outcome queue so people don't retry an unknown payment. PayPal remains provider of its own records; PayFlow links them to business policy.
+6. **Agent platform entry point:** a minimal SDK tool with typed action proposals, exactly scoped grants and readable errors. A developer should be able to prove one authorized Sandbox payment with no new payment processor, but any real-world onboarding constraints remain.
+7. **PayPal ecosystem alignment:** future merchant integration with Agent Ready, Store Sync or delegated tokens is an *access-dependent research opportunity*, not a current integration or a dependency of the November 2026 hackathon.
+
+**Order:** first make owner/agent/PayPal/Proof work with real Sandbox evidence. Then add explain-and-resolve and only then expand merchant/developer interfaces. A clickable mockup is not a real financial-action demo.
+
 ## Product expansion beyond the initial hackathon
 Do not build it all now. The category is a **Payment Authority OS** across agent spend, not a single procurement demo:
 - **Now: controlled spend:** procurement/AP first-party actions with PayPal Sandbox.
