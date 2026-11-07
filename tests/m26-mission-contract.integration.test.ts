@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { MissionService } from "../src/missions/service.js";
+import {
+  PayFlowAgentMissionClient,
+  PayFlowMemberClient,
+  type MissionContractInput,
+} from "../packages/sdk-typescript/src/member.js";
 import { hostHarness } from "./helpers/host-harness.js";
 
 /**
@@ -44,6 +49,7 @@ const MISSIONS = "/v1/admin/org/missions";
       ...over,
     });
     const enroll = async () => {
+      await h.ownerOf();
       for (const id of ["a", "b", "c"]) await h.agentToken(id);
     };
     const create = async (
@@ -77,6 +83,15 @@ const MISSIONS = "/v1/admin/org/missions";
       await enroll();
       const owner = await h.ownerOf();
       const m = await made(owner);
+      expect(
+        (await act(owner, m.missionId, "approve", { version: 1 })).status,
+      ).toBe(200);
+      return { owner, id: m.missionId };
+    };
+    const activeWith = async (c: unknown) => {
+      await enroll();
+      const owner = await h.ownerOf();
+      const m = await made(owner, c);
       expect(
         (await act(owner, m.missionId, "approve", { version: 1 })).status,
       ).toBe(200);
@@ -488,6 +503,20 @@ const MISSIONS = "/v1/admin/org/missions";
           (await act(buyer, id, op, { version: 3 })).status,
         );
       expect([401, 403]).toContain((await create(buyer)).status);
+      // Defence in depth: even called in-process, the service itself refuses a decision from anything but a member.
+      const svc = gate();
+      const agentCaller = {
+        organizationId: "payflow-sandbox",
+        environment: "SANDBOX" as const,
+        id: "c",
+        kind: "AGENT" as const,
+      };
+      expect(
+        await svc.decide(agentCaller, id, { version: 2 }, "APPROVE"),
+      ).toMatchObject({ ok: false, refusal: "NOT_ASSIGNED" });
+      expect(await svc.control(agentCaller, id, {}, "revoke")).toMatchObject({
+        ok: false,
+      });
       // Smuggling authority through the body is refused by the strict schema, at the top level and nested.
       for (const smuggled of [
         { ...contract(), status: "ACTIVE" },
@@ -637,8 +666,10 @@ const MISSIONS = "/v1/admin/org/missions";
     });
 
     it("a mission past its deadline expires (recorded by the system), grants nothing, and cannot be resumed", async () => {
-      const { owner, id } = await active();
-      h.advance(20 * 24 * 3600 * 1000); // past 2026-11-23
+      const { owner, id } = await activeWith(
+        contract({ expiresAt: "2026-10-25T10:00:00.000Z" }),
+      );
+      h.advance(3 * 24 * 3600 * 1000); // past the 2026-10-25 deadline, inside the member token life
       const svc = gate();
       const tenant = {
         organizationId: "payflow-sandbox",
@@ -672,7 +703,14 @@ const MISSIONS = "/v1/admin/org/missions";
         expect((await h.call(theirs, method, path)).status).toBe(404);
       for (const op of ["approve", "pause", "cancel", "revoke", "submit"])
         expect(
-          (await act(theirs, m.missionId, op, { version: 1 })).status,
+          (
+            await act(
+              theirs,
+              m.missionId,
+              op,
+              op === "approve" ? { version: 1 } : {},
+            )
+          ).status,
           op,
         ).toBe(404);
       expect((await revise(theirs, m.missionId, 1, contract())).status).toBe(
@@ -755,6 +793,71 @@ const MISSIONS = "/v1/admin/org/missions";
         await h.call(owner, "GET", `${MISSIONS}?status=CANCELLED`)
       ).json()) as { missions: { missionId: string }[] };
       expect(cancelled.missions.map((x) => x.missionId)).toEqual([ids[0]]);
+    });
+
+    it("the SDK clients complete the real workflow: owner creates, approves, revises; an agent reads its slice and proposes; the owner decides", async () => {
+      await enroll();
+      const owner = new PayFlowMemberClient({
+        baseUrl: h.origin,
+        memberToken: await h.ownerOf(),
+      });
+      const agent = new PayFlowAgentMissionClient({
+        baseUrl: h.origin,
+        agentToken: await h.agentToken("c"),
+      });
+      const c = contract() as unknown as MissionContractInput;
+      const created = await owner.missions.create(c, key());
+      if (!created.ok) throw new Error(created.reason);
+      const id = created.mission.missionId;
+      expect(await agent.list()).toEqual([]); // not in force yet: an agent sees nothing
+      expect((await owner.missions.approve(id, 1)).ok).toBe(true);
+      const mine = await agent.list();
+      expect(mine).toHaveLength(1);
+      expect(mine[0]!.myCapabilities).toEqual(["PURCHASE", "REQUEST_APPROVAL"]);
+      expect((await agent.get(id))?.objective).toBe(c.objective);
+      const proposal = await agent.propose(id, {
+        baseVersion: 1,
+        contract: {
+          ...c,
+          totalBudgetMinor: 400_000,
+          maxCommitmentMinor: 100_000,
+        },
+        idempotencyKey: key(),
+      });
+      if (!proposal.ok) throw new Error(proposal.reason);
+      expect(proposal.mission).toMatchObject({
+        activeVersion: 1,
+        pendingVersion: 2,
+      });
+      expect(proposal.mission.pendingReasons).toContain("BUDGET_INCREASED");
+      const stale = await owner.missions.revise(id, {
+        baseVersion: 1,
+        contract: c,
+        idempotencyKey: key(),
+      });
+      expect(stale).toMatchObject({
+        ok: false,
+        httpStatus: 409,
+        reason: "STALE_VERSION",
+      });
+      expect((await owner.missions.reject(id, 2, "not now")).ok).toBe(true);
+      expect(
+        (await owner.missions.control(id, "pause", { reason: "review" })).ok,
+      ).toBe(true);
+      expect(await agent.list()).toEqual([]);
+      expect(
+        (await owner.missions.list({ status: "PAUSED" })).missions,
+      ).toHaveLength(1);
+      const hist = (await owner.missions.history(id)).transitions as {
+        event: string;
+      }[];
+      expect(hist.map((t) => t.event)).toEqual([
+        "CREATED",
+        "VERSION_APPROVED",
+        "REVISION_PROPOSED",
+        "VERSION_REJECTED",
+        "PAUSED",
+      ]);
     });
   },
 );

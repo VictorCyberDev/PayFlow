@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { RestRequest, RestResponse } from "./rest.js";
 import type { Member } from "./rbac.js";
 import type { Permission } from "./rbac.js";
+import type { MissionService } from "../missions/service.js";
 import {
-  MissionService,
   type MissionCaller,
   type MissionRefusal,
   type MissionStatus,
@@ -212,7 +212,7 @@ export function createMissionRoutes(deps: MissionRouteDeps) {
         missions: await service.forAgent(caller),
       });
     if (one && !one[2] && request.method === "GET") {
-      const [m] = await service.forAgent(caller, one[1]!);
+      const [m] = await service.forAgent(caller, one[1]);
       return m
         ? reply(requestId, 200, { mission: m })
         : refuse(requestId, { refusal: "NOT_FOUND" });

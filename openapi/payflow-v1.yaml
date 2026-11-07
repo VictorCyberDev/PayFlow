@@ -462,6 +462,179 @@ paths:
         "403":
           { description: Not the holder, or the hop would widen the parent }
         "423": { description: Organization paused }
+  /v1/admin/org/missions:
+    post:
+      operationId: createMission
+      summary: Create a mission (Mission Contract v1, `payflow-mission/v1`). Needs mission:create. Starts as DRAFT; nothing is in force until an owner approves.
+      description: >-
+        Money is integer minor units. Unknown fields at any depth are rejected, so authority cannot be smuggled in. Idempotent on `idempotencyKey`.
+        A mission is a planning and permission boundary; it never moves money and is not a second Trust Kernel.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [contract, idempotencyKey]
+              properties:
+                contract: { type: object }
+                idempotencyKey: { type: string, minLength: 16, maxLength: 128 }
+      responses:
+        "201": { description: Created }
+        "200": { description: Replay of an identical request }
+        "409": { description: Idempotency key reused with a different contract }
+        "422":
+          {
+            description: Contract invalid (money,
+            shape,
+            unknown agent or capability,
+            deadline in the past),
+          }
+    get:
+      operationId: listMissions
+      summary: List this tenant's missions. Needs view:missions. Cursor pagination (`after`), optional `status` and `limit`.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200": { description: A page of missions and a `next` cursor }
+  /v1/admin/org/missions/{missionId}:
+    get:
+      operationId: getMission
+      summary: A mission with the contract in force, any proposal awaiting an owner, and why it needs one.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: The mission }
+        "404": { description: No such mission in this tenant and environment }
+  /v1/admin/org/missions/{missionId}/history:
+    get:
+      operationId: missionHistory
+      summary: Append-only transitions and every contract version with its decision.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Transitions and versions }
+  /v1/admin/org/missions/{missionId}/revisions:
+    post:
+      operationId: reviseMission
+      summary: Revise a mission. Needs mission:revise. A revision that only narrows takes effect; anything wider waits for an owner.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Stored (applied, or proposed and waiting) }
+        "409":
+          {
+            description: STALE_VERSION - `baseVersion` was not the newest version,
+          }
+  /v1/admin/org/missions/{missionId}/approve:
+    post:
+      operationId: approveMission
+      summary: Put a pending version in force. Needs mission:approve (owner). Agents can never call this.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: The version is now in force }
+        "409":
+          {
+            description: Nothing to approve,
+            or `version` is not the pending one,
+          }
+  /v1/admin/org/missions/{missionId}/reject:
+    post:
+      operationId: rejectMissionVersion
+      summary: Refuse a pending version. Needs mission:approve.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Rejected; the version in force is unchanged }
+  /v1/admin/org/missions/{missionId}/{operation}:
+    post:
+      operationId: controlMission
+      summary: "submit | resume | cancel | complete need mission:control; pause | revoke need mission:contain (SECURITY_ADMIN may contain, not release)."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            in: path,
+            name: operation,
+            required: true,
+            schema:
+              {
+                type: string,
+                enum: [submit, pause, resume, cancel, revoke, complete],
+              },
+          }
+      responses:
+        "200": { description: Transitioned }
+        "409": { description: Illegal transition or mission already terminal }
+  /v1/agent/missions:
+    get:
+      operationId: agentListMissions
+      summary: Missions in force that this agent is assigned, showing only this agent's own capabilities.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      responses:
+        "200": { description: The agent's slice of its missions }
+  /v1/agent/missions/{missionId}/revisions:
+    post:
+      operationId: agentProposeMissionRevision
+      summary: An agent holding REQUEST_APPROVAL PROPOSES a revision. It always waits for an owner; `applied` is false.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "202": { description: Proposal stored; nothing changed }
+        "403": { description: The agent lacks REQUEST_APPROVAL on this mission }
   /v1/issuer/directory:
     get:
       operationId: issuerDirectory

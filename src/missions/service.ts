@@ -275,8 +275,8 @@ export class MissionService {
     await tx`insert into mission_versions
       (mission_id, version, contract, contract_digest, authored_by_kind, authored_by, widening, decision, decided_by, decided_at,
        idempotency_key, request_digest, created_at)
-      values (${missionId}, ${version}, ${tx.json(contract as never)}, ${contractDigest(contract)}, ${author.kind}, ${author.id},
-        ${tx.json(widening as never)}, ${decision}, ${decider}, ${decision === "APPROVED" ? now : null}, ${idem}, ${requestDigest}, ${now})`;
+      values (${missionId}, ${version}, ${tx.json(contract)}, ${contractDigest(contract)}, ${author.kind}, ${author.id},
+        ${tx.json(widening)}, ${decision}, ${decider}, ${decision === "APPROVED" ? now : null}, ${idem}, ${requestDigest}, ${now})`;
     for (const a of contract.agents)
       await tx`insert into mission_agent_grants (mission_id, version, agent_id, capabilities)
         values (${missionId}, ${version}, ${a.agentId}, ${a.capabilities})`;
@@ -287,6 +287,13 @@ export class MissionService {
     caller: MissionCaller,
     rawBody: unknown,
   ): Promise<Result<MissionView & { replayed: boolean }>> {
+    // Only an authenticated member creates a mission; an agent never does.
+    if (caller.kind !== "MEMBER")
+      return {
+        ok: false,
+        refusal: "NOT_ASSIGNED",
+        detail: "ONLY_A_MEMBER_CAN_CREATE",
+      };
     const body = CreateRequestSchema.safeParse(rawBody);
     if (!body.success) return { ok: false, refusal: "MALFORMED" };
     const contract = this.parseContract(body.data.contract);
@@ -490,6 +497,11 @@ export class MissionService {
       base: body.data.baseVersion,
       contract: contract.value,
     });
+    // Existence in THIS tenant is established first, so another tenant's mission is indistinguishable from none.
+    const [exists] = await this.deps
+      .sql`select 1 from missions where mission_id = ${missionId}
+      and organization_id = ${caller.organizationId} and environment = ${caller.environment}`;
+    if (!exists) return { ok: false, refusal: "NOT_FOUND" };
     if (!(await this.agentsExist(this.deps.sql, caller, contract.value)))
       return { ok: false, refusal: "AGENT_NOT_IN_ORGANIZATION" };
     const outcome = await this.deps.sql.begin(
@@ -526,7 +538,7 @@ export class MissionService {
         let applyNow = false;
         if (hasActive) {
           widening = wideningReasons(
-            await this.contractOf(tx, missionId, rec.activeVersion!),
+            await this.contractOf(tx, missionId, rec.activeVersion),
             contract.value,
           );
           // Only a MEMBER, and only a non-widening revision, takes effect without an owner decision.
@@ -560,7 +572,7 @@ export class MissionService {
         );
         if (applyNow) {
           await tx`update mission_versions set decision = 'SUPERSEDED' where mission_id = ${missionId} and version = ${rec.pendingVersion ?? 0} and decision = 'PENDING'`;
-          await tx`update mission_versions set decision = 'SUPERSEDED' where mission_id = ${missionId} and version = ${rec.activeVersion!} and decision = 'APPROVED'`;
+          await tx`update mission_versions set decision = 'SUPERSEDED' where mission_id = ${missionId} and version = ${rec.activeVersion} and decision = 'APPROVED'`;
           await tx`update missions set latest_version = ${version}, active_version = ${version}, pending_version = null, row_version = row_version + 1, updated_at = ${now} where mission_id = ${missionId}`;
           await this.transition(
             tx,
@@ -704,7 +716,7 @@ export class MissionService {
         const contract = await this.contractOf(tx, missionId, candidate);
         if (Date.parse(contract.expiresAt) <= Date.parse(now))
           return { ok: false, refusal: "ALREADY_EXPIRED" };
-        if (!(await this.agentsExist(tx as unknown as Sql, caller, contract)))
+        if (!(await this.agentsExist(tx, caller, contract)))
           return { ok: false, refusal: "AGENT_NOT_IN_ORGANIZATION" };
         if (rec.activeVersion !== null)
           await tx`update mission_versions set decision = 'SUPERSEDED' where mission_id = ${missionId} and version = ${rec.activeVersion} and decision = 'APPROVED'`;
@@ -749,6 +761,12 @@ export class MissionService {
     rawBody: unknown,
     op: "submit" | "pause" | "resume" | "cancel" | "revoke" | "complete",
   ): Promise<Result<MissionView>> {
+    if (caller.kind !== "MEMBER")
+      return {
+        ok: false,
+        refusal: "NOT_ASSIGNED",
+        detail: "ONLY_A_MEMBER_CAN_CONTROL",
+      };
     const body = ControlRequestSchema.safeParse(rawBody ?? {});
     if (!body.success) return { ok: false, refusal: "MALFORMED" };
     const now = this.deps.now();

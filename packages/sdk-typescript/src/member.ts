@@ -173,6 +173,171 @@ export class PayFlowAgentDelegationClient {
   }
 }
 
+// ------------------------------------------------------------------------------------------------ missions (V3 M26)
+export type MissionStatus =
+  | "DRAFT"
+  | "PENDING_OWNER_APPROVAL"
+  | "ACTIVE"
+  | "PAUSED"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "EXPIRED"
+  | "REVOKED"
+  | "FAILED";
+export type MissionCapability =
+  | "SEARCH"
+  | "READ"
+  | "COMPARE"
+  | "DRAFT"
+  | "COMMUNICATE"
+  | "NEGOTIATE"
+  | "REQUEST_APPROVAL"
+  | "RESERVE"
+  | "CONTRACT"
+  | "PURCHASE"
+  | "REFUND_REQUEST"
+  | "STATUS"
+  | "VERIFY";
+/** The Mission Contract v1 document. Money is an integer count of minor units. */
+export interface MissionContractInput {
+  readonly objective: string;
+  readonly description?: string;
+  readonly intendedOutcome: string;
+  readonly successCriteria: readonly string[];
+  readonly businessContext?: string;
+  readonly country?: string;
+  readonly currency: string;
+  readonly totalBudgetMinor: number;
+  readonly maxCommitmentMinor: number;
+  readonly spendingCategories?: readonly string[];
+  readonly approvedProviderTypes?: readonly string[];
+  readonly merchantRestrictions?:
+    | { mode: "NONE_ALLOWED" }
+    | { mode: "ANY" }
+    | { mode: "ONLY"; ids: readonly string[] };
+  readonly agents?: readonly {
+    agentId: string;
+    capabilities: readonly MissionCapability[];
+  }[];
+  readonly approvalConditions?: {
+    humanApprovalAboveMinor?: number;
+    requireApprovalToNegotiate?: boolean;
+    requireApprovalToContract?: boolean;
+  };
+  readonly priority?: "LOW" | "NORMAL" | "HIGH";
+  readonly riskTier?: "LOW" | "MEDIUM" | "HIGH";
+  readonly expiresAt: string;
+}
+export interface MissionView {
+  readonly missionId: string;
+  readonly status: MissionStatus;
+  readonly latestVersion: number;
+  readonly activeVersion: number | null;
+  readonly pendingVersion: number | null;
+  readonly rowVersion: number;
+  readonly activeContract: MissionContractInput | null;
+  readonly pendingContract: MissionContractInput | null;
+  readonly pendingReasons: readonly string[];
+  readonly latestContract: MissionContractInput;
+}
+export type MissionResult =
+  | {
+      readonly ok: true;
+      readonly replayed: boolean;
+      readonly mission: MissionView;
+    }
+  | {
+      readonly ok: false;
+      readonly httpStatus: number;
+      readonly reason: string;
+      readonly detail?: string;
+    };
+const asMission = (
+  status: number,
+  json: Record<string, unknown>,
+): MissionResult =>
+  status >= 200 && status < 300 && json.mission
+    ? {
+        ok: true,
+        replayed: status === 200,
+        mission: json.mission as MissionView,
+      }
+    : {
+        ok: false,
+        httpStatus: status,
+        reason: typeof json.reason === "string" ? json.reason : "UNKNOWN",
+        ...(typeof json.detail === "string" ? { detail: json.detail } : {}),
+      };
+export interface AgentMissionView {
+  readonly missionId: string;
+  readonly version: number;
+  readonly objective: string;
+  readonly intendedOutcome: string;
+  readonly successCriteria: readonly string[];
+  readonly currency: string;
+  readonly expiresAt: string;
+  /** The capabilities THIS agent holds on this mission, and nothing about anyone else's. */
+  readonly myCapabilities: readonly MissionCapability[];
+}
+
+/** An agent's view of its missions. It can read what it is assigned and PROPOSE a revision; it can never approve one. */
+export class PayFlowAgentMissionClient {
+  private readonly doFetch: typeof globalThis.fetch;
+  constructor(
+    private readonly options: {
+      baseUrl: string;
+      agentToken: string;
+      fetch?: typeof globalThis.fetch;
+    },
+  ) {
+    this.doFetch = options.fetch ?? fetch;
+  }
+  private async call(method: "GET" | "POST", path: string, body?: unknown) {
+    const response = await this.doFetch(new URL(path, this.options.baseUrl), {
+      method,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${this.options.agentToken}`,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    return {
+      status: response.status,
+      json: (await response.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >,
+    };
+  }
+  async list(): Promise<readonly AgentMissionView[]> {
+    const r = await this.call("GET", "/v1/agent/missions");
+    return (r.json.missions ?? []) as AgentMissionView[];
+  }
+  async get(missionId: string): Promise<AgentMissionView | null> {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}`,
+    );
+    return r.status === 200 ? (r.json.mission as AgentMissionView) : null;
+  }
+  /** Always waits for an owner; the result's `applied` is false. */
+  async propose(
+    missionId: string,
+    input: {
+      baseVersion: number;
+      contract: MissionContractInput;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/revisions`,
+      input,
+    );
+    return asMission(r.status, r.json);
+  }
+}
+
 export interface CredentialSummary {
   readonly credentialId: string;
   readonly authorityId: string;
@@ -315,6 +480,95 @@ export class PayFlowMemberClient {
         found: r.status === 200,
         alreadyRevoked: r.json.alreadyRevoked === true,
       };
+    },
+  };
+
+  readonly missions = {
+    create: async (
+      contract: MissionContractInput,
+      idempotencyKey: string,
+    ): Promise<MissionResult> => {
+      const r = await this.call("POST", "/v1/admin/org/missions", {
+        contract,
+        idempotencyKey,
+      });
+      return asMission(r.status, r.json);
+    },
+    get: async (missionId: string): Promise<MissionView | null> => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}`,
+      );
+      return r.status === 200
+        ? ((r.json.mission as MissionView) ?? null)
+        : null;
+    },
+    list: async (
+      filter: { status?: MissionStatus; limit?: number; after?: string } = {},
+    ) => {
+      const q = new URLSearchParams();
+      if (filter.status) q.set("status", filter.status);
+      if (filter.limit) q.set("limit", String(filter.limit));
+      if (filter.after) q.set("after", filter.after);
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions${q.size ? `?${q}` : ""}`,
+      );
+      return {
+        missions: (r.json.missions ?? []) as MissionView[],
+        next: (r.json.next as string | null) ?? null,
+      };
+    },
+    /** `baseVersion` is the newest version you saw; a stale one is refused. Anything wider than the version in force waits for an owner. */
+    revise: async (
+      missionId: string,
+      input: {
+        baseVersion: number;
+        contract: MissionContractInput;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/revisions`,
+        input,
+      );
+      return asMission(r.status, r.json);
+    },
+    approve: async (missionId: string, version: number, reason?: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/approve`,
+        { version, ...(reason ? { reason } : {}) },
+      );
+      return asMission(r.status, r.json);
+    },
+    reject: async (missionId: string, version: number, reason?: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/reject`,
+        { version, ...(reason ? { reason } : {}) },
+      );
+      return asMission(r.status, r.json);
+    },
+    control: async (
+      missionId: string,
+      op: "submit" | "pause" | "resume" | "cancel" | "revoke" | "complete",
+      options: { reason?: string; expectedRowVersion?: number } = {},
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/${op}`,
+        options,
+      );
+      return asMission(r.status, r.json);
+    },
+    history: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/history`,
+      );
+      return r.json as { transitions: unknown[]; versions: unknown[] };
     },
   };
 }

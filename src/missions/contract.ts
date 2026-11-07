@@ -154,7 +154,7 @@ export function normalize(contract: MissionContract): MissionContract {
     agents: contract.agents
       .map((a) => ({
         agentId: a.agentId,
-        capabilities: [...new Set(a.capabilities)].sort() as Capability[],
+        capabilities: [...new Set(a.capabilities)].sort(),
       }))
       .sort((a, b) => (a.agentId < b.agentId ? -1 : 1)),
   };
