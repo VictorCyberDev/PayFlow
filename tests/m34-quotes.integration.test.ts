@@ -592,7 +592,8 @@ describe("M34 landed cost (pure)", () => {
         toLedger(owner, good.quoteId),
         toLedger(owner, good.quoteId),
       ]);
-      for (const r of results) expect([200, 201]).toContain(r.status);
+      for (const r of results)
+        expect([200, 201], await r.clone().text()).toContain(r.status);
       const ids = new Set(
         await Promise.all(
           results.map(

@@ -73,6 +73,10 @@ import { AcceptanceService } from "../missions/acceptance-service.js";
 import { OperationTraceService } from "../operation-trace.js";
 import { createProcurementRoutes } from "./procurement-routes.js";
 import { createOrderRoutes } from "./order-routes.js";
+import { createFulfillmentRoutes } from "./fulfillment-routes.js";
+import { createDisputeRoutes } from "./dispute-routes.js";
+import { DisputeService } from "../missions/dispute-service.js";
+import { FulfillmentService } from "../missions/fulfillment-service.js";
 import { OrderService } from "../missions/order-service.js";
 import { ProcurementService } from "../missions/procurement-service.js";
 import { traceFactsOf } from "../missions/purchase.js";
@@ -891,7 +895,16 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   ): Promise<RestResponse | null> {
     try {
       return await run();
-    } catch {
+    } catch (error) {
+      // Diagnosable without leaking: only the error class, SQLSTATE and constraint name, never the message or any parameter.
+      const e = error as {
+        name?: string;
+        code?: string;
+        constraint_name?: string;
+      };
+      console.error(
+        `[gateway] INTERNAL_ERROR ${e.name ?? "Error"} code=${e.code ?? "-"} constraint=${e.constraint_name ?? "-"}`,
+      );
       return reply(`req_${randomUUID()}`, 500, {
         reason: "INTERNAL_ERROR",
         recoverable: false,
@@ -1348,6 +1361,54 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   });
   const orderRoutes = createOrderRoutes({
     service: orderService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
+  const fulfillmentService = new FulfillmentService({
+    sql,
+    audit,
+    missions: missionService,
+    now: iso,
+  });
+  const fulfillmentRoutes = createFulfillmentRoutes({
+    service: fulfillmentService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
+  const disputeService = new DisputeService({
+    sql,
+    audit,
+    missions: missionService,
+    ledger: ledgerService,
+    fulfillment: fulfillmentService,
+    now: iso,
+  });
+  const disputeRoutes = createDisputeRoutes({
+    service: disputeService,
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(
@@ -2396,7 +2457,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path.startsWith("/v1/agent/messages/") ||
       path.startsWith("/v1/agent/acceptances/") ||
       path.startsWith("/v1/agent/purchase-orders/") ||
-      path.startsWith("/v1/agent/orders/")
+      path.startsWith("/v1/agent/orders/") ||
+      path.startsWith("/v1/agent/disputes/")
     ) {
       send(
         res,
@@ -2413,7 +2475,9 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => communicationRoutes.agent(request))) ??
           (await safely(() => acceptanceRoutes.agent(request))) ??
           (await safely(() => procurementRoutes.agent(request))) ??
-          (await safely(() => orderRoutes.agent(request))) ?? {
+          (await safely(() => orderRoutes.agent(request))) ??
+          (await safely(() => fulfillmentRoutes.agent(request))) ??
+          (await safely(() => disputeRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2447,6 +2511,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => acceptanceRoutes.member(request))) ??
         (await safely(() => procurementRoutes.member(request))) ??
         (await safely(() => orderRoutes.member(request))) ??
+        (await safely(() => fulfillmentRoutes.member(request))) ??
+        (await safely(() => disputeRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {

@@ -985,6 +985,69 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** Open a dispute on your order. The ground must be one the computed fulfillment outcome supports; a person resolves it. */
+  async openDispute(
+    orderId: string,
+    dispute: {
+      ground:
+        | "DAMAGED"
+        | "WRONG_ITEM"
+        | "SHORT_DELIVERY"
+        | "OVER_DELIVERY"
+        | "NOT_DELIVERED_LATE";
+      claimedMinor: number;
+      reason: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/orders/${encodeURIComponent(orderId)}/disputes`,
+      dispute,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Record what the supplier said about a dispute. It is a claim and resolves nothing. */
+  async addDisputeEvent(
+    disputeId: string,
+    event: {
+      kind: "SUPPLIER_RESPONSE" | "NOTE";
+      text: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/disputes/${encodeURIComponent(disputeId)}/events`,
+      event,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Report a shipment for your order (a claim; a person verifies it). */
+  async reportShipment(
+    orderId: string,
+    shipment: {
+      carrier: string;
+      trackingRef: string;
+      expectedDelivery?: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/orders/${encodeURIComponent(orderId)}/shipments`,
+      shipment,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** What has arrived, the computed outcome and the dispute grounds it supports. Read-only. */
+  async fulfillment(orderId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/orders/${encodeURIComponent(orderId)}/fulfillment`,
+    );
+    return [r.status, r.json] as const;
+  }
   /** Create the order for a purchase PayFlow reconciled as settled (needs PURCHASE; you must be the order's buyer). */
   async createOrder(poId: string, idempotencyKey: string) {
     const r = await this.call(
@@ -1792,6 +1855,116 @@ export class PayFlowMemberClient {
         `/v1/admin/org/messages/${encodeURIComponent(messageId)}/events`,
       );
       return (r.json.events ?? []) as unknown[];
+    },
+  };
+
+  /** Disputes and refunds. Only a person resolves; a refund needs Proof or a provider confirmation. */
+  readonly disputes = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/disputes`,
+      );
+      return r.json;
+    },
+    open: async (
+      orderId: string,
+      dispute: {
+        ground:
+          | "DAMAGED"
+          | "WRONG_ITEM"
+          | "SHORT_DELIVERY"
+          | "OVER_DELIVERY"
+          | "NOT_DELIVERED_LATE";
+        claimedMinor: number;
+        reason: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/orders/${encodeURIComponent(orderId)}/disputes`,
+        dispute,
+      );
+      return [r.status, r.json] as const;
+    },
+    resolve: async (
+      disputeId: string,
+      resolution:
+        | { decision: "NO_REFUND"; note?: string }
+        | {
+            decision: "REFUND";
+            refundMinor: number;
+            evidenceKind: "PAYFLOW_PROOF" | "PROVIDER_CONFIRMATION";
+            evidenceRef: string;
+            note?: string;
+          },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/disputes/${encodeURIComponent(disputeId)}/resolve`,
+        resolution,
+      );
+      return [r.status, r.json] as const;
+    },
+    withdraw: async (disputeId: string, reason: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/disputes/${encodeURIComponent(disputeId)}/withdraw`,
+        { reason },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Fulfillment: shipments and a person's receipts; the outcome is computed. */
+  readonly fulfillment = {
+    get: async (orderId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/orders/${encodeURIComponent(orderId)}/fulfillment`,
+      );
+      return r.json;
+    },
+    shipment: async (
+      orderId: string,
+      shipment: {
+        carrier: string;
+        trackingRef: string;
+        expectedDelivery?: string;
+        verify?: boolean;
+        evidenceKind?:
+          "NONE" | "OWNER_ATTESTATION" | "DOCUMENT_REF" | "CONNECTOR_CALL";
+        evidenceRef?: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/orders/${encodeURIComponent(orderId)}/shipments`,
+        shipment,
+      );
+      return [r.status, r.json] as const;
+    },
+    /** A person's count of what arrived for one purchase-order line. Needs evidence. */
+    receipt: async (
+      orderId: string,
+      receipt: {
+        lineIndex: number;
+        quantity: number;
+        condition: "OK" | "DAMAGED" | "WRONG_ITEM";
+        evidenceKind: "OWNER_ATTESTATION" | "DOCUMENT_REF";
+        evidenceRef?: string;
+        note?: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/orders/${encodeURIComponent(orderId)}/receipts`,
+        receipt,
+      );
+      return [r.status, r.json] as const;
     },
   };
 
