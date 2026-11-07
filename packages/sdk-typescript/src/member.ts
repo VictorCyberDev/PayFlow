@@ -954,6 +954,37 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /**
+   * Issue the purchase order for an accepted quote (needs PURCHASE; you are the buyer). It is an instruction, not a payment: pay through
+   * the usual path under the order's Authority, then reconcile.
+   */
+  async issuePurchaseOrder(
+    acceptanceId: string,
+    body: {
+      category: string;
+      purpose: string;
+      costCenter?: string;
+      invoiceRef?: string;
+      ttlMinutes?: number;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/acceptances/${encodeURIComponent(acceptanceId)}/purchase-order`,
+      body,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Ask PayFlow to compare your payment (its proposal id) to the order. PayFlow reads its own trace; your report is not believed. */
+  async reconcilePurchaseOrder(poId: string, proposalId: string) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/purchase-orders/${encodeURIComponent(poId)}/reconcile`,
+      { proposalId },
+    );
+    return [r.status, r.json] as const;
+  }
   /** What would stop (or allow) accepting this quote, check by check, and who may. Read-only. */
   async acceptanceCheck(quoteId: string) {
     const r = await this.call(
@@ -1726,6 +1757,44 @@ export class PayFlowMemberClient {
         `/v1/admin/org/messages/${encodeURIComponent(messageId)}/events`,
       );
       return (r.json.events ?? []) as unknown[];
+    },
+  };
+
+  /** Purchase orders derived from acceptances, and reconciliation of the payment against them. */
+  readonly purchaseOrders = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/purchase-orders`,
+      );
+      return r.json;
+    },
+    issue: async (
+      acceptanceId: string,
+      body: {
+        agentId: string;
+        category: string;
+        purpose: string;
+        costCenter?: string;
+        invoiceRef?: string;
+        ttlMinutes?: number;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/acceptances/${encodeURIComponent(acceptanceId)}/purchase-order`,
+        body,
+      );
+      return [r.status, r.json] as const;
+    },
+    reconcile: async (poId: string, proposalId: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/purchase-orders/${encodeURIComponent(poId)}/reconcile`,
+        { proposalId },
+      );
+      return [r.status, r.json] as const;
     },
   };
 

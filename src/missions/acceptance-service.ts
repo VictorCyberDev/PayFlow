@@ -551,6 +551,14 @@ export class AcceptanceService {
         ok: true,
         value: { acceptanceId, status: "WITHDRAWN", replayed: true },
       };
+    const [built] = await this.deps
+      .sql`select 1 from mission_purchase_orders where acceptance_id = ${acceptanceId}`;
+    if (built)
+      return {
+        ok: false,
+        refusal: "ALREADY_RESOLVED",
+        detail: "A purchase order was issued from this acceptance.",
+      };
     const moved = await this.deps.ledger.transition(
       caller,
       String(a.ledger_item_id),
