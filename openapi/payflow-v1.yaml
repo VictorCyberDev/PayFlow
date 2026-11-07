@@ -2005,6 +2005,57 @@ paths:
         - { in: path, name: orderId, required: true, schema: { type: string } }
       responses:
         "200": { description: Recorded as a claim }
+  /v1/admin/org/orders/{orderId}/fulfillment:
+    get:
+      operationId: orderFulfillment
+      summary: Shipments, receipts, the computed outcome and the dispute grounds it supports.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Fulfillment }
+  /v1/admin/org/orders/{orderId}/shipments:
+    post:
+      operationId: recordShipment
+      summary: Record a shipment; with verify and evidence a person verifies it, otherwise it is a claim.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Recorded }
+  /v1/admin/org/orders/{orderId}/receipts:
+    post:
+      operationId: recordReceipt
+      summary: A person's count of what arrived for one purchase-order line, with condition and evidence. Only for an order verified as shipped.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Recorded }
+        "409": { description: Order not verified as shipped }
+  /v1/agent/orders/{orderId}/fulfillment:
+    get:
+      operationId: agentOrderFulfillment
+      summary: Fulfillment view (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Fulfillment }
+  /v1/agent/orders/{orderId}/shipments:
+    post:
+      operationId: agentReportShipment
+      summary: Report a shipment for your order. Always a claim.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Recorded as a claim }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem

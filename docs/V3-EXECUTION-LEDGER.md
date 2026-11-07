@@ -22,13 +22,14 @@ Source of truth for resuming the V3 program (ADR-018). Update at every milestone
 | M39 Acceptance          | COMPLETE_LOCAL                                                                                                                      | next PR | 042       | walk-away never exceeded; agent accepts only within approved rules, else escalates; commits budget, pays no one              |
 | M40 Procurement→payment | COMPLETE_LOCAL (reconciliation from PayFlow's own trace); live gateway PO enforcement PARTIAL; real PayPal Sandbox BLOCKED_EXTERNAL | #53     | 043       | PO is an instruction not a payment; budget follows the trace, mismatch holds as UNKNOWN, foreign payments cannot move it     |
 | M41 Orders              | COMPLETE_LOCAL                                                                                                                      | this PR | 044       | only a reconciled-settled purchase becomes an order; status moves only on a person's evidenced event, claims shown beside it |
-| M42–M50                 | NOT STARTED                                                                                                                         | —       | —         | see ADR-018                                                                                                                  |
+| M42 Fulfillment         | COMPLETE_LOCAL                                                                                                                      | this PR | 045       | receipts are a person's counts; outcome computed from PO lines and receipts; shipments from agents are claims                |
+| M43–M50                 | NOT STARTED                                                                                                                         | —       | —         | see ADR-018                                                                                                                  |
 
 ## Next executable actions (in order)
 
 1. **M30 follow-up (deferred, not blocking):** UI actions (create, approve/reject a pending revision, pause/resume/cancel) and an approvals queue.
    Deliberately not in v1: a UI that can approve is a second approval surface. Revisit after M31-M40 when more state needs a human.
-2. **M42 fulfillment** (next; M41 is done locally; real PayPal Sandbox needs the owner's credentials) + a real adapter only where authorized access exists (eBay Browse needs developer keys - owner action).
+2. **M43 refunds/disputes** (next; M42 is done locally; M41 is done locally; real PayPal Sandbox needs the owner's credentials) + a real adapter only where authorized access exists (eBay Browse needs developer keys - owner action).
 3. Procurement pack on the live path (extend the purchase request with SKU/costCenter/purpose/invoice, compare to the trusted offer).
 4. M32–M50 as ADR-018. M40 real PayPal Sandbox needs the owner's Sandbox credentials (never in chat).
 

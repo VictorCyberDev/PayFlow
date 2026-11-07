@@ -985,6 +985,31 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** Report a shipment for your order (a claim; a person verifies it). */
+  async reportShipment(
+    orderId: string,
+    shipment: {
+      carrier: string;
+      trackingRef: string;
+      expectedDelivery?: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/orders/${encodeURIComponent(orderId)}/shipments`,
+      shipment,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** What has arrived, the computed outcome and the dispute grounds it supports. Read-only. */
+  async fulfillment(orderId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/orders/${encodeURIComponent(orderId)}/fulfillment`,
+    );
+    return [r.status, r.json] as const;
+  }
   /** Create the order for a purchase PayFlow reconciled as settled (needs PURCHASE; you must be the order's buyer). */
   async createOrder(poId: string, idempotencyKey: string) {
     const r = await this.call(
@@ -1792,6 +1817,57 @@ export class PayFlowMemberClient {
         `/v1/admin/org/messages/${encodeURIComponent(messageId)}/events`,
       );
       return (r.json.events ?? []) as unknown[];
+    },
+  };
+
+  /** Fulfillment: shipments and a person's receipts; the outcome is computed. */
+  readonly fulfillment = {
+    get: async (orderId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/orders/${encodeURIComponent(orderId)}/fulfillment`,
+      );
+      return r.json;
+    },
+    shipment: async (
+      orderId: string,
+      shipment: {
+        carrier: string;
+        trackingRef: string;
+        expectedDelivery?: string;
+        verify?: boolean;
+        evidenceKind?:
+          "NONE" | "OWNER_ATTESTATION" | "DOCUMENT_REF" | "CONNECTOR_CALL";
+        evidenceRef?: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/orders/${encodeURIComponent(orderId)}/shipments`,
+        shipment,
+      );
+      return [r.status, r.json] as const;
+    },
+    /** A person's count of what arrived for one purchase-order line. Needs evidence. */
+    receipt: async (
+      orderId: string,
+      receipt: {
+        lineIndex: number;
+        quantity: number;
+        condition: "OK" | "DAMAGED" | "WRONG_ITEM";
+        evidenceKind: "OWNER_ATTESTATION" | "DOCUMENT_REF";
+        evidenceRef?: string;
+        note?: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/orders/${encodeURIComponent(orderId)}/receipts`,
+        receipt,
+      );
+      return [r.status, r.json] as const;
     },
   };
 
