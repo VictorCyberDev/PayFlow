@@ -54,6 +54,7 @@ import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
 import { verifyProofRequest } from "./hosted-verify.js";
 import { PortableCredentialIssuer } from "./credential-issuance.js";
+import { IssuerDirectoryPublisher } from "./issuer-directory.js";
 import { createExecutingRestHandler } from "./rest-execution.js";
 import { createMcpHttpHandler } from "../protocols/mcp-http.js";
 import { protectedResourceMetadata } from "../protocols/chatgpt-app.js";
@@ -250,6 +251,20 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       })
     : undefined;
   const registry = new SigningKeyRegistry(sql);
+  const directoryPublisher = options.credentialIssuer
+    ? new IssuerDirectoryPublisher({
+        sql,
+        registry,
+        registryIssuer: options.organizationId,
+        issuer: options.credentialIssuer,
+        signer: {
+          kid: key.keyId,
+          privateKey: demo.signingForProofs().privateKey,
+        },
+        statusListUrl: `${options.credentialIssuer}/v1/issuer/status`,
+        now: iso,
+      })
+    : undefined;
   const members = new MemberStore(sql);
   const alerts = new AlertEngine(sql);
   // The active key is registered once; older keys stay published so historical Proof still
@@ -1335,6 +1350,39 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       );
       res.writeHead(reply.status, Object.fromEntries(reply.headers.entries()));
       res.end(Buffer.from(await reply.arrayBuffer()));
+      return true;
+    }
+    if (method === "GET" && path === "/v1/issuer/directory") {
+      if (!directoryPublisher) {
+        send(res, {
+          status: 404,
+          headers: { "content-type": "application/json" },
+          body: { reason: "ISSUER_NOT_CONFIGURED" },
+        });
+        return true;
+      }
+      try {
+        await ensureKeys();
+        send(res, {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "public, max-age=60",
+          },
+          body: await directoryPublisher.current(),
+        });
+      } catch {
+        // Nothing is published rather than something wrong: a verifier keeps its previous directory until it expires.
+        send(res, {
+          status: 503,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "no-store",
+            "retry-after": "30",
+          },
+          body: { reason: "DIRECTORY_UNAVAILABLE" },
+        });
+      }
       return true;
     }
     if (method === "GET" && path === "/v1/issuer/status") {

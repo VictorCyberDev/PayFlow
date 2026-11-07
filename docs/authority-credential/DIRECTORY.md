@@ -44,3 +44,39 @@ verifier: valid, revoked credential, revoked signing key, expired directory, old
   control trust. Compromise of the root key's private half is not recoverable by this protocol.
 - Revocation is as fresh as the last successful status-list fetch; there is no push channel.
 - Ed25519 only; JSON canonicalisation is this project's own; no interop with any existing directory standard.
+
+## Publication (A2): PayFlow's own issuer directory
+
+`GET /v1/issuer/directory` (public) and `GET /v1/issuer/status` (public), from the same host that issues the credentials
+(`docs/authority-credential/ISSUANCE.md`). Status: **COMPLETE_LOCAL** — a separate `IssuerDirectoryClient`, pinned only to the
+root key and talking to a real local HTTP host with PostgreSQL, discovers the directory, verifies a credential, follows
+rotation, and learns of revocations. Not deployed; the public Neon database needs migrations 025 and 026.
+
+- **Immutable documents.** A sequence is stored (the exact bytes) and re-served unchanged until the key set or signer changes,
+  or it is within 15 minutes of expiry (valid 1 h). Ten concurrent requests and a process restart returned identical bytes;
+  cutting a sequence takes a database advisory lock, so two instances cannot disagree (no equivocation).
+- **Keys.** ACTIVE, RETIRED (explicit end of grace, 24 h after retirement) and REVOKED tombstones from the existing signing-key
+  registry. A revoked key can never be re-activated.
+- **Signer.** The directory is signed by this process's key, which must be in the registry and not revoked; otherwise the
+  endpoint answers `503 DIRECTORY_UNAVAILABLE` and publishes nothing (a client keeps its previous directory until it expires,
+  then fails closed).
+- **Rotation (two steps; the second document must be signed by a key the first already trusted):**
+  1. `SigningKeyRegistry.announce(issuer, newKid, newPublicJwk)` — status NEXT. The process still signs with the OLD key.
+     The directory rolls to the next sequence listing the new key as trusted, signed by the old key. Nothing else changes:
+     the ACTIVE key, `/v1/keys` and Proof signing are untouched.
+  2. Wait at least the directory lifetime (1 h) so verifiers have fetched it.
+  3. Change the deployment's signing secret and `PAYFLOW_M6_SIGNING_KID` to the new key and redeploy. Starting with the new
+     key promotes it to ACTIVE and retires the old one (the existing M14 rule, including rollback by redeploying the old
+     key). The next sequence is signed by the new key, which the previous directory already named.
+     A cold start of an old-key process between steps 1 and 3 changes nothing, because announcing never moves the ACTIVE key
+     (tested). While designing this, a simpler approach (never re-activating a known key at start-up) broke the accepted M14
+     "rollback by redeploy" contract and was dropped.
+- **Compromise.** `SigningKeyRegistry.revoke(kid)`: the key appears as REVOKED and every credential it signed stops verifying
+  at the verifier's next refresh. If the revoked key is the one the process signs with, publication stops until the
+  deployment is switched to a good key.
+
+Mutation checks (each fails a test): re-serving vs always cutting a sequence, revoked signer allowed, tombstones omitted,
+announced keys not trusted, retired keys never expiring.
+
+Remaining: the signing key is still the Proof key; no dedicated credential key. No monitoring alert on `DIRECTORY_UNAVAILABLE`
+yet. The hosted public deployment does not exist, so nothing here has been fetched from a public URL.

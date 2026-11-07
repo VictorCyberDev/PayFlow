@@ -345,6 +345,23 @@ paths:
             description: Revoked (or already revoked); verifiers learn at their next status-list fetch,
           }
         "404": { description: No such credential in this tenant }
+  /v1/issuer/directory:
+    get:
+      operationId: issuerDirectory
+      summary: The issuer's signed key directory. Public.
+      description: >-
+        `payflow-issuer-directory/v1`: the issuer id (an origin), a monotonically increasing `sequence`, every key the issuer
+        has published with its status (ACTIVE, RETIRED with an end of grace, or REVOKED as a tombstone), and the status-list
+        URL. Valid for one hour. A published sequence is immutable and re-served byte for byte; a new sequence is cut only
+        when the key set changes, the signing key changes, or the document nears expiry. Signed by the host's signing key.
+        Verifiers must PIN the root key out of band, accept a new directory only if a key they already trust signed it, and
+        refuse rollback or two different documents for one sequence (see `@payflow/directory-client`). If the signing key is
+        unknown or revoked the endpoint answers 503 and publishes nothing.
+      x-hosted-only: true
+      security: []
+      responses:
+        "200": { description: Signed directory }
+        "503": { description: DIRECTORY_UNAVAILABLE; nothing was published }
   /v1/issuer/status:
     get:
       operationId: issuerStatusList
