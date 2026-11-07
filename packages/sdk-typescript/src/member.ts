@@ -384,6 +384,41 @@ const asPlan = (status: number, json: Record<string, unknown>): PlanResult =>
           : {}),
       };
 
+// ------------------------------------------------------------------------- quotes (V3 M34)
+export type QuoteMoney =
+  { basis: "STATED" | "ESTIMATED"; minor: number } | { basis: "UNKNOWN" };
+export interface QuoteInput {
+  supplierId: string;
+  currency: string;
+  validUntil: string;
+  document: {
+    lines: {
+      description: string;
+      sku?: string;
+      quantity: number;
+      unitPrice: QuoteMoney;
+    }[];
+    shipping: QuoteMoney;
+    tax: QuoteMoney;
+    duties: QuoteMoney;
+    fees: QuoteMoney;
+    discount: QuoteMoney;
+    terms?: {
+      paymentTerms?: string;
+      deliveryDays?: number;
+      returnWindowDays?: number;
+      warrantyMonths?: number;
+    };
+  };
+  source: {
+    kind:
+      "CONNECTOR_CALL" | "DOCUMENT_REF" | "SUPPLIER_STATED" | "OWNER_REPORTED";
+    ref?: string;
+  };
+  supersedes?: string;
+  idempotencyKey: string;
+}
+
 // ------------------------------------------------------------------------- supplier qualification (V3 M33)
 export interface SupplierFactInput {
   criterion: string;
@@ -731,6 +766,42 @@ export class PayFlowAgentMissionClient {
       "POST",
       `/v1/agent/suppliers/${encodeURIComponent(supplierId)}/facts`,
       input,
+    );
+    return [r.status, r.json] as const;
+  }
+  /**
+   * Record what a supplier STATED (needs COMPARE). Each money part is STATED, ESTIMATED or UNKNOWN; the total is only claimed
+   * when nothing is unknown. A quote is not an acceptance and PayFlow cannot make it binding.
+   */
+  async recordQuote(missionId: string, input: QuoteInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/quotes`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  async quotes(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/quotes`,
+    );
+    return r.json;
+  }
+  async compareQuotes(missionId: string, quoteIds?: string[]) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/quotes/compare`,
+      quoteIds ? { quoteIds } : {},
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Put a current, complete quote in the budget as ONE QUOTED item (holds nothing until a person approves it). Idempotent. */
+  async quoteToLedger(quoteId: string, idempotencyKey: string) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/quotes/${encodeURIComponent(quoteId)}/ledger`,
+      { idempotencyKey },
     );
     return [r.status, r.json] as const;
   }
@@ -1231,6 +1302,41 @@ export class PayFlowMemberClient {
         "POST",
         `/v1/admin/org/missions/${encodeURIComponent(missionId)}/qualification-policy`,
         { required, idempotencyKey },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Supplier quotes and landed cost. */
+  readonly quotes = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/quotes`,
+      );
+      return r.json;
+    },
+    record: async (missionId: string, input: QuoteInput) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/quotes`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    compare: async (missionId: string, quoteIds?: string[]) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/quotes/compare`,
+        quoteIds ? { quoteIds } : {},
+      );
+      return [r.status, r.json] as const;
+    },
+    toLedger: async (quoteId: string, idempotencyKey: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/quotes/${encodeURIComponent(quoteId)}/ledger`,
+        { idempotencyKey },
       );
       return [r.status, r.json] as const;
     },

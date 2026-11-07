@@ -1157,6 +1157,122 @@ paths:
             description: Verification,
             attestation or erasure by an agent refused,
           }
+  /v1/admin/org/missions/{missionId}/quotes:
+    get:
+      operationId: listQuotes
+      summary: Recorded supplier quotes with status (CURRENT, EXPIRED, SUPERSEDED) and landed cost. A total is shown only when nothing in it is unknown.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Quotes }
+    post:
+      operationId: recordQuote
+      summary: Record what a supplier stated. Immutable; a newer quote supersedes an older one once.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded }
+        "403": { description: Supplier not allowed by the contract }
+        "409": { description: Expired, superseded, or idempotency key reused }
+  /v1/admin/org/missions/{missionId}/quotes/compare:
+    post:
+      operationId: compareQuotes
+      summary: Rank complete, current quotes in the mission currency by landed cost; list the rest with the reason they were not ranked.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Ranking }
+  /v1/admin/org/quotes/{quoteId}/ledger:
+    post:
+      operationId: quoteToLedger
+      summary: Put a current, complete quote in the budget as one QUOTED item. Holds nothing until a person approves it.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Created }
+        "200": { description: Already in the budget (replay) }
+        "422":
+          {
+            description: Quote incomplete,
+            or currency differs from the mission,
+          }
+  /v1/agent/missions/{missionId}/quotes:
+    get:
+      operationId: agentQuotes
+      summary: Quotes for the mission (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Quotes }
+    post:
+      operationId: agentRecordQuote
+      summary: Record a supplier quote (needs COMPARE). An agent cannot report a quote as the owner's.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded }
+  /v1/agent/missions/{missionId}/quotes/compare:
+    post:
+      operationId: agentCompareQuotes
+      summary: Quote ranking by landed cost (needs COMPARE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Ranking }
+  /v1/agent/quotes/{quoteId}/ledger:
+    post:
+      operationId: agentQuoteToLedger
+      summary: Put a quote in the budget as one QUOTED item (needs COMPARE; ledger rules apply).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Created }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem
