@@ -56,6 +56,8 @@ import { verifyProofRequest } from "./hosted-verify.js";
 import { PortableCredentialIssuer } from "./credential-issuance.js";
 import { MissionService, type MissionCaller } from "../missions/service.js";
 import { createMissionRoutes } from "./mission-routes.js";
+import { PlanService } from "../missions/plan-service.js";
+import { createPlanRoutes } from "./plan-routes.js";
 import { DelegationService, type Caller } from "./delegation-service.js";
 import type { JWTVerifyGetKey } from "jose";
 import type { ProtocolAuthenticator } from "../protocols/http-auth.js";
@@ -974,6 +976,29 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   const missionService = new MissionService({ sql, audit, now: iso });
   const missionRoutes = createMissionRoutes({
     service: missionService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
+  const planService = new PlanService({
+    sql,
+    audit,
+    missions: missionService,
+    now: iso,
+  });
+  const planRoutes = createPlanRoutes({
+    service: planService,
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(
@@ -2010,12 +2035,15 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     if (
       path.startsWith("/v1/agent/delegations/") ||
       path === "/v1/agent/missions" ||
-      path.startsWith("/v1/agent/missions/")
+      path.startsWith("/v1/agent/missions/") ||
+      path === "/v1/agent/tasks" ||
+      path.startsWith("/v1/agent/tasks/")
     ) {
       send(
         res,
         (await safely(() => delegationRoute(request))) ??
-          (await safely(() => missionRoutes.agent(request))) ?? {
+          (await safely(() => missionRoutes.agent(request))) ??
+          (await safely(() => planRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2037,6 +2065,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => credentialRoute(request))) ??
         (await safely(() => delegationRoute(request))) ??
         (await safely(() => missionRoutes.member(request))) ??
+        (await safely(() => planRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {

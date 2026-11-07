@@ -48,6 +48,7 @@ export const PERMISSIONS = [
   "mission:approve",
   "mission:control",
   "mission:contain",
+  "mission:plan",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -90,6 +91,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "mission:revise",
     "mission:control",
     "mission:contain",
+    "mission:plan",
   ],
   // Contains blast radius: revoke credentials, pause/resume, see agents and exposure.
   // Cannot widen Authority or approve spend.
