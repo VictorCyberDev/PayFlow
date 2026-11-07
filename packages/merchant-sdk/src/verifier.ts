@@ -42,15 +42,18 @@ const orderDigest = (o: MerchantOrder) =>
     .digest("hex");
 
 // ------------------------------------------------------------------ challenges
+type Maybe<T> = T | Promise<T>;
 export interface ChallengeStore {
+  /** True for a store whose methods return promises (a shared database). `issueChallenge` then needs `issue`. */
+  readonly async?: true;
   put(
     challenge: string,
     record: { digest: string; expiresAt: number },
     now: number,
-  ): void;
+  ): Maybe<void>;
   /** Atomic single use: true exactly once, and only for an unexpired challenge bound to this digest. */
-  consume(challenge: string, digest: string, now: number): boolean;
-  peek(challenge: string, digest: string, now: number): boolean;
+  consume(challenge: string, digest: string, now: number): Maybe<boolean>;
+  peek(challenge: string, digest: string, now: number): Maybe<boolean>;
 }
 /** In-process store. A multi-instance merchant must supply a shared one with the same atomic `consume`. */
 export class MemoryChallengeStore implements ChallengeStore {
@@ -94,7 +97,9 @@ export type AgentVerification =
   | { readonly valid: true; readonly bound: BoundVerification }
   | {
       readonly valid: false;
-      readonly reasons: readonly (Reason | "UNKNOWN_CHALLENGE")[];
+      readonly reasons: readonly (
+        Reason | "UNKNOWN_CHALLENGE" | "STORE_UNAVAILABLE"
+      )[];
     };
 
 export type ProofVerdict = "FULFIL" | "HOLD" | "DO_NOT_FULFIL" | "REFUSE";
@@ -107,6 +112,7 @@ export interface ProofAssociation {
     | "PROOF_NOT_AUTHENTIC"
     | "PROOF_DOES_NOT_MATCH_ORDER"
     | "PROOF_ALREADY_USED_FOR_ANOTHER_ORDER"
+    | "ORDER_ALREADY_PAID_BY_ANOTHER_PAYMENT"
     | "VERIFIER_UNAVAILABLE";
   readonly mismatches: readonly string[];
   readonly humanSummary: string;
@@ -148,17 +154,31 @@ export const hostedProofVerifier =
     return (await response.json()) as ProofCheck;
   };
 
+export type ClaimResult =
+  | "CLAIMED"
+  | "SAME_ORDER_AGAIN"
+  | "ACTION_USED_FOR_ANOTHER_ORDER"
+  | "ORDER_PAID_BY_ANOTHER_ACTION";
 export interface ProofLedger {
-  /** Atomic: true only the first time this Proof's action is tied to an order (or to the same order again). */
-  claim(actionId: string, orderId: string): boolean;
+  /**
+   * Atomic. One payment (action id) pays one order and one order is paid by one payment; claiming the same pair again is
+   * fine (a re-check). Either conflict is reported by name, and nothing is recorded.
+   */
+  claim(actionId: string, orderId: string): Maybe<ClaimResult>;
 }
 export class MemoryProofLedger implements ProofLedger {
   private readonly owner = new Map<string, string>();
-  claim(actionId: string, orderId: string) {
+  private readonly paidBy = new Map<string, string>();
+  claim(actionId: string, orderId: string): ClaimResult {
     const existing = this.owner.get(actionId);
-    if (existing !== undefined) return existing === orderId;
+    if (existing !== undefined)
+      return existing === orderId
+        ? "SAME_ORDER_AGAIN"
+        : "ACTION_USED_FOR_ANOTHER_ORDER";
+    if (this.paidBy.has(orderId)) return "ORDER_PAID_BY_ANOTHER_ACTION";
     this.owner.set(actionId, orderId);
-    return true;
+    this.paidBy.set(orderId, actionId);
+    return "CLAIMED";
   }
 }
 
@@ -190,13 +210,29 @@ export class MerchantVerifier {
     this.ttl = (options.challengeTtlSeconds ?? 300) * 1000;
   }
 
+  /** In-process stores only. With a shared (async) store use `issue`; this refuses before storing anything. */
   issueChallenge(order: MerchantOrder): {
     challenge: string;
     expiresAt: string;
   } {
+    if (this.challenges.async) throw new Error("ASYNC_STORE_USE_ISSUE");
     const challenge = randomBytes(24).toString("base64url");
     const expires = Date.parse(this.now()) + this.ttl;
-    this.challenges.put(
+    void this.challenges.put(
+      challenge,
+      { digest: orderDigest(order), expiresAt: expires },
+      Date.parse(this.now()),
+    );
+    return { challenge, expiresAt: new Date(expires).toISOString() };
+  }
+
+  /** Works with any store. If a shared store is unavailable this throws and NO challenge exists: fail closed. */
+  async issue(
+    order: MerchantOrder,
+  ): Promise<{ challenge: string; expiresAt: string }> {
+    const challenge = randomBytes(24).toString("base64url");
+    const expires = Date.parse(this.now()) + this.ttl;
+    await this.challenges.put(
       challenge,
       { digest: orderDigest(order), expiresAt: expires },
       Date.parse(this.now()),
@@ -212,36 +248,46 @@ export class MerchantVerifier {
     // The challenge comes from our own store keyed by what the agent presented, never trusted for its own sake.
     const challenge = (presentation as Presentation | null)?.proof?.challenge;
     const digest = orderDigest(order);
-    if (
-      typeof challenge !== "string" ||
-      !this.challenges.peek(challenge, digest, Date.parse(at))
-    )
+    if (typeof challenge !== "string")
       return { valid: false, reasons: ["UNKNOWN_CHALLENGE"] };
-    const verdict = await verifyPresentation(
-      presentation,
-      {
-        aud: this.options.audience,
-        challenge,
-        now: at,
-        action: {
-          kind: order.actionKind ?? "PURCHASE",
-          currency: order.currency,
-          counterpartyId: order.merchantId,
-          amountMinor: order.amountMinor,
+    try {
+      if (!(await this.challenges.peek(challenge, digest, Date.parse(at))))
+        return { valid: false, reasons: ["UNKNOWN_CHALLENGE"] };
+    } catch {
+      // A store that cannot answer is never read as "valid".
+      return { valid: false, reasons: ["STORE_UNAVAILABLE"] };
+    }
+    let verdict;
+    try {
+      verdict = await verifyPresentation(
+        presentation,
+        {
+          aud: this.options.audience,
+          challenge,
+          now: at,
+          action: {
+            kind: order.actionKind ?? "PURCHASE",
+            currency: order.currency,
+            counterpartyId: order.merchantId,
+            amountMinor: order.amountMinor,
+          },
         },
-      },
-      {
-        ...this.options.env,
-        claimNonce:
-          this.options.claimNonce ??
-          ((scope, nonce) => {
-            const k = `${scope}:${nonce}`;
-            if (this.seenNonces.has(k)) return false;
-            this.seenNonces.add(k);
-            return true;
-          }),
-      },
-    );
+        {
+          ...this.options.env,
+          claimNonce:
+            this.options.claimNonce ??
+            ((scope, nonce) => {
+              const k = `${scope}:${nonce}`;
+              if (this.seenNonces.has(k)) return false;
+              this.seenNonces.add(k);
+              return true;
+            }),
+        },
+      );
+    } catch {
+      // The nonce store (or another dependency) could not answer: never read as valid.
+      return { valid: false, reasons: ["STORE_UNAVAILABLE"] };
+    }
     if (
       !verdict.valid ||
       !verdict.effective ||
@@ -250,8 +296,12 @@ export class MerchantVerifier {
     )
       return { valid: false, reasons: verdict.reasons };
     // Spent only now, on success, and only if it was still ours to spend (a concurrent use loses).
-    if (!this.challenges.consume(challenge, digest, Date.parse(at)))
-      return { valid: false, reasons: ["UNKNOWN_CHALLENGE"] };
+    try {
+      if (!(await this.challenges.consume(challenge, digest, Date.parse(at))))
+        return { valid: false, reasons: ["UNKNOWN_CHALLENGE"] };
+    } catch {
+      return { valid: false, reasons: ["STORE_UNAVAILABLE"] };
+    }
     const bound = {
       orderId: order.orderId,
       verifiedAt: at,
@@ -331,12 +381,35 @@ export class MerchantVerifier {
         mismatches: ["outcome"],
         humanSummary: "The Proof is in a form this merchant does not accept.",
       };
-    if (!this.ledger.claim(check.actionId, order.orderId))
+    let claim: ClaimResult;
+    try {
+      claim = await this.ledger.claim(check.actionId, order.orderId);
+    } catch {
+      // Cannot record the claim: hold. Shipping without the record would allow double fulfilment.
+      return {
+        verdict: "HOLD",
+        reason: "VERIFIER_UNAVAILABLE",
+        mismatches: [],
+        humanSummary:
+          "The merchant's payment ledger is unavailable. Do not ship and do not cancel; try again.",
+        actionId: check.actionId,
+      };
+    }
+    if (claim === "ACTION_USED_FOR_ANOTHER_ORDER")
       return {
         verdict: "REFUSE",
         reason: "PROOF_ALREADY_USED_FOR_ANOTHER_ORDER",
         mismatches: [],
         humanSummary: "This payment already paid for a different order.",
+        actionId: check.actionId,
+      };
+    if (claim === "ORDER_PAID_BY_ANOTHER_ACTION")
+      return {
+        verdict: "REFUSE",
+        reason: "ORDER_ALREADY_PAID_BY_ANOTHER_PAYMENT",
+        mismatches: [],
+        humanSummary:
+          "This order is already paid by a different payment. Do not ship twice; consider refunding the duplicate.",
         actionId: check.actionId,
       };
     return {

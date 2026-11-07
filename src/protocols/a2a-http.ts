@@ -69,6 +69,7 @@ export function delegatedSpendFacts(
   if (action === null || typeof action !== "object") return null;
   const a = action as {
     action?: unknown;
+    authority?: unknown;
     amount?: { minor?: unknown; currency?: unknown };
     merchant?: { id?: unknown };
   };
@@ -76,7 +77,8 @@ export function delegatedSpendFacts(
     a.action !== "purchase" ||
     typeof a.amount?.minor !== "number" ||
     typeof a.amount.currency !== "string" ||
-    typeof a.merchant?.id !== "string"
+    typeof a.merchant?.id !== "string" ||
+    typeof a.authority !== "string"
   )
     return null;
   return {
@@ -84,6 +86,8 @@ export function delegatedSpendFacts(
     currency: a.amount.currency,
     counterpartyId: a.merchant.id,
     amountMinor: a.amount.minor,
+    // The delegation must be bound to exactly the stored Authority this action is for.
+    authorityId: a.authority,
   };
 }
 

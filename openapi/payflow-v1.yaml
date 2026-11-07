@@ -345,6 +345,123 @@ paths:
             description: Revoked (or already revoked); verifiers learn at their next status-list fetch,
           }
         "404": { description: No such credential in this tenant }
+  /v1/admin/org/authorities/{authorityId}/delegations:
+    post:
+      operationId: createRootDelegation
+      summary: Root a delegation chain in a STORED Authority. Needs authority:delegate.
+      description: >-
+        Scope comes from storage: action PURCHASE, the Authority's currency, merchants within its list, and a shared budget
+        no larger than its cumulative limit. A request that names a currency, action kind or amount ceiling is rejected.
+        Idempotent on `idempotencyKey`. Never bypasses the Trust Kernel: a delegation is only a constraint.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: authorityId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [childAgentId, budgetMinor, idempotencyKey]
+              properties:
+                childAgentId: { type: string }
+                budgetMinor: { type: integer, minimum: 1 }
+                counterpartyIds:
+                  { type: array, items: { type: string }, minItems: 1 }
+                ttlSeconds: { type: integer, minimum: 60 }
+                idempotencyKey: { type: string, minLength: 16, maxLength: 128 }
+      responses:
+        "201": { description: Created }
+        "200": { description: Replay of an earlier identical request }
+        "400": { description: Malformed or unknown field }
+        "403":
+          {
+            description: Refused (budget above Authority,
+            counterparty not in Authority,
+            revoked Authority,
+            role),
+          }
+        "404": { description: No such Authority in this tenant }
+        "409": { description: Idempotency key reused with a different request }
+    get:
+      operationId: listDelegations
+      summary: Delegations rooted in one Authority, with lineage and remaining budget. Needs view:authorities.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: authorityId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Delegation views for this tenant only }
+  /v1/admin/org/delegations/{delegationId}:
+    get:
+      operationId: inspectDelegation
+      summary: A delegation with its parent/child lineage and its EFFECTIVE permissions (the intersection of every hop above it).
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: delegationId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: The delegation view }
+        "404":
+          { description: No such delegation in this tenant and environment }
+  /v1/admin/org/delegations/{delegationId}/hops:
+    post:
+      operationId: createDelegationHop
+      summary: Extend a delegation on behalf of the organization. Narrowing only. Needs authority:delegate.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: delegationId
+          required: true
+          schema: { type: string }
+      responses:
+        "201": { description: Created }
+        "200": { description: Replay }
+        "403": { description: Refused; a child can never widen its parent }
+        "404": { description: No such delegation in this tenant }
+  /v1/admin/org/delegations/{delegationId}/revoke:
+    post:
+      operationId: revokeDelegation
+      summary: Revoke a delegation and, with it, everything beneath it. Idempotent. Needs authority:delegate_revoke.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - in: path
+          name: delegationId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Revoked; charges already reserved stay counted }
+        "404": { description: No such delegation in this tenant }
+  /v1/agent/delegations/{delegationId}/hops:
+    post:
+      operationId: agentCreateDelegationHop
+      summary: The agent that HOLDS a delegation extends it to another agent. Narrowing only.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - in: path
+          name: delegationId
+          required: true
+          schema: { type: string }
+      responses:
+        "201": { description: Created }
+        "401": { description: Agent credential required }
+        "403":
+          { description: Not the holder, or the hop would widen the parent }
+        "423": { description: Organization paused }
   /v1/issuer/directory:
     get:
       operationId: issuerDirectory

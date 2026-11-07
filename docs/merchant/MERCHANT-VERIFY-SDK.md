@@ -26,7 +26,7 @@ authorises a payment and never sees a payment credential.
 | A presentation made for another merchant, or for an action beyond the agent's authority, is refused for that reason             |
 | An **UNKNOWN** payment outcome **holds**: neither ship nor cancel. A Verify outage also holds; it is not evidence of no payment |
 | A Proof of no money moved does not ship; an inauthentic or mismatched Proof is refused, naming what differs                     |
-| One payment cannot pay for two orders; re-checking the same order is fine                                                       |
+| One payment cannot pay for two orders, and one order cannot be paid by two payments; re-checking the same order is fine         |
 | Anything but exactly one effect with an action id is refused (never guessed)                                                    |
 
 ## Gate Mark rules (`docs/AUTHORITY-MARK-BETA.md`, now enforced)
@@ -48,10 +48,42 @@ hand-made verification for a mark, not holding on UNKNOWN, and not consuming a c
 
 ## Not claimed
 
-- In-process stores (challenges, nonces, Proof ledger). A merchant with several instances must supply shared ones with the
-  same atomic `consume`/`claim`; the interfaces exist, no shared implementation does.
+- A merchant that does not pass shared stores gets in-process ones, which are correct for ONE instance only.
 - The trust source for issuer keys and status lists is injected. No issuer directory is published yet (M24).
 - The SDK is TypeScript only and assumes the credential format of M22 (not a standard).
 - `MerchantVerifierClient` (the older class posting to `/v1/verify/presentations`) is unchanged and that route is not
   mounted on the hosted Gateway; use `MerchantVerifier`.
 - The mark's visual design has not been reviewed in a browser here (no axe or screenshot run for `renderGateMarkHtml`).
+
+## Shared durable stores (PostgreSQL, migration 028)
+
+`@payflow/merchant-verify/postgres` provides `PostgresChallengeStore`, `PostgresNonceStore` (pass its `claim` as
+`claimNonce`) and `PostgresProofLedger`. Pointing several instances at one database makes them behave as one verifier, and
+state survives restarts.
+
+```ts
+const sql = postgres(process.env.MERCHANT_DATABASE_URL!);
+const merchant = new MerchantVerifier({
+  audience: "https://shop.example",
+  env,
+  proofVerifier,
+  challenges: new PostgresChallengeStore(sql, "shop-1"),
+  claimNonce: new PostgresNonceStore(sql, "shop-1").claim,
+  proofLedger: new PostgresProofLedger(sql, "shop-1"),
+});
+const { challenge } = await merchant.issue(order); // async; issueChallenge() throws with a shared store
+```
+
+| Property                                                     | How                                                                                                                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A challenge is spent exactly once, across instances          | one `UPDATE ... WHERE consumed_at IS NULL ... RETURNING`; 12 concurrent presentations produce one winner                                                         |
+| One challenge, one order                                     | the order digest is part of both the check and the spend                                                                                                         |
+| TTL                                                          | enforced in the statement, not by a sweeper; expired rows are removed opportunistically                                                                          |
+| Challenges are not recoverable from the database             | only a SHA-256 hash is stored                                                                                                                                    |
+| A presentation nonce is claimed once                         | `INSERT ... ON CONFLICT DO NOTHING`, kept an hour (presentations live at most five minutes)                                                                      |
+| One payment pays one order; one order is paid by one payment | primary key + unique key, serialised with advisory locks; never deleted                                                                                          |
+| Store unavailable → fail closed                              | no challenge is issued; verification returns `STORE_UNAVAILABLE`; a Proof **HOLDs** (never ship, never cancel). Nothing is spent or recorded by a failed attempt |
+| Merchants sharing a database are separated                   | every row carries the `namespace`                                                                                                                                |
+
+Not claimed: the adapter is PostgreSQL only; no retention policy for `merchant_proof_claims` (kept on purpose);
+`namespace` must be unique per merchant and is the caller's responsibility; hosted-Gateway behaviour is unchanged.
