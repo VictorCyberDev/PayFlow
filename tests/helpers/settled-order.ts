@@ -12,6 +12,7 @@ export async function settledPurchase(
     pay?: boolean;
     total?: number;
     terms?: Record<string, number>;
+    extraMerchants?: string[];
   } = {},
 ) {
   const total = opts.total ?? 8_400;
@@ -22,7 +23,10 @@ export async function settledPurchase(
     contract({
       spendingCategories: ["KEYBOARD"],
       approvedProviderTypes: ["COMMERCE_MARKETPLACE"],
-      merchantRestrictions: { mode: "ONLY", ids: [DEMO_MERCHANT] },
+      merchantRestrictions: {
+        mode: "ONLY",
+        ids: [DEMO_MERCHANT, ...(opts.extraMerchants ?? [])],
+      },
       maxCommitmentMinor: 60_000,
       totalBudgetMinor: 150_000,
       agents: [

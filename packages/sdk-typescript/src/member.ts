@@ -985,6 +985,15 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** The multi-vendor view: spend by supplier, concentration, trouble per supplier and close-out blockers. Needs READ. */
+  async portfolio(missionId: string, maxShareBps?: number) {
+    const q = maxShareBps === undefined ? "" : `?maxShareBps=${maxShareBps}`;
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/portfolio${q}`,
+    );
+    return [r.status, r.json] as const;
+  }
   /** Add a reminder (a renewal, a payment due, or a note with a date). It moves no money; a person closes it. Needs READ. */
   async addObligation(
     missionId: string,
@@ -1883,6 +1892,16 @@ export class PayFlowMemberClient {
       );
       return (r.json.events ?? []) as unknown[];
     },
+  };
+
+  /** The multi-vendor view, computed when asked. `maxShareBps` (1..10000, default 5000) is the concentration limit. */
+  readonly portfolio = async (missionId: string, maxShareBps?: number) => {
+    const q = maxShareBps === undefined ? "" : `?maxShareBps=${maxShareBps}`;
+    const r = await this.call(
+      "GET",
+      `/v1/admin/org/missions/${encodeURIComponent(missionId)}/portfolio${q}`,
+    );
+    return r.json;
   };
 
   /** Dates the mission must not forget. Derived dates start from verified facts only. */

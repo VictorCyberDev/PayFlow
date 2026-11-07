@@ -2274,6 +2274,56 @@ paths:
           }
       responses:
         "201": { description: Added }
+  /v1/admin/org/missions/{missionId}/portfolio:
+    get:
+      operationId: missionPortfolio
+      summary: "Multi-vendor view computed when asked - spend by supplier in basis points, concentration above the limit, trouble open per supplier, and what blocks close-out. Read-only."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            in: query,
+            name: maxShareBps,
+            required: false,
+            schema: { type: integer, minimum: 1, maximum: 10000 },
+          }
+      responses:
+        "200":
+          {
+            description: "Spend by supplier, concentration, flags and close-out blockers",
+          }
+        "400": { description: "maxShareBps is not an integer from 1 to 10000" }
+  /v1/agent/missions/{missionId}/portfolio:
+    get:
+      operationId: agentMissionPortfolio
+      summary: The same view for an agent that can READ the mission.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            in: query,
+            name: maxShareBps,
+            required: false,
+            schema: { type: integer, minimum: 1, maximum: 10000 },
+          }
+      responses:
+        "200":
+          {
+            description: "Spend by supplier, concentration, flags and close-out blockers",
+          }
+        "400": { description: "maxShareBps is not an integer from 1 to 10000" }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem
