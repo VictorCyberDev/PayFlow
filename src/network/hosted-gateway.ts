@@ -74,6 +74,8 @@ import { OperationTraceService } from "../operation-trace.js";
 import { createProcurementRoutes } from "./procurement-routes.js";
 import { createOrderRoutes } from "./order-routes.js";
 import { createFulfillmentRoutes } from "./fulfillment-routes.js";
+import { createDisputeRoutes } from "./dispute-routes.js";
+import { DisputeService } from "../missions/dispute-service.js";
 import { FulfillmentService } from "../missions/fulfillment-service.js";
 import { OrderService } from "../missions/order-service.js";
 import { ProcurementService } from "../missions/procurement-service.js";
@@ -1388,6 +1390,31 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         caller.environment,
       )) !== null,
   });
+  const disputeService = new DisputeService({
+    sql,
+    audit,
+    missions: missionService,
+    ledger: ledgerService,
+    fulfillment: fulfillmentService,
+    now: iso,
+  });
+  const disputeRoutes = createDisputeRoutes({
+    service: disputeService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
   /** An authenticated agent credential → its tenant and agent id. Null for anything else. */
   async function resolveAgentCaller(
     request: RestRequest,
@@ -2421,7 +2448,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path.startsWith("/v1/agent/messages/") ||
       path.startsWith("/v1/agent/acceptances/") ||
       path.startsWith("/v1/agent/purchase-orders/") ||
-      path.startsWith("/v1/agent/orders/")
+      path.startsWith("/v1/agent/orders/") ||
+      path.startsWith("/v1/agent/disputes/")
     ) {
       send(
         res,
@@ -2439,7 +2467,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => acceptanceRoutes.agent(request))) ??
           (await safely(() => procurementRoutes.agent(request))) ??
           (await safely(() => orderRoutes.agent(request))) ??
-          (await safely(() => fulfillmentRoutes.agent(request))) ?? {
+          (await safely(() => fulfillmentRoutes.agent(request))) ??
+          (await safely(() => disputeRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2474,6 +2503,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => procurementRoutes.member(request))) ??
         (await safely(() => orderRoutes.member(request))) ??
         (await safely(() => fulfillmentRoutes.member(request))) ??
+        (await safely(() => disputeRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {

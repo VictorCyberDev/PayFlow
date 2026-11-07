@@ -2056,6 +2056,139 @@ paths:
         - { in: path, name: orderId, required: true, schema: { type: string } }
       responses:
         "201": { description: Recorded as a claim }
+  /v1/admin/org/orders/{orderId}/disputes:
+    post:
+      operationId: openDispute
+      summary: Open a dispute on a ground the computed fulfillment outcome supports, for no more than was paid and not yet refunded.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Opened }
+        "422":
+          {
+            description: Ground not supported,
+            claim too large,
+            or already open,
+          }
+  /v1/admin/org/missions/{missionId}/disputes:
+    get:
+      operationId: listDisputes
+      summary: Disputes with supplier replies (claims) and resolutions.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Disputes }
+  /v1/admin/org/disputes/{disputeId}/resolve:
+    post:
+      operationId: resolveDispute
+      summary: A person resolves a dispute. A refund needs Proof or a provider confirmation and cannot exceed the claim; it is applied through the ledger's partial-refund path, once.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: disputeId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Resolved (or replayed) }
+        "409": { description: Already resolved, or the ledger refused }
+        "422": { description: Refund not allowed }
+  /v1/admin/org/disputes/{disputeId}/withdraw:
+    post:
+      operationId: withdrawDispute
+      summary: Withdraw an open dispute. Moves no money.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: disputeId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Withdrawn }
+  /v1/admin/org/disputes/{disputeId}/events:
+    post:
+      operationId: addDisputeEvent
+      summary: Record a supplier response or a note. Stored as a claim.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: disputeId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Recorded }
+  /v1/agent/orders/{orderId}/disputes:
+    post:
+      operationId: agentOpenDispute
+      summary: Open a dispute on your order (needs PURCHASE; you must be the buyer).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Opened }
+  /v1/agent/missions/{missionId}/disputes:
+    get:
+      operationId: agentDisputes
+      summary: Disputes (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Disputes }
+  /v1/agent/disputes/{disputeId}/events:
+    post:
+      operationId: agentAddDisputeEvent
+      summary: Record a supplier response or note. A claim; resolves nothing.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: disputeId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Recorded }
+  /v1/agent/disputes/{disputeId}/withdraw:
+    post:
+      operationId: agentWithdrawDispute
+      summary: Withdraw a dispute you opened.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: disputeId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Withdrawn }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem
