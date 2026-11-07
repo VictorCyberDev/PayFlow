@@ -1,3 +1,5 @@
+> **PayPal AI Hackathon (2026-11-07):** [Spend Desk product and positioning](docs/competition/PAYPAL-2026-WINNING-PRODUCT.md) · [fair PayPal/AI baseline](docs/competition/PAYPAL-2026-BASELINE-METHOD.md) · [judge story and required submission gates](docs/competition/PAYPAL-2026-JUDGE-STORY.md) · [real customer-evidence plan](docs/competition/PAYPAL-2026-CUSTOMER-EVIDENCE.md). These are implementation plans, **not commissioned public-demo features, measured benchmark wins, customer proof, or a verified final Devpost submission**. Source truth and external blockers remain in [Gate evaluation](docs/GATE-EVALUATION.md) and [Owner actions](docs/OWNER-ACTIONS.md).
+
 > **Status (2026-11-03):** M7–M15 are merged to `main` (PR #19). PayFlow is a **developer preview**: PayPal Sandbox and a simulated rail only, no real money, no customers, no audit or certification. The per-milestone truth is in [docs/GATE-EVALUATION.md](docs/GATE-EVALUATION.md). The public host is not live yet; what remains, and why, is in [docs/GATE-A-PUBLIC-HOST.md](docs/GATE-A-PUBLIC-HOST.md). Older reports below are historical, not current certifications.
 
 # PayFlow
