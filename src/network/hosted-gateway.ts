@@ -66,6 +66,8 @@ import { createDiscoveryRoutes } from "./discovery-routes.js";
 import { createQualificationRoutes } from "./qualification-routes.js";
 import { createQuoteRoutes } from "./quote-routes.js";
 import { createSourcingRoutes } from "./sourcing-routes.js";
+import { createNegotiationRoutes } from "./negotiation-routes.js";
+import { NegotiationService } from "../missions/negotiation-service.js";
 import { SourcingService } from "../missions/sourcing-service.js";
 import { QuoteService } from "../missions/quote-service.js";
 import { QualificationService } from "../missions/qualification-service.js";
@@ -1198,6 +1200,31 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         caller.environment,
       )) !== null,
   });
+  const negotiationService = new NegotiationService({
+    sql,
+    audit,
+    missions: missionService,
+    qualification: qualificationService,
+    ledger: ledgerService,
+    now: iso,
+  });
+  const negotiationRoutes = createNegotiationRoutes({
+    service: negotiationService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
   /** An authenticated agent credential → its tenant and agent id. Null for anything else. */
   async function resolveAgentCaller(
     request: RestRequest,
@@ -2226,7 +2253,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path === "/v1/agent/connectors" ||
       path.startsWith("/v1/agent/candidates/") ||
       path.startsWith("/v1/agent/suppliers/") ||
-      path.startsWith("/v1/agent/quotes/")
+      path.startsWith("/v1/agent/quotes/") ||
+      path.startsWith("/v1/agent/negotiations/")
     ) {
       send(
         res,
@@ -2238,7 +2266,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => discoveryRoutes.agent(request))) ??
           (await safely(() => qualificationRoutes.agent(request))) ??
           (await safely(() => quoteRoutes.agent(request))) ??
-          (await safely(() => sourcingRoutes.agent(request))) ?? {
+          (await safely(() => sourcingRoutes.agent(request))) ??
+          (await safely(() => negotiationRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2267,6 +2296,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => qualificationRoutes.member(request))) ??
         (await safely(() => quoteRoutes.member(request))) ??
         (await safely(() => sourcingRoutes.member(request))) ??
+        (await safely(() => negotiationRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {

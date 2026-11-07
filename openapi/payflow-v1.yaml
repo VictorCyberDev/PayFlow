@@ -1360,6 +1360,143 @@ paths:
           }
       responses:
         "201": { description: Recorded }
+  /v1/admin/org/missions/{missionId}/negotiations:
+    get:
+      operationId: listNegotiations
+      summary: Negotiation rulebooks per supplier with status (IN_FORCE, WAITING_FOR_A_PERSON, EXPIRED, REVOKED, MISSION_NOT_ACTIVE) and every version.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Negotiations }
+    post:
+      operationId: proposeNegotiation
+      summary: Propose rules for negotiating with a supplier. They wait for the owner. Nothing is sent to a supplier.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Proposed as a new version }
+        "422":
+          {
+            description: The document breaks a limit of the mission,
+            the budget or the grants,
+          }
+  /v1/admin/org/negotiations/{negotiationId}/versions/{version}/{decision}:
+    post:
+      operationId: decideNegotiationVersion
+      summary: Owner approves or rejects a version. Approval re-checks the world (qualified supplier, budget, limits).
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: negotiationId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: path, name: version, required: true, schema: { type: integer } }
+        - {
+            in: path,
+            name: decision,
+            required: true,
+            schema: { type: string, enum: [approve, reject] },
+          }
+      responses:
+        "200": { description: Decided }
+        "409": { description: Already decided, or the negotiation was revoked }
+        "422": { description: Approval refused because the facts changed }
+  /v1/admin/org/negotiations/{negotiationId}/revoke:
+    post:
+      operationId: revokeNegotiation
+      summary: Withdraw the rules at once (containment). One way.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: negotiationId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Revoked (or already) }
+  /v1/admin/org/negotiations/{negotiationId}/check:
+    post:
+      operationId: checkNegotiationMove
+      summary: Dry-run a move against the rules in force. Returns ALLOW, REQUIRES_PERSON or REFUSE with reasons.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: negotiationId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Verdict }
+  /v1/agent/missions/{missionId}/negotiations:
+    get:
+      operationId: agentNegotiations
+      summary: Negotiation rulebooks for the mission (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Negotiations }
+    post:
+      operationId: agentProposeNegotiation
+      summary: Propose rules for yourself (needs NEGOTIATE). An agent cannot write rules for another agent or approve any.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Proposed }
+  /v1/agent/negotiations/{negotiationId}/check:
+    post:
+      operationId: agentCheckNegotiationMove
+      summary: Check a move against the rules in force now (only the named negotiator, needs NEGOTIATE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: negotiationId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Verdict }
+        "403":
+          {
+            description: Not the named negotiator,
+            or the mission does not grant NEGOTIATE,
+          }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem
