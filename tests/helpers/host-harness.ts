@@ -9,6 +9,7 @@ import {
   parseHostedConfig,
 } from "../../src/console-hosted.js";
 import { VerticalProvider } from "../m4-vertical-fixture.js";
+import type { ConnectorRegistry } from "../../src/missions/connectors.js";
 import { truncateTenantData } from "./reset.js";
 
 /**
@@ -26,6 +27,8 @@ export function hostHarness(
     env?: Record<string, string>;
     extraTruncate?: string;
     agents?: readonly string[];
+    /** Replace the host's connector registry (a test double must never be in a production registry). */
+    connectors?: () => ConnectorRegistry;
   } = {},
 ) {
   const url = process.env.TEST_DATABASE_URL;
@@ -65,7 +68,11 @@ export function hostHarness(
           ...over,
         }),
       ),
-      { clock, paymentProvider: provider },
+      {
+        clock,
+        paymentProvider: provider,
+        ...(options.connectors ? { connectors: options.connectors() } : {}),
+      },
     );
   };
 

@@ -1,3 +1,4 @@
+import type { ConnectorRegistry } from "./missions/connectors.js";
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import postgres, { type Sql } from "postgres";
@@ -234,6 +235,8 @@ export function createHostedConsole(
     sendAlert?: (url: string, init: RequestInit) => Promise<{ ok: boolean }>;
     /** Test seam: the OAuth issuer's signing keys instead of fetching its JWKS URL. */
     oauthKeys?: JWTVerifyGetKey;
+    /** Test seam: the connectors this host offers instead of the built-in sandbox catalogue. */
+    connectors?: ConnectorRegistry;
   } = {},
 ) {
   const clock = deps.clock ?? (() => new Date());
@@ -344,6 +347,7 @@ export function createHostedConsole(
         sql: ownedSql,
         repo,
         demo,
+        ...(deps.connectors ? { connectors: deps.connectors } : {}),
         principalId: config.PAYFLOW_M5_PRINCIPAL_ID,
         agentId: config.PAYFLOW_M5_AGENT_ID,
         ...(simulated ? { simulated } : {}),

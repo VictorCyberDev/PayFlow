@@ -384,6 +384,23 @@ const asPlan = (status: number, json: Record<string, unknown>): PlanResult =>
           : {}),
       };
 
+// ------------------------------------------------------------------------- connectors (V3 M31)
+export interface ConnectorSummary {
+  connectorId: string;
+  displayName: string;
+  providerTypes: string[];
+  mode: "SANDBOX" | "LIVE";
+  capabilities: string[];
+  dataUse: string;
+  status: string;
+}
+export interface ConnectorInvokeInput {
+  connectorId: string;
+  capability: "SEARCH" | "READ" | "COMPARE" | "STATUS" | "VERIFY";
+  query: { text?: string; recordId?: string; limit?: number };
+  idempotencyKey: string;
+}
+
 // ------------------------------------------------------------------------- commitment ledger (V3 M28)
 export type LedgerStage =
   | "ESTIMATED"
@@ -597,6 +614,23 @@ export class PayFlowAgentMissionClient {
       input,
     );
     return asLedger(r.status, r.json);
+  }
+  /** What connectors exist and which are usable now. No installation details. */
+  async connectors() {
+    const r = await this.call("GET", "/v1/agent/connectors");
+    return (r.json.connectors ?? []) as unknown as ConnectorSummary[];
+  }
+  /**
+   * Observe through a connector. Read-only by construction: the capability must be one of SEARCH, READ, COMPARE, STATUS or VERIFY,
+   * the mission must grant it, and the answer is an observation, never a quote or a commitment. Reuse the key to replay.
+   */
+  async observe(missionId: string, input: ConnectorInvokeInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/connectors/invoke`,
+      input,
+    );
+    return [r.status, r.json] as const;
   }
   async ledgerView(missionId: string) {
     const r = await this.call(
@@ -946,6 +980,59 @@ export class PayFlowMemberClient {
     );
     return [r.status, r.json];
   }
+
+  /** Install, enable, disable and suspend connectors. The installation never returns a credential reference. */
+  readonly connectors = {
+    list: async () => {
+      const r = await this.call("GET", "/v1/admin/org/connectors");
+      return (r.json.connectors ?? []) as unknown[];
+    },
+    install: async (
+      connectorId: string,
+      input: { acknowledgedDataUse: true; credentialRef?: string },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/connectors/${encodeURIComponent(connectorId)}/install`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    enable: async (
+      connectorId: string,
+      input: { acknowledgedDataUse?: true; expectedRowVersion?: number } = {},
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/connectors/${encodeURIComponent(connectorId)}/enable`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    disable: async (connectorId: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/connectors/${encodeURIComponent(connectorId)}/disable`,
+        {},
+      );
+      return [r.status, r.json] as const;
+    },
+    suspend: async (connectorId: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/connectors/${encodeURIComponent(connectorId)}/suspend`,
+        {},
+      );
+      return [r.status, r.json] as const;
+    },
+    calls: async (missionId?: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/connector-calls${missionId ? `?missionId=${encodeURIComponent(missionId)}` : ""}`,
+      );
+      return (r.json.calls ?? []) as unknown[];
+    },
+  };
 
   readonly ledger = {
     overview: async (missionId: string) => {

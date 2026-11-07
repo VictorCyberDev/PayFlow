@@ -50,6 +50,8 @@ export const PERMISSIONS = [
   "mission:contain",
   "mission:plan",
   "mission:ledger",
+  "connector:manage",
+  "connector:contain",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -94,6 +96,9 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "mission:contain",
     "mission:plan",
     "mission:ledger",
+    // Connectors: may install, enable and disable them; suspending is the containment half.
+    "connector:manage",
+    "connector:contain",
   ],
   // Contains blast radius: revoke credentials, pause/resume, see agents and exposure.
   // Cannot widen Authority or approve spend.
@@ -113,6 +118,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     // Contains blast radius: may pause or revoke a mission; cannot create, revise, approve or resume one.
     "view:missions",
     "mission:contain",
+    "connector:contain",
   ],
   // Builds integrations. May issue and revoke agent credentials. CANNOT provision or widen
   // Authority, approve a decision, or read the finance/audit views.
