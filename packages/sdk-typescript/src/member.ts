@@ -384,6 +384,59 @@ const asPlan = (status: number, json: Record<string, unknown>): PlanResult =>
           : {}),
       };
 
+// ------------------------------------------------------------------------- negotiation (V3 M36)
+export interface NegotiationProposal {
+  supplierId: string;
+  document: {
+    baselineQuoteId?: string;
+    currency: string;
+    targetTotalMinor: number;
+    walkAwayMinor: number;
+    terms?: {
+      minWarrantyMonths?: number;
+      minReturnWindowDays?: number;
+      maxDeliveryDays?: number;
+      acceptablePaymentTerms?: string[];
+    };
+    concessions?: {
+      maxQuantityIncreasePercent?: number;
+      mayExtendDeliveryDays?: number;
+    };
+    rounds: { maxRounds: number };
+    negotiatorAgentId: string;
+    disclosure?: { competingQuotes?: boolean; deadline?: boolean };
+    acceptanceRule?: "PERSON_ALWAYS" | "AGENT_WITHIN_LIMITS";
+    expiresAt: string;
+  };
+  idempotencyKey: string;
+}
+export interface NegotiationMove {
+  kind: "COUNTER" | "ACCEPT";
+  round: number;
+  currency: string;
+  totalMinor: number;
+  terms?: {
+    warrantyMonths?: number;
+    returnWindowDays?: number;
+    deliveryDays?: number;
+    paymentTerms?: string;
+  };
+  quantityIncreasePercent?: number;
+  disclosing?: (
+    "BUDGET" | "OTHER_SUPPLIERS_IDENTITY" | "COMPETING_QUOTES" | "DEADLINE"
+  )[];
+}
+
+// ------------------------------------------------------------------------- sourcing (V3 M35)
+export interface SourcingRunInput {
+  demand: { sku: string; quantity: number }[];
+  quoteIds?: string[];
+  maxSurplusUnits?: number;
+  allowExtras?: boolean;
+  requireQualified?: boolean;
+  idempotencyKey: string;
+}
+
 // ------------------------------------------------------------------------- quotes (V3 M34)
 export type QuoteMoney =
   { basis: "STATED" | "ESTIMATED"; minor: number } | { basis: "UNKNOWN" };
@@ -802,6 +855,53 @@ export class PayFlowAgentMissionClient {
       "POST",
       `/v1/agent/quotes/${encodeURIComponent(quoteId)}/ledger`,
       { idempotencyKey },
+    );
+    return [r.status, r.json] as const;
+  }
+  /**
+   * Ask which recorded quotes to rely on to cover a demand at the least landed cost (needs COMPARE). A recommendation only:
+   * optimal for the quotes on file and the constraints given, and it commits nothing.
+   */
+  async sourcingRun(missionId: string, input: SourcingRunInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/sourcing/runs`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  async sourcingRuns(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/sourcing/runs`,
+    );
+    return r.json;
+  }
+  /**
+   * Propose the rules you will negotiate under (needs NEGOTIATE; only for yourself). They wait for the owner. Nothing is sent
+   * to a supplier and nothing is accepted by this call.
+   */
+  async proposeNegotiation(missionId: string, input: NegotiationProposal) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/negotiations`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  async negotiations(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/negotiations`,
+    );
+    return r.json;
+  }
+  /** Check one intended move against the rules in force right now. ALLOW, REQUIRES_PERSON or REFUSE with reasons. */
+  async checkNegotiationMove(negotiationId: string, move: NegotiationMove) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/negotiations/${encodeURIComponent(negotiationId)}/check`,
+      move,
     );
     return [r.status, r.json] as const;
   }
@@ -1337,6 +1437,90 @@ export class PayFlowMemberClient {
         "POST",
         `/v1/admin/org/quotes/${encodeURIComponent(quoteId)}/ledger`,
         { idempotencyKey },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Sourcing runs: recommendations, and a person's adoption of one. */
+  readonly sourcing = {
+    run: async (missionId: string, input: SourcingRunInput) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/sourcing/runs`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/sourcing/runs`,
+      );
+      return r.json;
+    },
+    get: async (runId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/sourcing/runs/${encodeURIComponent(runId)}`,
+      );
+      return r.json;
+    },
+    /** Put the chosen quotes in the budget as QUOTED items. Idempotent; recorded as adopted only when every quote went in. */
+    adopt: async (runId: string, idempotencyKey: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/sourcing/runs/${encodeURIComponent(runId)}/adopt`,
+        { idempotencyKey },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Negotiation rulebooks: propose, decide (owner), revoke, and dry-run a move. */
+  readonly negotiations = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/negotiations`,
+      );
+      return r.json;
+    },
+    propose: async (missionId: string, input: NegotiationProposal) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/negotiations`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    /** Owner only. Approval re-checks the world: qualified supplier, limits inside the mission and the budget, deadline inside the mission's. */
+    decide: async (
+      negotiationId: string,
+      version: number,
+      decision: "approve" | "reject",
+      reason = "",
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/negotiations/${encodeURIComponent(negotiationId)}/versions/${version}/${decision}`,
+        { reason },
+      );
+      return [r.status, r.json] as const;
+    },
+    revoke: async (negotiationId: string, reason = "") => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/negotiations/${encodeURIComponent(negotiationId)}/revoke`,
+        { reason },
+      );
+      return [r.status, r.json] as const;
+    },
+    check: async (negotiationId: string, move: NegotiationMove) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/negotiations/${encodeURIComponent(negotiationId)}/check`,
+        move,
       );
       return [r.status, r.json] as const;
     },
