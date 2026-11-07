@@ -384,6 +384,25 @@ const asPlan = (status: number, json: Record<string, unknown>): PlanResult =>
           : {}),
       };
 
+// ------------------------------------------------------------------------- discovery (V3 M32)
+export interface DiscoverInput {
+  connectorId: string;
+  query: { text?: string; recordId?: string; limit?: number };
+  requirements?: {
+    maxUnitPriceMinor?: number;
+    currency?: string;
+    minQuantity?: number;
+    maxAgeMinutes?: number;
+    claims?: Record<string, string | number | boolean>;
+  };
+  idempotencyKey: string;
+}
+export interface CandidateMarkInput {
+  decision: "SHORTLIST" | "REJECT" | "CLEAR";
+  reason?: string;
+  idempotencyKey: string;
+}
+
 // ------------------------------------------------------------------------- connectors (V3 M31)
 export interface ConnectorSummary {
   connectorId: string;
@@ -628,6 +647,42 @@ export class PayFlowAgentMissionClient {
     const r = await this.call(
       "POST",
       `/v1/agent/missions/${encodeURIComponent(missionId)}/connectors/invoke`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  /**
+   * Search through a connector and keep what was observed as candidates, ranked against the requirements you state.
+   * Observations are never quotes. Reuse the key to replay without searching again.
+   */
+  async discover(missionId: string, input: DiscoverInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/discovery/search`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  async candidates(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/candidates`,
+    );
+    return r.json;
+  }
+  async compareCandidates(missionId: string, candidateIds: string[]) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/candidates/compare`,
+      { candidateIds },
+    );
+    return [r.status, r.json] as const;
+  }
+  /** SHORTLIST, REJECT or CLEAR a candidate. A working note, not an approval. */
+  async markCandidate(candidateId: string, input: CandidateMarkInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/candidates/${encodeURIComponent(candidateId)}/mark`,
       input,
     );
     return [r.status, r.json] as const;
@@ -1031,6 +1086,52 @@ export class PayFlowMemberClient {
         `/v1/admin/org/connector-calls${missionId ? `?missionId=${encodeURIComponent(missionId)}` : ""}`,
       );
       return (r.json.calls ?? []) as unknown[];
+    },
+  };
+
+  /** Discovered candidates: ranked against requirements passed as query parameters, compared, and marked by people. */
+  readonly discovery = {
+    candidates: async (
+      missionId: string,
+      requirements: {
+        maxUnitPriceMinor?: number;
+        currency?: string;
+        minQuantity?: number;
+        maxAgeMinutes?: number;
+        claims?: Record<string, string>;
+      } = {},
+    ) => {
+      const q = new URLSearchParams();
+      for (const k of [
+        "maxUnitPriceMinor",
+        "currency",
+        "minQuantity",
+        "maxAgeMinutes",
+      ] as const)
+        if (requirements[k] !== undefined) q.set(k, String(requirements[k]));
+      for (const [k, v] of Object.entries(requirements.claims ?? {}))
+        q.set(`claim.${k}`, v);
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/candidates${q.size ? `?${q}` : ""}`,
+      );
+      return r.json;
+    },
+    compare: async (missionId: string, candidateIds: string[]) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/candidates/compare`,
+        { candidateIds },
+      );
+      return [r.status, r.json] as const;
+    },
+    mark: async (candidateId: string, input: CandidateMarkInput) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/candidates/${encodeURIComponent(candidateId)}/mark`,
+        input,
+      );
+      return [r.status, r.json] as const;
     },
   };
 

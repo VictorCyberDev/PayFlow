@@ -907,6 +907,127 @@ paths:
           { description: Connector failed or returned something unsafe to show }
         "503": { description: Connector circuit open after repeated failures }
         "504": { description: Connector timed out }
+  /v1/agent/missions/{missionId}/discovery/search:
+    post:
+      operationId: agentDiscover
+      summary: Search through a connector (all connector gates apply) and keep what was observed as candidates, ranked against the stated requirements. Observations are never quotes.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          { description: Ranked candidates (or the stored ones, on replay) }
+        "403":
+          {
+            description: Mission does not grant SEARCH,
+            or provider type not approved,
+          }
+        "409":
+          {
+            description: Connector not installed/disabled,
+            or idempotency key reused,
+          }
+  /v1/agent/missions/{missionId}/candidates:
+    get:
+      operationId: agentCandidates
+      summary: Candidates found for this mission, ranked against optional requirements given as query parameters (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          {
+            description: Candidates with checks,
+            marks and fit against the contract and ledger,
+          }
+  /v1/agent/missions/{missionId}/candidates/compare:
+    post:
+      operationId: agentCompareCandidates
+      summary: Side-by-side of 2-5 candidates showing exactly what differs. No totals or landed cost (needs COMPARE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Comparison rows }
+  /v1/agent/candidates/{candidateId}/mark:
+    post:
+      operationId: agentMarkCandidate
+      summary: SHORTLIST, REJECT or CLEAR a candidate (append-only; the latest mark wins). A working note, not an approval (needs COMPARE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: candidateId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Recorded or replayed }
+        "409": { description: Idempotency key reused }
+  /v1/admin/org/missions/{missionId}/candidates:
+    get:
+      operationId: listCandidates
+      summary: The same candidate list for people.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Candidates }
+  /v1/admin/org/missions/{missionId}/candidates/compare:
+    post:
+      operationId: compareCandidates
+      summary: The same comparison for people.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Comparison rows }
+  /v1/admin/org/candidates/{candidateId}/mark:
+    post:
+      operationId: markCandidate
+      summary: A person's SHORTLIST, REJECT or CLEAR (needs the plan permission).
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: candidateId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Recorded or replayed }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem

@@ -62,6 +62,8 @@ import { createPlanRoutes } from "./plan-routes.js";
 import { LedgerService } from "../missions/ledger-service.js";
 import { createLedgerRoutes } from "./ledger-routes.js";
 import { createConnectorRoutes } from "./connector-routes.js";
+import { createDiscoveryRoutes } from "./discovery-routes.js";
+import { DiscoveryService } from "../missions/discovery-service.js";
 import { ConnectorService } from "../missions/connector-service.js";
 import {
   builtinRegistry,
@@ -1077,6 +1079,31 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   });
   const ledgerRoutes = createLedgerRoutes({
     service: ledgerService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
+  const discoveryService = new DiscoveryService({
+    sql,
+    audit,
+    missions: missionService,
+    connectors: connectorService,
+    ledger: ledgerService,
+    now: iso,
+  });
+  const discoveryRoutes = createDiscoveryRoutes({
+    service: discoveryService,
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(
@@ -2117,7 +2144,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path === "/v1/agent/tasks" ||
       path.startsWith("/v1/agent/tasks/") ||
       path.startsWith("/v1/agent/ledger/") ||
-      path === "/v1/agent/connectors"
+      path === "/v1/agent/connectors" ||
+      path.startsWith("/v1/agent/candidates/")
     ) {
       send(
         res,
@@ -2125,7 +2153,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => missionRoutes.agent(request))) ??
           (await safely(() => planRoutes.agent(request))) ??
           (await safely(() => ledgerRoutes.agent(request))) ??
-          (await safely(() => connectorRoutes.agent(request))) ?? {
+          (await safely(() => connectorRoutes.agent(request))) ??
+          (await safely(() => discoveryRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2150,6 +2179,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => planRoutes.member(request))) ??
         (await safely(() => ledgerRoutes.member(request))) ??
         (await safely(() => connectorRoutes.member(request))) ??
+        (await safely(() => discoveryRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {
