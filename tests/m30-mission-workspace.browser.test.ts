@@ -4,12 +4,6 @@ import type { AddressInfo } from "node:net";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { createRequire } from "node:module";
-import type * as Playwright from "../apps/console/node_modules/playwright-core/index.js";
-import type {
-  Browser,
-  Page,
-  Route,
-} from "../apps/console/node_modules/playwright-core/index.js";
 import { hostHarness } from "./helpers/host-harness.js";
 import {
   activeMission,
@@ -32,6 +26,46 @@ const pw = resolve("apps/console/node_modules/playwright-core/index.mjs");
 const have = existsSync(out) && existsSync(pw);
 const required = process.env.REQUIRE_BROWSER === "1";
 if (required && !have) throw new Error("console build or Playwright missing");
+/* The slice of Playwright this test uses. The real library lives in apps/console (installed only in the browser CI job), so the
+   root typecheck and lint must not import its types. */
+interface Loc {
+  waitFor(): Promise<void>;
+  click(): Promise<void>;
+  fill(v: string): Promise<void>;
+  innerText(): Promise<string>;
+  filter(o: { hasText: string }): Loc;
+}
+interface Rt {
+  request(): {
+    url(): string;
+    method(): string;
+    headers(): Record<string, string>;
+  };
+  fulfill(o: {
+    status: number;
+    headers?: Record<string, string>;
+    body?: string;
+  }): Promise<void>;
+}
+interface Page {
+  goto(u: string): Promise<unknown>;
+  getByLabel(n: string, o?: { exact?: boolean }): Loc;
+  getByRole(r: string, o?: { name?: string | RegExp; level?: number }): Loc;
+  getByText(t: string): Loc;
+  locator(s: string): Loc;
+  evaluate<R>(fn: () => R): Promise<R>;
+  evaluate<R, A>(fn: (a: A) => R, arg: A): Promise<R>;
+  addScriptTag(o: { content: string }): Promise<unknown>;
+  route(p: string, h: (r: Rt) => Promise<void>): Promise<void>;
+}
+interface Ctx {
+  newPage(): Promise<Page>;
+  close(): Promise<void>;
+}
+interface Browser {
+  newContext(o: object): Promise<Ctx>;
+  close(): Promise<void>;
+}
 interface Axe {
   run(
     d: Document,
@@ -88,7 +122,9 @@ const chromePath = [
       });
       await new Promise<void>((r) => site.listen(0, "127.0.0.1", r));
       siteOrigin = `http://127.0.0.1:${(site.address() as AddressInfo).port}`;
-      const { chromium } = (await import(pw)) as typeof Playwright;
+      const { chromium } = (await import(pw)) as {
+        chromium: { launch(o: object): Promise<Browser> };
+      };
       browser = await chromium.launch({
         headless: true,
         ...(chromePath ? { executablePath: chromePath } : {}),
@@ -107,7 +143,7 @@ const chromePath = [
       });
       const page = await ctx.newPage();
       const seen: string[] = [];
-      await page.route(`${h.origin}/**`, async (route: Route) => {
+      await page.route(`${h.origin}/**`, async (route: Rt) => {
         const req = route.request();
         const cors = {
           "access-control-allow-origin": siteOrigin,
