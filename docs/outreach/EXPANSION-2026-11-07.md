@@ -69,17 +69,17 @@ that were seen on the company's own pages; **no email address was collected or g
 
 ## Combined pipeline (all sources)
 
-| Stage                                           | Count | Note                                                                                                    |
-| ----------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------- |
-| Researched with a public evidence page          | 28    | 20 in `docs/gtm`, 4 in `PROSPECTS.md`, 4 here (Crossmint appears in two lists)                          |
-| With a **verified** public contact route        | 7     | Crossmint, Tipalti, Marqeta, Medius, Visa, Mastercard (registration), plus none new from Nevermined/ACI |
-| Approved drafts                                 | 0     | the owner has approved nothing                                                                          |
-| **Sent**                                        | **0** |                                                                                                         |
-| **Replies**                                     | **0** |                                                                                                         |
-| **Bounded evaluations run by a prospect**       | **0** |                                                                                                         |
-| **Pilots**                                      | **0** |                                                                                                         |
-| **Integrations**                                | **0** |                                                                                                         |
-| Revenue, customers, certification, legal review | none  |                                                                                                         |
+| Stage                                           | Count | Note                                                                                                                                       |
+| ----------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Researched with a public evidence page          | 26    | 20 in `docs/gtm`, plus Marqeta and Medius from `docs/outreach`, plus 4 here (Crossmint and Tipalti are in both older lists)                |
+| With a **verified** public contact route        | 6     | Crossmint, Tipalti, Marqeta, Medius (web forms); Visa (partner link); Mastercard (integrator registration). **None** for Nevermined or ACI |
+| Approved drafts                                 | 0     | the owner has approved nothing                                                                                                             |
+| **Sent**                                        | **0** |                                                                                                                                            |
+| **Replies**                                     | **0** |                                                                                                                                            |
+| **Bounded evaluations run by a prospect**       | **0** |                                                                                                                                            |
+| **Pilots**                                      | **0** |                                                                                                                                            |
+| **Integrations**                                | **0** |                                                                                                                                            |
+| Revenue, customers, certification, legal review | none  |                                                                                                                                            |
 
 Each of the last four lines is tracked separately and moves only on a real event with evidence.
 
