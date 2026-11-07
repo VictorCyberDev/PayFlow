@@ -954,6 +954,76 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /**
+   * Issue the purchase order for an accepted quote (needs PURCHASE; you are the buyer). It is an instruction, not a payment: pay through
+   * the usual path under the order's Authority, then reconcile.
+   */
+  async issuePurchaseOrder(
+    acceptanceId: string,
+    body: {
+      category: string;
+      purpose: string;
+      costCenter?: string;
+      invoiceRef?: string;
+      ttlMinutes?: number;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/acceptances/${encodeURIComponent(acceptanceId)}/purchase-order`,
+      body,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Ask PayFlow to compare your payment (its proposal id) to the order. PayFlow reads its own trace; your report is not believed. */
+  async reconcilePurchaseOrder(poId: string, proposalId: string) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/purchase-orders/${encodeURIComponent(poId)}/reconcile`,
+      { proposalId },
+    );
+    return [r.status, r.json] as const;
+  }
+  /** What would stop (or allow) accepting this quote, check by check, and who may. Read-only. */
+  async acceptanceCheck(quoteId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/quotes/${encodeURIComponent(quoteId)}/acceptance-check`,
+    );
+    return [r.status, r.json] as const;
+  }
+  /**
+   * Accept a quote (needs CONTRACT). You accept on your own authority only when the approved negotiation rules allow it, the mission lets
+   * an agent contract, you are the named negotiator and every check holds; otherwise the result is outcome ESCALATED and a person decides.
+   * Accepting commits budget inside PayFlow; it does not tell the supplier or pay anyone.
+   */
+  async acceptQuote(quoteId: string, idempotencyKey: string) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/quotes/${encodeURIComponent(quoteId)}/accept`,
+      { idempotencyKey },
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Hand a decision to a person: ask to accept a quote, or to walk away from a negotiation (needs NEGOTIATE). */
+  async escalate(
+    missionId: string,
+    input: {
+      kind: "ACCEPTANCE_REQUEST" | "WALK_AWAY_REQUEST";
+      quoteId?: string;
+      negotiationId?: string;
+      reason: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/escalations`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
   async ledgerView(missionId: string) {
     const r = await this.call(
       "GET",
@@ -1687,6 +1757,96 @@ export class PayFlowMemberClient {
         `/v1/admin/org/messages/${encodeURIComponent(messageId)}/events`,
       );
       return (r.json.events ?? []) as unknown[];
+    },
+  };
+
+  /** Purchase orders derived from acceptances, and reconciliation of the payment against them. */
+  readonly purchaseOrders = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/purchase-orders`,
+      );
+      return r.json;
+    },
+    issue: async (
+      acceptanceId: string,
+      body: {
+        agentId: string;
+        category: string;
+        purpose: string;
+        costCenter?: string;
+        invoiceRef?: string;
+        ttlMinutes?: number;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/acceptances/${encodeURIComponent(acceptanceId)}/purchase-order`,
+        body,
+      );
+      return [r.status, r.json] as const;
+    },
+    reconcile: async (poId: string, proposalId: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/purchase-orders/${encodeURIComponent(poId)}/reconcile`,
+        { proposalId },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Acceptance of supplier quotes and the escalations agents raise. Owner only. */
+  readonly acceptances = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/acceptances`,
+      );
+      return r.json;
+    },
+    check: async (quoteId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/quotes/${encodeURIComponent(quoteId)}/acceptance-check`,
+      );
+      return r.json;
+    },
+    /** The walk-away cannot be exceeded; a missed term floor needs an overrideReason. */
+    accept: async (
+      quoteId: string,
+      idempotencyKey: string,
+      overrideReason?: string,
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/quotes/${encodeURIComponent(quoteId)}/accept`,
+        { idempotencyKey, ...(overrideReason ? { overrideReason } : {}) },
+      );
+      return [r.status, r.json] as const;
+    },
+    withdraw: async (acceptanceId: string, reason: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/acceptances/${encodeURIComponent(acceptanceId)}/withdraw`,
+        { reason },
+      );
+      return [r.status, r.json] as const;
+    },
+    resolveEscalation: async (
+      escalationId: string,
+      decision: "ACCEPT" | "DECLINE" | "DISMISS",
+      note = "",
+      overrideReason?: string,
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/escalations/${encodeURIComponent(escalationId)}/resolve`,
+        { decision, note, ...(overrideReason ? { overrideReason } : {}) },
+      );
+      return [r.status, r.json] as const;
     },
   };
 

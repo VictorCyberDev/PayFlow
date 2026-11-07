@@ -1717,6 +1717,221 @@ paths:
       responses:
         "200": { description: Timeline and recommendation }
         "403": { description: Not the named negotiator }
+  /v1/admin/org/quotes/{quoteId}/acceptance-check:
+    get:
+      operationId: acceptanceCheck
+      summary: Every check for accepting this quote, whether a person may, and whether an agent may on its own authority.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Checks }
+  /v1/admin/org/quotes/{quoteId}/accept:
+    post:
+      operationId: acceptQuote
+      summary: Owner accepts a quote. Commits the budget inside PayFlow and concludes the negotiation; tells no one and pays no one. The walk-away cannot be exceeded; a missed term floor needs overrideReason.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Accepted }
+        "200": { description: Replay }
+        "422":
+          {
+            description: A hard check failed,
+            or an override reason is required,
+          }
+  /v1/admin/org/acceptances/{acceptanceId}/withdraw:
+    post:
+      operationId: withdrawAcceptance
+      summary: Owner withdraws an acceptance. Releases the budget and reopens the negotiation; the quote itself is never accepted twice.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: acceptanceId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Withdrawn (or already) }
+  /v1/admin/org/missions/{missionId}/acceptances:
+    get:
+      operationId: listAcceptances
+      summary: Acceptances and escalations for the mission.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Acceptances and escalations }
+  /v1/admin/org/escalations/{escalationId}/resolve:
+    post:
+      operationId: resolveEscalation
+      summary: Owner resolves an agent's request - ACCEPT (accepts the quote, or ends the negotiation for a walk-away), DECLINE or DISMISS.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: escalationId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Resolved }
+        "409": { description: Already resolved }
+  /v1/agent/quotes/{quoteId}/acceptance-check:
+    get:
+      operationId: agentAcceptanceCheck
+      summary: The same checks for an agent that can READ.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Checks }
+  /v1/agent/quotes/{quoteId}/accept:
+    post:
+      operationId: agentAcceptQuote
+      summary: Accept a quote (needs CONTRACT) only within the approved rules and the mission's permission; otherwise an escalation is raised for a person (outcome ESCALATED).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: quoteId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: ACCEPTED or ESCALATED }
+        "422":
+          {
+            description: A hard check failed; nothing is escalated because nothing could be accepted,
+          }
+  /v1/agent/missions/{missionId}/escalations:
+    post:
+      operationId: agentEscalate
+      summary: Hand a decision to a person (needs NEGOTIATE) - ACCEPTANCE_REQUEST or WALK_AWAY_REQUEST. One open request per subject.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Raised }
+        "200": { description: Already waiting }
+  /v1/agent/missions/{missionId}/acceptances:
+    get:
+      operationId: agentAcceptances
+      summary: Acceptances and escalations (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Acceptances and escalations }
+  /v1/admin/org/acceptances/{acceptanceId}/purchase-order:
+    post:
+      operationId: issuePurchaseOrder
+      summary: Issue the purchase order for an accepted quote (owner, naming the PURCHASE agent). An instruction, not a payment; once per acceptance.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: acceptanceId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Issued }
+        "200": { description: Replayed }
+        "422":
+          {
+            description: No Authority,
+            above the Authority,
+            or merchant not in it,
+          }
+  /v1/admin/org/missions/{missionId}/purchase-orders:
+    get:
+      operationId: listPurchaseOrders
+      summary: Purchase orders and their reconciliations for the mission.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Orders and reconciliations }
+  /v1/admin/org/purchase-orders/{poId}/reconcile:
+    post:
+      operationId: reconcilePurchaseOrder
+      summary: Compare a payment (by proposal id) to the order using PayFlow's own operation trace, and move the budget item with the evidence the ledger requires. Needs mission:ledger.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: poId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Reconciled (or replayed) }
+        "409": { description: PayFlow has no trace for that payment }
+  /v1/agent/acceptances/{acceptanceId}/purchase-order:
+    post:
+      operationId: agentIssuePurchaseOrder
+      summary: Issue the purchase order for an accepted quote (needs PURCHASE; the caller is the buyer).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: acceptanceId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Issued }
+  /v1/agent/missions/{missionId}/purchase-orders:
+    get:
+      operationId: agentPurchaseOrders
+      summary: Purchase orders and reconciliations (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Orders and reconciliations }
+  /v1/agent/purchase-orders/{poId}/reconcile:
+    post:
+      operationId: agentReconcilePurchaseOrder
+      summary: Reconcile your payment against the order (only the order's buyer; needs PURCHASE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: poId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Reconciled (or replayed) }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem

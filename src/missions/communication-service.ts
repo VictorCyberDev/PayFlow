@@ -339,6 +339,14 @@ export class CommunicationService {
         detail: String(c.status),
       };
     if (row.kind === "NEGOTIATION") {
+      const [done] = await this.deps
+        .sql`select 1 from mission_acceptances where negotiation_id = ${row.negotiationId} and status = 'ACCEPTED'`;
+      if (done)
+        return {
+          ok: false,
+          refusal: "RULES_REFUSE",
+          detail: "NEGOTIATION_CONCLUDED",
+        };
       const g = await this.deps.negotiations.check(
         guardAs,
         row.negotiationId!,
