@@ -29,10 +29,10 @@ declare `securitySchemes` per tool. An optional UI is an MCP Apps resource (`ui:
 
 ## Gaps (all internal engineering unless stated)
 
-1. **No OAuth authorization server.** PayFlow issues its own Gateway bearer credentials; ChatGPT cannot obtain one by
-   itself. An authorization server (authorize + consent by a signed-in member, token with PKCE, resource binding,
-   CIMD/DCR, single-use codes, scope-limited tokens that map to a Gateway credential) must be built and reviewed
-   before a protected connection can work. Until then the server cannot be COMMISSIONED. _Not built._
+1. **OAuth: decision made, no provider connected.** PayFlow will not build an authorization server; it is a resource
+   server for a proven external provider, and the default publication candidate (`verify-only`) can run with no
+   authentication at all. The resource-server side is built and tested locally; no provider is chosen or configured. See
+   `OAUTH-PROVIDER-EVALUATION.md`. Until a deployment and, where wanted, a provider exist, the server cannot be COMMISSIONED.
 2. **Nothing is deployed** (`payflow-public` is owner-gated), and ChatGPT needs a public HTTPS URL.
 3. **Domain verification** (`/.well-known/openai-apps-challenge`) and the submission portal are owner actions.
 4. No real ChatGPT account has connected. Nothing here is evidence of that.
