@@ -90,6 +90,14 @@ export interface HostedGatewayOptions {
    */
   readonly cronSecret?: string;
   /**
+   * How many reverse proxies sit in front of this host and append to `x-forwarded-for`. The client address is the entry that
+   * many positions from the RIGHT (the one the nearest trusted proxy appended); anything to its left is client-controlled and
+   * ignored. Default 1. 0 trusts no header and uses the socket address.
+   */
+  readonly trustedProxyHops?: number;
+  /** Requests per minute allowed from one client address across ALL credentials (default 600). */
+  readonly ipRateLimitPerMinute?: number;
+  /**
    * Public https URL of `POST /v1/mcp`. When absent the MCP endpoint is disabled (404). MCP is a protocol adapter
    * over the same Gateway: it uses the caller's own Gateway credential and the same single decision path.
    */
@@ -125,6 +133,17 @@ export interface HostedGatewayOptions {
     init: RequestInit,
   ) => Promise<{ ok: boolean }>;
   readonly clock: () => Date;
+}
+
+/** The client address: the entry `hops` positions from the right of x-forwarded-for (appended by our trusted proxy). */
+function clientAddressOf(req: IncomingMessage, hops: number): string {
+  const chain = String(req.headers["x-forwarded-for"] ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return hops > 0 && chain.length >= hops
+    ? chain[chain.length - hops]!
+    : (req.socket.remoteAddress ?? "unknown");
 }
 
 const MAX_BODY = 16 * 1024;
@@ -1630,12 +1649,44 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     // Rate limit every /v1 request before any processing. It protects PayFlow and never alters a
     // decision; a limited request has zero effect by construction.
     {
+      // Outer bucket per client ADDRESS, whatever the credential. Per-credential buckets alone are not enough: the credential id
+      // is read from the token's shape before it is authenticated, so an attacker could mint unlimited fresh buckets.
+      const clientAddress = clientAddressOf(req, options.trustedProxyHops ?? 1);
+      let addressDecision;
+      try {
+        addressDecision = await enforceRateLimit(limiter, {
+          bucket: "address",
+          subject: `addr:${clientAddress.slice(0, 64)}`,
+          limit: options.ipRateLimitPerMinute ?? 600,
+          windowSeconds: 60,
+          now: iso(),
+        });
+      } catch {
+        addressDecision = { allowed: true, remaining: 0, resetAt: iso() };
+      }
+      if (!addressDecision.allowed) {
+        res.writeHead(429, {
+          "content-type": "application/json",
+          "retry-after": "60",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        });
+        res.end(
+          JSON.stringify({
+            decision: "DENY",
+            effectCount: 0,
+            reason: "RATE_LIMITED",
+            recoverable: true,
+            humanSummary: "Too many requests from this address. $0 moved.",
+            nextAction: "WAIT_AND_RETRY",
+          }),
+        );
+        return true;
+      }
       const bearer = authorization?.match(
         /^Bearer pf_(?:sbx|live|act)_(pf[cm]_[a-f0-9]{24})\./u,
       )?.[1];
-      const forwarded = String(req.headers["x-forwarded-for"] ?? "")
-        .split(",")[0]
-        ?.trim();
+      const forwarded = clientAddress;
       const family = path.startsWith("/v1/admin/")
         ? "admin"
         : path === "/v1/keys"
@@ -1739,15 +1790,38 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       }
       try {
         await ensureKeys();
+        const document = await directoryPublisher.current();
+        // Recovery closes the alert; failure below opens it. Alerting is best-effort and never changes the response.
+        await alerts
+          .resolveSubject(
+            "ISSUER_DIRECTORY_UNAVAILABLE",
+            "ISSUER",
+            options.credentialIssuer ?? "unknown",
+            iso(),
+          )
+          .catch(() => false);
         send(res, {
           status: 200,
           headers: {
             "content-type": "application/json",
             "cache-control": "public, max-age=60",
           },
-          body: await directoryPublisher.current(),
+          body: document,
         });
       } catch {
+        await alerts
+          .raise(
+            {
+              severity: "P1",
+              code: "ISSUER_DIRECTORY_UNAVAILABLE",
+              subjectKind: "ISSUER",
+              subjectId: options.credentialIssuer ?? "unknown",
+              organizationId: options.organizationId,
+              detail: { endpoint: "directory" },
+            },
+            iso(),
+          )
+          .catch(() => undefined);
         // Nothing is published rather than something wrong: a verifier keeps its previous directory until it expires.
         send(res, {
           status: 503,
@@ -1770,23 +1844,55 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         });
         return true;
       }
-      send(res, {
-        status: 200,
-        headers: {
-          "content-type": "application/json",
-          "cache-control": "public, max-age=60",
-        },
-        body: await credentialIssuer.statusList(),
-      });
+      try {
+        const list = await credentialIssuer.statusList();
+        await alerts
+          .resolveSubject(
+            "ISSUER_STATUS_UNAVAILABLE",
+            "ISSUER",
+            options.credentialIssuer ?? "unknown",
+            iso(),
+          )
+          .catch(() => false);
+        send(res, {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "public, max-age=60",
+          },
+          body: list,
+        });
+      } catch {
+        // No status list is better than a wrong one: verifiers fail closed on a missing or stale list.
+        await alerts
+          .raise(
+            {
+              severity: "P1",
+              code: "ISSUER_STATUS_UNAVAILABLE",
+              subjectKind: "ISSUER",
+              subjectId: options.credentialIssuer ?? "unknown",
+              organizationId: options.organizationId,
+              detail: { endpoint: "status" },
+            },
+            iso(),
+          )
+          .catch(() => undefined);
+        send(res, {
+          status: 503,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "no-store",
+            "retry-after": "30",
+          },
+          body: { reason: "STATUS_UNAVAILABLE" },
+        });
+      }
       return true;
     }
     if (method === "POST" && path === "/v1/verify/proofs") {
       // Public and read-only, so it is rate limited per address AND globally, and it fails closed: no working limiter
       // means no anonymous verification, never unmetered verification.
-      const ip =
-        String(req.headers["x-forwarded-for"] ?? "")
-          .split(",")[0]
-          ?.trim() || "unknown";
+      const ip = clientAddressOf(req, options.trustedProxyHops ?? 1);
       let limited = false;
       try {
         const perIp = await enforceRateLimit(limiter, {
@@ -1859,10 +1965,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         });
         return true;
       }
-      const ip =
-        String(req.headers["x-forwarded-for"] ?? "")
-          .split(",")[0]
-          ?.trim() || "unknown";
+      const ip = clientAddressOf(req, options.trustedProxyHops ?? 1);
       let blocked = false;
       try {
         const perIp = await enforceRateLimit(limiter, {
