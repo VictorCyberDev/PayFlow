@@ -757,6 +757,104 @@ paths:
           }
       responses:
         "202": { description: PROPOSED }
+  /v1/admin/org/missions/{missionId}/ledger:
+    get:
+      operationId: missionLedger
+      summary: The mission's authoritative financial view - ceiling, exposure by stage, available capacity, UNKNOWN and unverified exposure, and every item.
+      description: >-
+        Budget is spoken for from APPROVED through SETTLED (net of refunds) and while UNKNOWN. Estimates and quotes consume nothing.
+        One item has one amount at a time, so an obligation is never counted twice as it moves from committed to reserved to settled.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Overview }
+  /v1/admin/org/missions/{missionId}/ledger/items:
+    post:
+      operationId: createLedgerItem
+      summary: Record an estimate, quote, approval, or an obligation committed outside PayFlow. Needs mission:ledger. Idempotent.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Created }
+        "409":
+          {
+            description: Capacity exceeded,
+            above the maximum commitment,
+            mission not active,
+            or illegal start stage,
+          }
+        "422": { description: Currency mismatch or insufficient evidence }
+  /v1/admin/org/ledger/items/{itemId}/transition:
+    post:
+      operationId: transitionLedgerItem
+      summary: Move an item between stages (or apply a partial refund). Settled/refunded/failed/released need Proof or a provider confirmation; reservations and payment starts need an Authority receipt.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: itemId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Moved or replayed }
+        "409":
+          {
+            description: Illegal move,
+            capacity,
+            frozen amount or refund beyond what was settled,
+          }
+  /v1/admin/org/ledger/items/{itemId}/history:
+    get:
+      operationId: ledgerItemHistory
+      summary: The append-only entries of one item.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: itemId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Entries }
+  /v1/agent/missions/{missionId}/ledger:
+    get:
+      operationId: agentMissionLedger
+      summary: The capacity picture and only this agent's own items.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Summary and own items }
+  /v1/agent/missions/{missionId}/ledger/items:
+    post:
+      operationId: agentLedgerEstimate
+      summary: An agent may only create ESTIMATED or QUOTED items.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Created }
+        "403": { description: Not permitted for an agent }
   /v1/issuer/directory:
     get:
       operationId: issuerDirectory
