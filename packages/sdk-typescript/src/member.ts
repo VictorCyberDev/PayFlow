@@ -384,6 +384,108 @@ const asPlan = (status: number, json: Record<string, unknown>): PlanResult =>
           : {}),
       };
 
+// ------------------------------------------------------------------------- commitment ledger (V3 M28)
+export type LedgerStage =
+  | "ESTIMATED"
+  | "QUOTED"
+  | "APPROVED"
+  | "COMMITTED"
+  | "RESERVED"
+  | "IN_FLIGHT"
+  | "SETTLED"
+  | "UNKNOWN"
+  | "REFUNDED"
+  | "CANCELLED"
+  | "RELEASED"
+  | "FAILED";
+export type LedgerEvidenceKind =
+  | "NONE"
+  | "AGENT_REPORTED"
+  | "OWNER_REPORTED"
+  | "PAYFLOW_AUTHORITY_RECEIPT"
+  | "PAYFLOW_PROOF"
+  | "PROVIDER_CONFIRMATION";
+export interface LedgerItemInput {
+  readonly kind:
+    | "GOODS"
+    | "SERVICE"
+    | "SUBSCRIPTION"
+    | "DEPOSIT"
+    | "CONTRACTOR_MILESTONE"
+    | "FEE"
+    | "OTHER";
+  readonly label: string;
+  /** Integer minor units, in the mission's currency. No conversion ever happens. */
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly stage?: LedgerStage;
+  readonly verification?: "OWNER_REPORTED" | "UNVERIFIED";
+  readonly evidenceKind?: LedgerEvidenceKind;
+  readonly evidence?: Record<string, string | number | boolean>;
+  readonly idempotencyKey: string;
+}
+export interface LedgerTransitionInput {
+  readonly to: LedgerStage;
+  readonly amountMinor?: number;
+  readonly refundMinor?: number;
+  readonly evidenceKind?: LedgerEvidenceKind;
+  readonly evidence?: Record<string, string | number | boolean>;
+  readonly expectedRowVersion?: number;
+  readonly idempotencyKey: string;
+}
+export interface LedgerItemView {
+  readonly itemId: string;
+  readonly stage: LedgerStage;
+  readonly amountMinor: number;
+  readonly refundedMinor: number;
+  /** The budget this item holds right now. */
+  readonly exposureMinor: number;
+  readonly verification: string;
+  readonly rowVersion: number;
+}
+export interface LedgerOverview {
+  readonly summary: {
+    readonly currency: string;
+    readonly ceilingMinor: number;
+    readonly exposureMinor: number;
+    readonly availableMinor: number;
+    readonly overCommittedMinor: number;
+    readonly unverifiedExposureMinor: number;
+    readonly unknownExposureMinor: number;
+    readonly refundedMinor: number;
+    readonly byStage: Record<string, { count: number; amountMinor: number }>;
+  };
+  readonly items: readonly LedgerItemView[];
+}
+export type LedgerResult =
+  | {
+      readonly ok: true;
+      readonly replayed: boolean;
+      readonly item: LedgerItemView;
+    }
+  | {
+      readonly ok: false;
+      readonly httpStatus: number;
+      readonly reason: string;
+      readonly detail?: string;
+    };
+const asLedger = (
+  status: number,
+  json: Record<string, unknown>,
+): LedgerResult =>
+  (status === 200 || status === 201) && json.item
+    ? {
+        ok: true,
+        replayed: (json.item as { replayed?: boolean }).replayed === true,
+        item: json.item as LedgerItemView,
+      }
+    : {
+        ok: false,
+        httpStatus: status,
+        reason: typeof json.reason === "string" ? json.reason : "UNKNOWN",
+        ...(typeof json.detail === "string" ? { detail: json.detail } : {}),
+      };
+
 /** An agent's view of its missions. It can read what it is assigned and PROPOSE a revision; it can never approve one. */
 export class PayFlowAgentMissionClient {
   private readonly doFetch: typeof globalThis.fetch;
@@ -486,6 +588,25 @@ export class PayFlowAgentMissionClient {
       { source: "MODEL", ...input },
     );
     return asPlan(r.status, r.json);
+  }
+  /** An agent may only ESTIMATE or QUOTE. Approval, commitment, reservation and money are never an agent's. */
+  async ledgerAdd(missionId: string, input: LedgerItemInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/ledger/items`,
+      input,
+    );
+    return asLedger(r.status, r.json);
+  }
+  async ledgerView(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/ledger`,
+    );
+    return r.json as unknown as {
+      summary: LedgerOverview["summary"];
+      items: LedgerItemView[];
+    };
   }
   /** Always waits for an owner; the result's `applied` is false. */
   async propose(
@@ -825,6 +946,40 @@ export class PayFlowMemberClient {
     );
     return [r.status, r.json];
   }
+
+  readonly ledger = {
+    overview: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/ledger`,
+      );
+      return r.json as unknown as LedgerOverview;
+    },
+    createItem: async (missionId: string, input: LedgerItemInput) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/ledger/items`,
+        input,
+      );
+      return asLedger(r.status, r.json);
+    },
+    /** Move an item between stages. Moves that assert what happened outside need Proof or a provider confirmation. */
+    transition: async (itemId: string, input: LedgerTransitionInput) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/ledger/items/${encodeURIComponent(itemId)}/transition`,
+        input,
+      );
+      return asLedger(r.status, r.json);
+    },
+    history: async (itemId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/ledger/items/${encodeURIComponent(itemId)}/history`,
+      );
+      return (r.json.entries ?? []) as unknown[];
+    },
+  };
 }
 
 /** The issuer's signed revocation list. Public: no token. Verify its signature before trusting it. */
