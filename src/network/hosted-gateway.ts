@@ -895,7 +895,16 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   ): Promise<RestResponse | null> {
     try {
       return await run();
-    } catch {
+    } catch (error) {
+      // Diagnosable without leaking: only the error class, SQLSTATE and constraint name, never the message or any parameter.
+      const e = error as {
+        name?: string;
+        code?: string;
+        constraint_name?: string;
+      };
+      console.error(
+        `[gateway] INTERNAL_ERROR ${e.name ?? "Error"} code=${e.code ?? "-"} constraint=${e.constraint_name ?? "-"}`,
+      );
       return reply(`req_${randomUUID()}`, 500, {
         reason: "INTERNAL_ERROR",
         recoverable: false,
