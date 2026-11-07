@@ -985,6 +985,41 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** Create the order for a purchase PayFlow reconciled as settled (needs PURCHASE; you must be the order's buyer). */
+  async createOrder(poId: string, idempotencyKey: string) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/purchase-orders/${encodeURIComponent(poId)}/order`,
+      { idempotencyKey },
+    );
+    return [r.status, r.json] as const;
+  }
+  /**
+   * Report something about an order (status, supplier reference, delivery date, note). It is recorded as a CLAIM and never moves the
+   * order's status: a person verifies with evidence.
+   */
+  async reportOrderEvent(
+    orderId: string,
+    event: {
+      kind: "STATUS" | "REFERENCE" | "DELIVERY_DATE" | "NOTE";
+      status?:
+        | "PLACED"
+        | "CONFIRMED"
+        | "SHIPPED"
+        | "DELIVERED"
+        | "CANCELLED"
+        | "IN_DISPUTE";
+      value?: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/orders/${encodeURIComponent(orderId)}/events`,
+      event,
+    );
+    return [r.status, r.json] as const;
+  }
   /** What would stop (or allow) accepting this quote, check by check, and who may. Read-only. */
   async acceptanceCheck(quoteId: string) {
     const r = await this.call(
@@ -1757,6 +1792,52 @@ export class PayFlowMemberClient {
         `/v1/admin/org/messages/${encodeURIComponent(messageId)}/events`,
       );
       return (r.json.events ?? []) as unknown[];
+    },
+  };
+
+  /** Orders: what settled purchases became. Status moves only on a person's evidenced event. */
+  readonly orders = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/orders`,
+      );
+      return r.json;
+    },
+    create: async (poId: string, idempotencyKey: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/purchase-orders/${encodeURIComponent(poId)}/order`,
+        { idempotencyKey },
+      );
+      return [r.status, r.json] as const;
+    },
+    /** `verify: true` needs an evidenceKind other than NONE and moves the status/reference/date; otherwise it is a claim. */
+    record: async (
+      orderId: string,
+      event: {
+        kind: "STATUS" | "REFERENCE" | "DELIVERY_DATE" | "NOTE";
+        status?:
+          | "PLACED"
+          | "CONFIRMED"
+          | "SHIPPED"
+          | "DELIVERED"
+          | "CANCELLED"
+          | "IN_DISPUTE";
+        value?: string;
+        verify?: boolean;
+        evidenceKind?:
+          "NONE" | "OWNER_ATTESTATION" | "DOCUMENT_REF" | "CONNECTOR_CALL";
+        evidenceRef?: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/orders/${encodeURIComponent(orderId)}/events`,
+        event,
+      );
+      return [r.status, r.json] as const;
     },
   };
 

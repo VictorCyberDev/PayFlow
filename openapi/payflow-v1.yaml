@@ -1932,6 +1932,79 @@ paths:
         - { in: path, name: poId, required: true, schema: { type: string } }
       responses:
         "200": { description: Reconciled (or replayed) }
+  /v1/admin/org/purchase-orders/{poId}/order:
+    post:
+      operationId: createOrder
+      summary: Create the order for a purchase PayFlow reconciled as settled. Once per purchase order.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: poId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Created }
+        "409": { description: Not settled, or already created }
+  /v1/admin/org/missions/{missionId}/orders:
+    get:
+      operationId: listOrders
+      summary: Orders for the mission, with verified status, unverified claims and lateness.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Orders }
+  /v1/admin/org/orders/{orderId}/events:
+    post:
+      operationId: recordOrderEvent
+      summary: Record an order event. With verify and evidence a person moves the status, reference or date; otherwise it is a claim.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Recorded }
+        "409": { description: Illegal move }
+        "422": { description: Evidence required }
+  /v1/agent/purchase-orders/{poId}/order:
+    post:
+      operationId: agentCreateOrder
+      summary: Create the order (only the purchase order's buyer; needs PURCHASE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: poId, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Created }
+  /v1/agent/missions/{missionId}/orders:
+    get:
+      operationId: agentOrders
+      summary: Orders (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Orders }
+  /v1/agent/orders/{orderId}/events:
+    post:
+      operationId: agentRecordOrderEvent
+      summary: Report something about an order. Always a claim; never moves the status.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Recorded as a claim }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem

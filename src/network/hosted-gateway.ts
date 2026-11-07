@@ -72,6 +72,8 @@ import { createAcceptanceRoutes } from "./acceptance-routes.js";
 import { AcceptanceService } from "../missions/acceptance-service.js";
 import { OperationTraceService } from "../operation-trace.js";
 import { createProcurementRoutes } from "./procurement-routes.js";
+import { createOrderRoutes } from "./order-routes.js";
+import { OrderService } from "../missions/order-service.js";
 import { ProcurementService } from "../missions/procurement-service.js";
 import { traceFactsOf } from "../missions/purchase.js";
 import { CommunicationService } from "../missions/communication-service.js";
@@ -1338,6 +1340,29 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         caller.environment,
       )) !== null,
   });
+  const orderService = new OrderService({
+    sql,
+    audit,
+    missions: missionService,
+    now: iso,
+  });
+  const orderRoutes = createOrderRoutes({
+    service: orderService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
   /** An authenticated agent credential → its tenant and agent id. Null for anything else. */
   async function resolveAgentCaller(
     request: RestRequest,
@@ -2370,7 +2395,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path.startsWith("/v1/agent/negotiations/") ||
       path.startsWith("/v1/agent/messages/") ||
       path.startsWith("/v1/agent/acceptances/") ||
-      path.startsWith("/v1/agent/purchase-orders/")
+      path.startsWith("/v1/agent/purchase-orders/") ||
+      path.startsWith("/v1/agent/orders/")
     ) {
       send(
         res,
@@ -2386,7 +2412,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => negotiationRoutes.agent(request))) ??
           (await safely(() => communicationRoutes.agent(request))) ??
           (await safely(() => acceptanceRoutes.agent(request))) ??
-          (await safely(() => procurementRoutes.agent(request))) ?? {
+          (await safely(() => procurementRoutes.agent(request))) ??
+          (await safely(() => orderRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2419,6 +2446,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => communicationRoutes.member(request))) ??
         (await safely(() => acceptanceRoutes.member(request))) ??
         (await safely(() => procurementRoutes.member(request))) ??
+        (await safely(() => orderRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {
