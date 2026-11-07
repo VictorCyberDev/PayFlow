@@ -55,6 +55,7 @@ import { ProofReader } from "./proof-read.js";
 import { verifyProofRequest } from "./hosted-verify.js";
 import { PortableCredentialIssuer } from "./credential-issuance.js";
 import { MissionService, type MissionCaller } from "../missions/service.js";
+import { MissionAuthorityCompiler } from "../missions/authority-compiler.js";
 import { createMissionRoutes } from "./mission-routes.js";
 import { PlanService } from "../missions/plan-service.js";
 import { createPlanRoutes } from "./plan-routes.js";
@@ -975,9 +976,23 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   }
 
   const delegations = new DelegationService({ sql, repo, audit, now: iso });
-  const missionService = new MissionService({ sql, audit, now: iso });
+  const authorityCompiler = new MissionAuthorityCompiler({
+    sql,
+    repo,
+    audit,
+    now: iso,
+  });
+  const missionService = new MissionService({
+    sql,
+    audit,
+    now: iso,
+    afterChange: (tenant, missionId) =>
+      authorityCompiler.reconcile(tenant, missionId),
+  });
   const missionRoutes = createMissionRoutes({
     service: missionService,
+    authorities: (caller, missionId) =>
+      authorityCompiler.list(caller, missionId),
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(

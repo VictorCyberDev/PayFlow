@@ -31,6 +31,11 @@ export interface MissionRouteDeps {
   readonly agent: (request: RestRequest) => Promise<MissionCaller | null>;
   /** True when the organization is paused (new proposals are refused while paused). */
   readonly paused: (caller: MissionCaller) => Promise<boolean>;
+  /** What was compiled from a mission into stored Authorities, and what could not be (M29). */
+  readonly authorities?: (
+    caller: MissionCaller,
+    missionId: string,
+  ) => Promise<object | null>;
 }
 
 const STATUS: Record<MissionRefusal, number> = {
@@ -52,6 +57,7 @@ const STATUS: Record<MissionRefusal, number> = {
 
 const ID = "msn_[a-f0-9]{24}";
 const MEMBER_OPS = new Set([
+  "authorities",
   "history",
   "revisions",
   "submit",
@@ -116,7 +122,9 @@ export function createMissionRoutes(deps: MissionRouteDeps) {
     if (one && op !== undefined && !MEMBER_OPS.has(op)) return null;
     const isRead =
       (base && request.method === "GET") ||
-      (one && (!op || op === "history") && request.method === "GET");
+      (one &&
+        (!op || op === "history" || op === "authorities") &&
+        request.method === "GET");
     const permission: Permission = isRead
       ? "view:missions"
       : base
@@ -156,6 +164,12 @@ export function createMissionRoutes(deps: MissionRouteDeps) {
     const id = one[1]!;
     if (request.method === "GET" && !op)
       return done(requestId, 200, await service.get(caller, id));
+    if (request.method === "GET" && op === "authorities" && deps.authorities) {
+      const a = await deps.authorities(caller, id);
+      return a
+        ? reply(requestId, 200, a)
+        : refuse(requestId, { refusal: "NOT_FOUND" });
+    }
     if (request.method === "GET" && op === "history") {
       const r = await service.history(caller, id);
       return r.ok ? reply(requestId, 200, r.value) : refuse(requestId, r);
