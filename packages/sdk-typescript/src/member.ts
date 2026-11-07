@@ -280,6 +280,110 @@ export interface AgentMissionView {
   readonly myCapabilities: readonly MissionCapability[];
 }
 
+// -------------------------------------------------------------------------------------------------- plans (V3 M27)
+export interface PlanTaskInput {
+  readonly key: string;
+  readonly title: string;
+  readonly intendedOutcome: string;
+  readonly taskType: string;
+  readonly requiredCapabilities: readonly MissionCapability[];
+  readonly providerTypes?: readonly string[];
+  readonly estimatedCostMinor?: number;
+  /** An estimate is labelled; a planner can never claim VERIFIED_QUOTE. */
+  readonly estimateSource?: "NONE" | "HUMAN_ESTIMATE" | "AI_ESTIMATE";
+  readonly expectedDurationMinutes?: number;
+  readonly requiredEvidence?: readonly string[];
+  readonly assignedAgentId?: string;
+  readonly priority?: "LOW" | "NORMAL" | "HIGH";
+  readonly deadline?: string;
+  readonly requiresOwnerApproval?: boolean;
+  readonly dependsOn?: readonly {
+    key: string;
+    kind?: "HARD" | "CONDITIONAL";
+  }[];
+  readonly explanation: string;
+}
+export interface PlanDraftInput {
+  readonly rationale?: string;
+  readonly tasks: readonly PlanTaskInput[];
+}
+export type PlanTaskState =
+  | "BLOCKED"
+  | "READY"
+  | "AWAITING_APPROVAL"
+  | "IN_PROGRESS"
+  | "HANDED_OFF"
+  | "COMPLETED"
+  | "FAILED"
+  | "SKIPPED"
+  | "INVALIDATED";
+export interface PlanTaskView {
+  readonly taskId: string;
+  readonly missionId?: string;
+  readonly key: string;
+  readonly planVersion: number;
+  readonly title: string;
+  readonly state: PlanTaskState;
+  readonly blockReason: string | null;
+  readonly readiness: "EXECUTABLE" | "PREPARED_HANDOFF" | "UNAVAILABLE";
+  readonly readinessReason: string | null;
+  readonly assignedAgentId: string | null;
+  readonly requiresOwnerApproval: boolean;
+  readonly estimatedCostMinor: number | null;
+  readonly estimateSource: string;
+  readonly requiredEvidence: readonly string[];
+  readonly dependsOn: readonly { key: string; kind: string }[];
+  readonly result: unknown;
+}
+export type PlanTaskResult =
+  | { readonly ok: true; readonly task: PlanTaskView }
+  | {
+      readonly ok: false;
+      readonly httpStatus: number;
+      readonly reason: string;
+      readonly detail?: string;
+    };
+const asTask = (
+  status: number,
+  json: Record<string, unknown>,
+): PlanTaskResult =>
+  status === 200 && json.task
+    ? { ok: true, task: json.task as PlanTaskView }
+    : {
+        ok: false,
+        httpStatus: status,
+        reason: typeof json.reason === "string" ? json.reason : "UNKNOWN",
+        ...(typeof json.detail === "string" ? { detail: json.detail } : {}),
+      };
+export type PlanResult =
+  | {
+      readonly ok: true;
+      readonly replayed: boolean;
+      readonly plan: {
+        planVersion: number;
+        status: string;
+        estimatedTotalMinor?: number;
+        overBudget?: boolean;
+      };
+    }
+  | {
+      readonly ok: false;
+      readonly httpStatus: number;
+      readonly reason: string;
+      readonly problems?: readonly { code: string }[];
+    };
+const asPlan = (status: number, json: Record<string, unknown>): PlanResult =>
+  (status === 200 || status === 201 || status === 202) && json.plan
+    ? { ok: true, replayed: status === 200, plan: json.plan as never }
+    : {
+        ok: false,
+        httpStatus: status,
+        reason: typeof json.reason === "string" ? json.reason : "UNKNOWN",
+        ...(Array.isArray(json.problems)
+          ? { problems: json.problems as { code: string }[] }
+          : {}),
+      };
+
 /** An agent's view of its missions. It can read what it is assigned and PROPOSE a revision; it can never approve one. */
 export class PayFlowAgentMissionClient {
   private readonly doFetch: typeof globalThis.fetch;
@@ -319,6 +423,69 @@ export class PayFlowAgentMissionClient {
       `/v1/agent/missions/${encodeURIComponent(missionId)}`,
     );
     return r.status === 200 ? (r.json.mission as AgentMissionView) : null;
+  }
+  /** The tasks assigned to this agent on missions in force (BLOCKED tasks are listed so the agent can see what it waits for). */
+  async tasks(): Promise<readonly PlanTaskView[]> {
+    const r = await this.call("GET", "/v1/agent/tasks");
+    return (r.json.tasks ?? []) as PlanTaskView[];
+  }
+  /** Claim a READY task. Re-sending the same `runKey` is a replay, never a second claim. */
+  async claim(taskId: string, runKey: string) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/tasks/${encodeURIComponent(taskId)}/claim`,
+      { runKey },
+    );
+    return asTask(r.status, r.json);
+  }
+  /** Report completion with the evidence the task requires. The result is recorded as AGENT_REPORTED, not provider-confirmed. */
+  async complete(
+    taskId: string,
+    input: {
+      runKey: string;
+      summary?: string;
+      evidence?: readonly { kind: string; ref: string }[];
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/tasks/${encodeURIComponent(taskId)}/complete`,
+      input,
+    );
+    return asTask(r.status, r.json);
+  }
+  async fail(taskId: string, input: { runKey: string; reason: string }) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/tasks/${encodeURIComponent(taskId)}/fail`,
+      input,
+    );
+    return asTask(r.status, r.json);
+  }
+  /** Hand the task to a person (a step no connected provider can do). */
+  async handoff(taskId: string, input: { runKey: string; note: string }) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/tasks/${encodeURIComponent(taskId)}/handoff`,
+      input,
+    );
+    return asTask(r.status, r.json);
+  }
+  /** Propose a plan (labelled MODEL). It stays inert until a member activates it. */
+  async proposePlan(
+    missionId: string,
+    input: {
+      draft: PlanDraftInput;
+      sourceLabel?: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/plans`,
+      { source: "MODEL", ...input },
+    );
+    return asPlan(r.status, r.json);
   }
   /** Always waits for an owner; the result's `applied` is false. */
   async propose(
@@ -571,6 +738,93 @@ export class PayFlowMemberClient {
       return r.json as { transitions: unknown[]; versions: unknown[] };
     },
   };
+
+  readonly plans = {
+    /** A member's plan is active at once. `TEMPLATE` derives it from the contract alone (no prices, no suppliers). */
+    create: async (
+      missionId: string,
+      input:
+        | { source: "TEMPLATE"; idempotencyKey: string }
+        | { source: "HUMAN"; draft: PlanDraftInput; idempotencyKey: string },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/plans`,
+        input,
+      );
+      return asPlan(r.status, r.json);
+    },
+    current: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/plans`,
+      );
+      return r.json as {
+        plans: unknown[];
+        activePlanVersion: number | null;
+        tasks: PlanTaskView[];
+        progress: Record<string, number>;
+        estimatedTotalMinor: number;
+      };
+    },
+    activate: async (missionId: string, planVersion: number) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/plans/${planVersion}/activate`,
+        {},
+      );
+      return asPlan(r.status, r.json);
+    },
+    reject: async (missionId: string, planVersion: number) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/plans/${planVersion}/reject`,
+        {},
+      );
+      return asPlan(r.status, r.json);
+    },
+  };
+  readonly tasks = {
+    /** Owner approval of a task that needs one. */
+    approve: async (taskId: string) =>
+      asTask(...(await this.taskCall(taskId, "approve", {}))),
+    /** A person confirms a handed-off task with evidence. Recorded as OWNER_REPORTED. */
+    confirmHandoff: async (
+      taskId: string,
+      input: {
+        summary?: string;
+        evidence: readonly { kind: string; ref: string }[];
+      },
+    ) => asTask(...(await this.taskCall(taskId, "confirm-handoff", input))),
+    skip: async (taskId: string, reason?: string) =>
+      asTask(
+        ...(await this.taskCall(taskId, "skip", reason ? { reason } : {})),
+      ),
+    invalidate: async (taskId: string, reason?: string) =>
+      asTask(
+        ...(await this.taskCall(
+          taskId,
+          "invalidate",
+          reason ? { reason } : {},
+        )),
+      ),
+    retry: async (taskId: string, reason?: string) =>
+      asTask(
+        ...(await this.taskCall(taskId, "retry", reason ? { reason } : {})),
+      ),
+  };
+  private async taskCall(
+    taskId: string,
+    op: string,
+    body: unknown,
+  ): Promise<[number, Record<string, unknown>]> {
+    const r = await this.call(
+      "POST",
+      `/v1/admin/org/tasks/${encodeURIComponent(taskId)}/${op}`,
+      body,
+    );
+    return [r.status, r.json];
+  }
 }
 
 /** The issuer's signed revocation list. Public: no token. Verify its signature before trusting it. */
