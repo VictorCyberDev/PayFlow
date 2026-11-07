@@ -93,6 +93,8 @@ export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
   mcpProfile?: "full" | "verify-only";
   /** Verify-only profile only: serve the one public verification tool without a credential. */
   mcpAnonymousVerify?: boolean;
+  trustedProxyHops?: number;
+  ipRateLimitPerMinute?: number;
   /** External OAuth authorization server (PayFlow is only the resource server). Both are https. */
   oauthIssuer?: string;
   oauthJwksUrl?: string;
@@ -144,6 +146,20 @@ export function parseHostedConfig(
   const profile = env.PAYFLOW_MCP_PROFILE;
   if (profile !== undefined && profile !== "full" && profile !== "verify-only")
     throw new Error("PAYFLOW_MCP_PROFILE_INVALID");
+  const intEnv = (name: string, min: number, max: number) => {
+    const v = env[name];
+    if (v === undefined) return undefined;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < min || n > max)
+      throw new Error(`${name}_INVALID`);
+    return n;
+  };
+  const trustedProxyHops = intEnv("PAYFLOW_TRUSTED_PROXY_HOPS", 0, 5);
+  const ipRateLimitPerMinute = intEnv(
+    "PAYFLOW_IP_RATE_LIMIT_PER_MINUTE",
+    10,
+    100000,
+  );
   const anonymous = env.PAYFLOW_MCP_ANONYMOUS_VERIFY;
   if (anonymous !== undefined && anonymous !== "true" && anonymous !== "false")
     throw new Error("PAYFLOW_MCP_ANONYMOUS_VERIFY_INVALID");
@@ -160,6 +176,8 @@ export function parseHostedConfig(
     ...base,
     ...(profile ? { mcpProfile: profile } : {}),
     ...(anonymous === "true" ? { mcpAnonymousVerify: true } : {}),
+    ...(trustedProxyHops !== undefined ? { trustedProxyHops } : {}),
+    ...(ipRateLimitPerMinute !== undefined ? { ipRateLimitPerMinute } : {}),
     ...(issuer && jwks ? { oauthIssuer: issuer, oauthJwksUrl: jwks } : {}),
     ...(adminToken ? { gatewayAdminToken: adminToken } : {}),
     ...(cronSecret ? { cronSecret } : {}),
@@ -333,6 +351,12 @@ export function createHostedConsole(
         ...credentialIssuerFor(config.PAYFLOW_M5_ORIGIN),
         ...(config.mcpProfile ? { mcpProfile: config.mcpProfile } : {}),
         ...(config.mcpAnonymousVerify ? { mcpAnonymousVerify: true } : {}),
+        ...(config.trustedProxyHops !== undefined
+          ? { trustedProxyHops: config.trustedProxyHops }
+          : {}),
+        ...(config.ipRateLimitPerMinute !== undefined
+          ? { ipRateLimitPerMinute: config.ipRateLimitPerMinute }
+          : {}),
         ...(config.oauthIssuer && config.oauthJwksUrl
           ? {
               oauth: {

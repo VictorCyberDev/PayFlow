@@ -112,6 +112,20 @@ export class AlertEngine {
     return rows.length === 1;
   }
 
+  /** Resolves the open alert for a subject, if any (recovery). Returns whether one was resolved. */
+  async resolveSubject(
+    code: string,
+    subjectKind: string,
+    subjectId: string,
+    now: string,
+  ): Promise<boolean> {
+    const rows = await this.sql`
+      update operational_alerts set state = 'RESOLVED', last_seen_at = ${now}
+      where dedupe_key = ${`${code}:${subjectKind}:${subjectId}`} and state <> 'RESOLVED'
+      returning alert_id`;
+    return rows.length > 0;
+  }
+
   async resolve(alertId: string, now: string): Promise<boolean> {
     const rows = await this.sql`
       update operational_alerts set state = 'RESOLVED', resolved_at = ${now}
