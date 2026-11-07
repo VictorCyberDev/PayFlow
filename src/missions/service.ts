@@ -11,6 +11,7 @@ import {
   type Capability,
   type MissionContract,
 } from "./contract.js";
+import { revokeCompiledInTx } from "./authority-compiler.js";
 
 /**
  * Mission lifecycle. One class owns every state change so the rules live in one place:
@@ -153,7 +154,19 @@ const toRecord = (r: Row): MissionRecord => ({
 
 export class MissionService {
   constructor(
-    private readonly deps: { sql: Sql; audit: AuditLog; now: () => string },
+    private readonly deps: {
+      sql: Sql;
+      audit: AuditLog;
+      now: () => string;
+      /**
+       * Called AFTER a change that may have put a new version in force (approval, a narrowing revision, resume). The
+       * Authority compiler uses it. A failure here is swallowed on purpose: no compiled Authority means no spending power.
+       */
+      afterChange?: (
+        tenant: { organizationId: string; environment: Environment },
+        missionId: string,
+      ) => Promise<unknown>;
+    },
   ) {}
 
   // ------------------------------------------------------------------------------------------------- helpers
@@ -574,6 +587,8 @@ export class MissionService {
           await tx`update mission_versions set decision = 'SUPERSEDED' where mission_id = ${missionId} and version = ${rec.pendingVersion ?? 0} and decision = 'PENDING'`;
           await tx`update mission_versions set decision = 'SUPERSEDED' where mission_id = ${missionId} and version = ${rec.activeVersion} and decision = 'APPROVED'`;
           await tx`update missions set latest_version = ${version}, active_version = ${version}, pending_version = null, row_version = row_version + 1, updated_at = ${now} where mission_id = ${missionId}`;
+          // A different version is now in force: Authorities compiled from the old one are revoked in this same transaction.
+          await revokeCompiledInTx(tx, missionId, "VERSION_SUPERSEDED", now);
           await this.transition(
             tx,
             missionId,
@@ -632,6 +647,8 @@ export class MissionService {
         { version: outcome.value.version },
         now,
       );
+    if (outcome.value.applied && !outcome.value.replayed)
+      await this.deps.afterChange?.(caller, missionId).catch(() => undefined);
     const view = await this.get(caller, missionId);
     return view.ok
       ? {
@@ -727,6 +744,7 @@ export class MissionService {
             ? "ACTIVE"
             : rec.status;
         await tx`update missions set active_version = ${candidate}, pending_version = null, status = ${to}, row_version = row_version + 1, updated_at = ${now} where mission_id = ${missionId}`;
+        await revokeCompiledInTx(tx, missionId, "VERSION_SUPERSEDED", now);
         await this.transition(
           tx,
           missionId,
@@ -751,6 +769,7 @@ export class MissionService {
       { version: body.data.version },
       now,
     );
+    await this.deps.afterChange?.(caller, missionId).catch(() => undefined);
     return this.get(caller, missionId);
   }
 
@@ -830,6 +849,9 @@ export class MissionService {
         where mission_id = ${missionId}`;
         if (op === "cancel" || op === "revoke")
           await tx`update mission_versions set decision = 'SUPERSEDED' where mission_id = ${missionId} and decision = 'PENDING'`;
+        // Anything that stops the mission stops its spending power in the SAME transaction (resume compiles fresh Authorities after commit).
+        if (["pause", "cancel", "revoke", "complete"].includes(op))
+          await revokeCompiledInTx(tx, missionId, op.toUpperCase(), now);
         await this.transition(
           tx,
           missionId,
@@ -846,6 +868,7 @@ export class MissionService {
     );
     if (!outcome.ok) return outcome;
     await this.audit(caller, `MISSION_${rule.event}`, missionId, { op }, now);
+    await this.deps.afterChange?.(caller, missionId).catch(() => undefined);
     return this.get(caller, missionId);
   }
 
@@ -872,6 +895,7 @@ export class MissionService {
           return false;
         await tx`update missions set status = 'EXPIRED', pending_version = null, row_version = row_version + 1, updated_at = ${now} where mission_id = ${String(d.mission_id)}`;
         await tx`update mission_versions set decision = 'SUPERSEDED' where mission_id = ${String(d.mission_id)} and decision = 'PENDING'`;
+        await revokeCompiledInTx(tx, String(d.mission_id), "EXPIRED", now);
         await this.transition(
           tx,
           String(d.mission_id),

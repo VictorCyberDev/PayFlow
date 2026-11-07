@@ -76,6 +76,11 @@ export const MissionContractSchema = z
     currency: z.string().regex(/^[A-Z]{3}$/u),
     totalBudgetMinor: Minor,
     maxCommitmentMinor: Minor,
+    /**
+     * Most items one compiled Authority may buy in total. Optional: when omitted the contract is silent and the Authority gets the
+     * mandate maximum (1000), so the budget remains the binding limit. Raising it, or removing it, is a widening.
+     */
+    maxItemQuantity: z.number().int().min(1).max(1000).optional(),
     spendingCategories: z.array(Id).max(50).default([]),
     approvedProviderTypes: z
       .array(z.enum(PROVIDER_TYPES))
@@ -192,6 +197,11 @@ export function wideningReasons(
   if (b.totalBudgetMinor > a.totalBudgetMinor) out.push("BUDGET_INCREASED");
   if (b.maxCommitmentMinor > a.maxCommitmentMinor)
     out.push("MAX_COMMITMENT_INCREASED");
+  if (
+    a.maxItemQuantity !== undefined &&
+    (b.maxItemQuantity === undefined || b.maxItemQuantity > a.maxItemQuantity)
+  )
+    out.push("ITEM_QUANTITY_LIMIT_RAISED_OR_REMOVED");
   if (Date.parse(b.expiresAt) > Date.parse(a.expiresAt))
     out.push("EXPIRY_EXTENDED");
   for (const cat of b.spendingCategories)

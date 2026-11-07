@@ -180,6 +180,8 @@ const MISSIONS = "/v1/admin/org/missions";
       expect(audit.map((a) => String(a.action))).toEqual([
         "MISSION_CREATED",
         "MISSION_VERSION_APPROVED",
+        // The purchasing agent in this contract gets a compiled Authority on approval (M29).
+        "MISSION_AUTHORITY_COMPILED",
       ]);
       // Immutable at the database: neither a contract nor a transition can be rewritten or removed.
       await expect(

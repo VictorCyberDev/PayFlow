@@ -855,6 +855,30 @@ paths:
       responses:
         "201": { description: Created }
         "403": { description: Not permitted for an agent }
+  /v1/admin/org/missions/{missionId}/authorities:
+    get:
+      operationId: missionAuthorities
+      summary: The stored Authorities compiled from an approved mission, and why any purchasing agent has none. Read-only.
+      description: >-
+        One Authority per (purchasing agent, spending category), never broader than the contract: merchants within the contract's ONLY list,
+        maximum single transaction within the maximum commitment, cumulative limit within an even allocation of the budget less what earlier
+        Authorities for the pair already used, the contract's deadline. Pausing, revoking, cancelling, completing, expiring or superseding the
+        mission revokes them in the same transaction. Mission Contracts decide nothing; the Trust Kernel decides every purchase.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          {
+            description: Compiled Authorities and the reasons others were not compiled,
+          }
+        "404": { description: No such mission in this tenant }
   /v1/issuer/directory:
     get:
       operationId: issuerDirectory

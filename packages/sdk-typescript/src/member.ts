@@ -980,6 +980,32 @@ export class PayFlowMemberClient {
       return (r.json.entries ?? []) as unknown[];
     },
   };
+
+  /** What was compiled from a mission into stored Authorities, and what could not be and why. Read-only: there is no way to ask for an Authority directly. */
+  readonly authorities = {
+    ofMission: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/authorities`,
+      );
+      return r.json as unknown as {
+        authorities: readonly {
+          authorityId: string;
+          agentId: string;
+          category: string;
+          missionVersion: number;
+          allocationMinor: number;
+          maxSingleTransactionMinor: number;
+          status: "ACTIVE" | "REVOKED";
+        }[];
+        notCompiled: readonly {
+          agentId: string | null;
+          category: string | null;
+          reason: string;
+        }[];
+      };
+    },
+  };
 }
 
 /** The issuer's signed revocation list. Public: no token. Verify its signature before trusting it. */
