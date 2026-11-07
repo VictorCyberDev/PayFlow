@@ -1497,6 +1497,226 @@ paths:
             description: Not the named negotiator,
             or the mission does not grant NEGOTIATE,
           }
+  /v1/admin/org/missions/{missionId}/contacts:
+    get:
+      operationId: listSupplierContacts
+      summary: Addresses a person registered for the mission's suppliers.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Contacts }
+  /v1/admin/org/suppliers/{supplierId}/contacts:
+    post:
+      operationId: addSupplierContact
+      summary: Register a plain email address for a supplier and say how it is known to be theirs. Agents cannot choose recipients.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: supplierId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Registered }
+        "200": { description: Already registered }
+  /v1/admin/org/contacts/{contactId}/{action}:
+    post:
+      operationId: setSupplierContactState
+      summary: Block (containment) or restore a contact. A blocked contact can receive nothing.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: contactId,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            in: path,
+            name: action,
+            required: true,
+            schema: { type: string, enum: [block, restore] },
+          }
+      responses:
+        "200": { description: Updated }
+  /v1/admin/org/missions/{missionId}/messages:
+    get:
+      operationId: listMessages
+      summary: Messages to and from suppliers with status. Inbound text is marked UNTRUSTED_SUPPLIER_TEXT.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Messages }
+    post:
+      operationId: draftMessage
+      summary: Draft a message (always waits for a person). A counteroffer carries a move that must pass the negotiation rules.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Waiting for approval }
+        "422":
+          {
+            description: The negotiation rules refuse the move,
+            or the text reveals something it must not,
+          }
+  /v1/admin/org/missions/{missionId}/messages/inbound:
+    post:
+      operationId: recordInboundMessage
+      summary: Record a supplier's reply as untrusted text. Triggers nothing.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded }
+  /v1/admin/org/messages/{messageId}/{action}:
+    post:
+      operationId: messageAction
+      summary: approve / reject (a person's decision, re-checking the contact, mission and negotiation rules), send (once, only if approved), or resolve (settle a DELIVERY_UNKNOWN message).
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: messageId,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            in: path,
+            name: action,
+            required: true,
+            schema: { type: string, enum: [approve, reject, send, resolve] },
+          }
+      responses:
+        "200": { description: Done }
+        "409":
+          {
+            description: Illegal move,
+            contact blocked,
+            mission not active,
+            or no channel available,
+          }
+        "422": { description: Rules or content check failed at this moment }
+  /v1/admin/org/messages/{messageId}/events:
+    get:
+      operationId: messageEvents
+      summary: Every status step of a message.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: messageId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Events }
+  /v1/agent/missions/{missionId}/messages:
+    get:
+      operationId: agentMessages
+      summary: Messages for the mission (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Messages }
+    post:
+      operationId: agentDraftMessage
+      summary: Draft a message (needs DRAFT, or NEGOTIATE for a counteroffer). Nothing is sent.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Waiting for approval }
+  /v1/agent/messages/{messageId}/send:
+    post:
+      operationId: agentSendMessage
+      summary: Send your own approved message (needs COMMUNICATE). Once; an unconfirmed delivery is DELIVERY_UNKNOWN and is never retried automatically.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: messageId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Status after the attempt }
+  /v1/admin/org/negotiations/{negotiationId}/timeline:
+    get:
+      operationId: negotiationTimeline
+      summary: Our counters (rounds counted by PayFlow) and the supplier's quotes in order, with a recommendation - review for acceptance, counter, wait, walk away or escalate. A recommendation only.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: negotiationId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Timeline and recommendation }
+  /v1/agent/negotiations/{negotiationId}/timeline:
+    get:
+      operationId: agentNegotiationTimeline
+      summary: The same for the named negotiator (needs NEGOTIATE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: negotiationId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Timeline and recommendation }
+        "403": { description: Not the named negotiator }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem

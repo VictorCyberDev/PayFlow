@@ -67,7 +67,11 @@ import { createQualificationRoutes } from "./qualification-routes.js";
 import { createQuoteRoutes } from "./quote-routes.js";
 import { createSourcingRoutes } from "./sourcing-routes.js";
 import { createNegotiationRoutes } from "./negotiation-routes.js";
+import { createCommunicationRoutes } from "./communication-routes.js";
+import { CommunicationService } from "../missions/communication-service.js";
+import { builtinChannels, type ChannelRegistry } from "../missions/channels.js";
 import { NegotiationService } from "../missions/negotiation-service.js";
+import { CounterofferService } from "../missions/counteroffer-service.js";
 import { SourcingService } from "../missions/sourcing-service.js";
 import { QuoteService } from "../missions/quote-service.js";
 import { QualificationService } from "../missions/qualification-service.js";
@@ -159,6 +163,10 @@ export interface HostedGatewayOptions {
    * exercise failure modes; production never adds a connector without a code change and review.
    */
   readonly connectors?: ConnectorRegistry;
+  /** Channels messages can leave through. Defaults to the sandbox channel, which sends nothing anywhere. */
+  readonly channels?: ChannelRegistry;
+  /** Test seam: how long a send may take before its outcome is recorded as unknown. */
+  readonly sendTimeoutMs?: number;
 }
 
 /** The client address: the entry `hops` positions from the right of x-forwarded-for (appended by our trusted proxy). */
@@ -1208,8 +1216,42 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     ledger: ledgerService,
     now: iso,
   });
+  const counterofferService = new CounterofferService({
+    sql,
+    missions: missionService,
+    negotiations: negotiationService,
+    quotes: quoteService,
+  });
   const negotiationRoutes = createNegotiationRoutes({
     service: negotiationService,
+    counteroffers: counterofferService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
+  const communicationService = new CommunicationService({
+    sql,
+    audit,
+    missions: missionService,
+    negotiations: negotiationService,
+    ledger: ledgerService,
+    channels: options.channels ?? builtinChannels(),
+    now: iso,
+    ...(options.sendTimeoutMs ? { sendTimeoutMs: options.sendTimeoutMs } : {}),
+  });
+  const communicationRoutes = createCommunicationRoutes({
+    service: communicationService,
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(
@@ -2254,7 +2296,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path.startsWith("/v1/agent/candidates/") ||
       path.startsWith("/v1/agent/suppliers/") ||
       path.startsWith("/v1/agent/quotes/") ||
-      path.startsWith("/v1/agent/negotiations/")
+      path.startsWith("/v1/agent/negotiations/") ||
+      path.startsWith("/v1/agent/messages/")
     ) {
       send(
         res,
@@ -2267,7 +2310,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => qualificationRoutes.agent(request))) ??
           (await safely(() => quoteRoutes.agent(request))) ??
           (await safely(() => sourcingRoutes.agent(request))) ??
-          (await safely(() => negotiationRoutes.agent(request))) ?? {
+          (await safely(() => negotiationRoutes.agent(request))) ??
+          (await safely(() => communicationRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2297,6 +2341,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => quoteRoutes.member(request))) ??
         (await safely(() => sourcingRoutes.member(request))) ??
         (await safely(() => negotiationRoutes.member(request))) ??
+        (await safely(() => communicationRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {

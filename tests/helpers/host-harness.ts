@@ -10,6 +10,7 @@ import {
 } from "../../src/console-hosted.js";
 import { VerticalProvider } from "../m4-vertical-fixture.js";
 import type { ConnectorRegistry } from "../../src/missions/connectors.js";
+import type { ChannelRegistry } from "../../src/missions/channels.js";
 import { truncateTenantData } from "./reset.js";
 
 /**
@@ -29,6 +30,8 @@ export function hostHarness(
     agents?: readonly string[];
     /** Replace the host's connector registry (a test double must never be in a production registry). */
     connectors?: () => ConnectorRegistry;
+    channels?: () => ChannelRegistry;
+    sendTimeoutMs?: number;
   } = {},
 ) {
   const url = process.env.TEST_DATABASE_URL;
@@ -72,6 +75,10 @@ export function hostHarness(
         clock,
         paymentProvider: provider,
         ...(options.connectors ? { connectors: options.connectors() } : {}),
+        ...(options.channels ? { channels: options.channels() } : {}),
+        ...(options.sendTimeoutMs
+          ? { sendTimeoutMs: options.sendTimeoutMs }
+          : {}),
       },
     );
   };

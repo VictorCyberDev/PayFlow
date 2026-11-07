@@ -384,6 +384,18 @@ const asPlan = (status: number, json: Record<string, unknown>): PlanResult =>
           : {}),
       };
 
+// ------------------------------------------------------------------------- communication (V3 M37)
+export interface MessageDraft {
+  supplierId: string;
+  contactId: string;
+  kind: "INQUIRY" | "NEGOTIATION" | "NOTICE";
+  subject: string;
+  body: string;
+  negotiationId?: string;
+  move?: NegotiationMove;
+  idempotencyKey: string;
+}
+
 // ------------------------------------------------------------------------- negotiation (V3 M36)
 export interface NegotiationProposal {
   supplierId: string;
@@ -902,6 +914,43 @@ export class PayFlowAgentMissionClient {
       "POST",
       `/v1/agent/negotiations/${encodeURIComponent(negotiationId)}/check`,
       move,
+    );
+    return [r.status, r.json] as const;
+  }
+  /**
+   * Draft a message to a supplier's registered contact (needs DRAFT, or NEGOTIATE for a counteroffer). It waits for a person; nothing
+   * is sent. A counteroffer carries a structured move that must pass the negotiation rules, and your text is scanned so it does not
+   * reveal the budget, the limits or other suppliers.
+   */
+  async draftMessage(missionId: string, input: MessageDraft) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/messages`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  async messages(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/messages`,
+    );
+    return r.json;
+  }
+  /** Send YOUR message once a person has approved it (needs COMMUNICATE). A delivery that cannot be confirmed is DELIVERY_UNKNOWN and is never retried automatically. */
+  async sendMessage(messageId: string) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/messages/${encodeURIComponent(messageId)}/send`,
+      {},
+    );
+    return [r.status, r.json] as const;
+  }
+  /** The negotiation so far (our counters, the supplier's quotes) and what to do next. A recommendation only. Only the named negotiator. */
+  async negotiationTimeline(negotiationId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/negotiations/${encodeURIComponent(negotiationId)}/timeline`,
     );
     return [r.status, r.json] as const;
   }
@@ -1523,6 +1572,121 @@ export class PayFlowMemberClient {
         move,
       );
       return [r.status, r.json] as const;
+    },
+  };
+
+  /** Supplier contacts, messages and their approval. Recipients come only from contacts a person registers here. */
+  readonly communication = {
+    contacts: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/contacts`,
+      );
+      return (r.json.contacts ?? []) as unknown[];
+    },
+    addContact: async (
+      supplierId: string,
+      input: { address: string; basis: string },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/suppliers/${encodeURIComponent(supplierId)}/contacts`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    blockContact: async (contactId: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/contacts/${encodeURIComponent(contactId)}/block`,
+        {},
+      );
+      return [r.status, r.json] as const;
+    },
+    restoreContact: async (contactId: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/contacts/${encodeURIComponent(contactId)}/restore`,
+        {},
+      );
+      return [r.status, r.json] as const;
+    },
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/messages`,
+      );
+      return r.json;
+    },
+    draft: async (missionId: string, input: MessageDraft) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/messages`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    /** Record a supplier's reply. It is stored as untrusted text and triggers nothing. */
+    recordReply: async (
+      missionId: string,
+      input: {
+        supplierId: string;
+        contactId?: string;
+        subject: string;
+        body: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/messages/inbound`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    approve: async (messageId: string, note = "") => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/messages/${encodeURIComponent(messageId)}/approve`,
+        { note },
+      );
+      return [r.status, r.json] as const;
+    },
+    reject: async (messageId: string, note = "") => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/messages/${encodeURIComponent(messageId)}/reject`,
+        { note },
+      );
+      return [r.status, r.json] as const;
+    },
+    send: async (messageId: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/messages/${encodeURIComponent(messageId)}/send`,
+        {},
+      );
+      return [r.status, r.json] as const;
+    },
+    /** Settle a message whose delivery was unknown, after checking with the supplier or the provider. */
+    resolve: async (
+      messageId: string,
+      outcome: "SENT" | "FAILED",
+      note: string,
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/messages/${encodeURIComponent(messageId)}/resolve`,
+        { outcome, note },
+      );
+      return [r.status, r.json] as const;
+    },
+    events: async (messageId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/messages/${encodeURIComponent(messageId)}/events`,
+      );
+      return (r.json.events ?? []) as unknown[];
     },
   };
 

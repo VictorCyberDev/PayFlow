@@ -1,4 +1,5 @@
 import type { ConnectorRegistry } from "./missions/connectors.js";
+import type { ChannelRegistry } from "./missions/channels.js";
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import postgres, { type Sql } from "postgres";
@@ -237,6 +238,9 @@ export function createHostedConsole(
     oauthKeys?: JWTVerifyGetKey;
     /** Test seam: the connectors this host offers instead of the built-in sandbox catalogue. */
     connectors?: ConnectorRegistry;
+    /** Test seam: the channels messages leave through instead of the built-in sandbox channel. */
+    channels?: ChannelRegistry;
+    sendTimeoutMs?: number;
   } = {},
 ) {
   const clock = deps.clock ?? (() => new Date());
@@ -348,6 +352,8 @@ export function createHostedConsole(
         repo,
         demo,
         ...(deps.connectors ? { connectors: deps.connectors } : {}),
+        ...(deps.channels ? { channels: deps.channels } : {}),
+        ...(deps.sendTimeoutMs ? { sendTimeoutMs: deps.sendTimeoutMs } : {}),
         principalId: config.PAYFLOW_M5_PRINCIPAL_ID,
         agentId: config.PAYFLOW_M5_AGENT_ID,
         ...(simulated ? { simulated } : {}),
