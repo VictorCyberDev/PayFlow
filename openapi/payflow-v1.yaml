@@ -1028,6 +1028,135 @@ paths:
           }
       responses:
         "200": { description: Recorded or replayed }
+  /v1/admin/org/missions/{missionId}/suppliers:
+    get:
+      operationId: listSuppliers
+      summary: Suppliers with their computed qualification (QUALIFIED, NOT_QUALIFIED or INCOMPLETE) per required criterion. Qualified is not an approval to buy.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          {
+            description: Suppliers,
+            required criteria,
+            criteria catalogue and notice,
+          }
+    post:
+      operationId: addSupplier
+      summary: Add a supplier by merchant reference, or from a discovered candidate that states a merchantId.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Added }
+        "200": { description: Already present (replay) }
+  /v1/admin/org/missions/{missionId}/qualification-policy:
+    post:
+      operationId: setQualificationPolicy
+      summary: Set which criteria are required. The contract check is always included.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Policy in force }
+  /v1/admin/org/suppliers/{supplierId}/facts:
+    get:
+      operationId: supplierFactHistory
+      summary: Every fact ever recorded about the supplier, in order.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: supplierId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Facts }
+    post:
+      operationId: recordSupplierFact
+      summary: Record a fact. A person may mark it VERIFIED with evidence acceptable for the criterion; the latest fact wins and nothing is erased.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: supplierId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded }
+        "403": { description: Evidence not acceptable for verification }
+  /v1/agent/missions/{missionId}/suppliers:
+    get:
+      operationId: agentSuppliers
+      summary: The same supplier view for an agent that can READ.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Suppliers }
+    post:
+      operationId: agentAddSupplier
+      summary: Add a supplier (needs READ).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Added }
+  /v1/agent/suppliers/{supplierId}/facts:
+    post:
+      operationId: agentRecordSupplierFact
+      summary: Record a CLAIMED, UNKNOWN or FAILED fact (needs VERIFY). An agent cannot verify, attest, or weaken a person's verification.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: supplierId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Recorded }
+        "403":
+          {
+            description: Verification,
+            attestation or erasure by an agent refused,
+          }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem

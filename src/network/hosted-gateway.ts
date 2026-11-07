@@ -63,6 +63,8 @@ import { LedgerService } from "../missions/ledger-service.js";
 import { createLedgerRoutes } from "./ledger-routes.js";
 import { createConnectorRoutes } from "./connector-routes.js";
 import { createDiscoveryRoutes } from "./discovery-routes.js";
+import { createQualificationRoutes } from "./qualification-routes.js";
+import { QualificationService } from "../missions/qualification-service.js";
 import { DiscoveryService } from "../missions/discovery-service.js";
 import { ConnectorService } from "../missions/connector-service.js";
 import {
@@ -1119,6 +1121,29 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         caller.environment,
       )) !== null,
   });
+  const qualificationService = new QualificationService({
+    sql,
+    audit,
+    missions: missionService,
+    now: iso,
+  });
+  const qualificationRoutes = createQualificationRoutes({
+    service: qualificationService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
   /** An authenticated agent credential → its tenant and agent id. Null for anything else. */
   async function resolveAgentCaller(
     request: RestRequest,
@@ -2145,7 +2170,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path.startsWith("/v1/agent/tasks/") ||
       path.startsWith("/v1/agent/ledger/") ||
       path === "/v1/agent/connectors" ||
-      path.startsWith("/v1/agent/candidates/")
+      path.startsWith("/v1/agent/candidates/") ||
+      path.startsWith("/v1/agent/suppliers/")
     ) {
       send(
         res,
@@ -2154,7 +2180,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => planRoutes.agent(request))) ??
           (await safely(() => ledgerRoutes.agent(request))) ??
           (await safely(() => connectorRoutes.agent(request))) ??
-          (await safely(() => discoveryRoutes.agent(request))) ?? {
+          (await safely(() => discoveryRoutes.agent(request))) ??
+          (await safely(() => qualificationRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2180,6 +2207,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => ledgerRoutes.member(request))) ??
         (await safely(() => connectorRoutes.member(request))) ??
         (await safely(() => discoveryRoutes.member(request))) ??
+        (await safely(() => qualificationRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {

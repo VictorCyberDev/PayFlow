@@ -13,13 +13,14 @@ Source of truth for resuming the V3 program (ADR-018). Update at every milestone
 | M30 Workspace           | PARTIAL (read-only workspace is COMPLETE_LOCAL)                                 | #47     | —         | no create/approve/pause in the UI by design; approvals and controls stay in API/SDK            |
 | M31 Connectors          | COMPLETE_LOCAL (framework + sandbox catalogue); live connector BLOCKED_EXTERNAL | this PR | 034       | read-only by construction; no real marketplace without owner credentials                       |
 | M32 Discovery           | COMPLETE_LOCAL (sandbox catalogue); real data BLOCKED_EXTERNAL                  | this PR | 035       | immutable observations, deterministic checks, unknown never met                                |
-| M33–M50                 | NOT STARTED                                                                     | —       | —         | see ADR-018                                                                                    |
+| M33 Qualification       | COMPLETE_LOCAL                                                                  | this PR | 036       | person-only verification; open is never met; PayFlow does not screen                           |
+| M34–M50                 | NOT STARTED                                                                     | —       | —         | see ADR-018                                                                                    |
 
 ## Next executable actions (in order)
 
 1. **M30 follow-up (deferred, not blocking):** UI actions (create, approve/reject a pending revision, pause/resume/cancel) and an approvals queue.
    Deliberately not in v1: a UI that can approve is a second approval surface. Revisit after M31-M40 when more state needs a human.
-2. **M33 supplier qualification** (next; uses M32 candidates) + a real adapter only where authorized access exists (eBay Browse needs developer keys - owner action).
+2. **M34 quote and landed cost** (next; uses M32/M33) + a real adapter only where authorized access exists (eBay Browse needs developer keys - owner action).
 3. Procurement pack on the live path (extend the purchase request with SKU/costCenter/purpose/invoice, compare to the trusted offer).
 4. M32–M50 as ADR-018. M40 real PayPal Sandbox needs the owner's Sandbox credentials (never in chat).
 

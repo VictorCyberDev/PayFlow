@@ -384,6 +384,18 @@ const asPlan = (status: number, json: Record<string, unknown>): PlanResult =>
           : {}),
       };
 
+// ------------------------------------------------------------------------- supplier qualification (V3 M33)
+export interface SupplierFactInput {
+  criterion: string;
+  status: "CLAIMED" | "VERIFIED" | "FAILED" | "UNKNOWN";
+  value?: Record<string, string | number | boolean>;
+  evidenceKind?:
+    "NONE" | "CONNECTOR_CALL" | "DOCUMENT_REF" | "OWNER_ATTESTATION";
+  evidenceRef?: string;
+  note?: string;
+  idempotencyKey: string;
+}
+
 // ------------------------------------------------------------------------- discovery (V3 M32)
 export interface DiscoverInput {
   connectorId: string;
@@ -683,6 +695,41 @@ export class PayFlowAgentMissionClient {
     const r = await this.call(
       "POST",
       `/v1/agent/candidates/${encodeURIComponent(candidateId)}/mark`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Add a supplier to the mission's qualification list (needs READ). Idempotent by merchant reference. */
+  async addSupplier(
+    missionId: string,
+    input: {
+      externalRef?: string;
+      displayName?: string;
+      fromCandidateId?: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/suppliers`,
+      input,
+    );
+    return [r.status, r.json] as const;
+  }
+  async suppliers(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/suppliers`,
+    );
+    return r.json;
+  }
+  /**
+   * Record a CLAIMED, UNKNOWN or FAILED fact about a supplier (needs VERIFY). An agent can never mark a fact VERIFIED, attest,
+   * or weaken a person's verification.
+   */
+  async recordSupplierFact(supplierId: string, input: SupplierFactInput) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/suppliers/${encodeURIComponent(supplierId)}/facts`,
       input,
     );
     return [r.status, r.json] as const;
@@ -1130,6 +1177,60 @@ export class PayFlowMemberClient {
         "POST",
         `/v1/admin/org/candidates/${encodeURIComponent(candidateId)}/mark`,
         input,
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Supplier dossiers. Only a person's VERIFIED fact on acceptable evidence qualifies a supplier. */
+  readonly suppliers = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/suppliers`,
+      );
+      return r.json;
+    },
+    add: async (
+      missionId: string,
+      input: {
+        externalRef?: string;
+        displayName?: string;
+        fromCandidateId?: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/suppliers`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    recordFact: async (supplierId: string, input: SupplierFactInput) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/suppliers/${encodeURIComponent(supplierId)}/facts`,
+        input,
+      );
+      return [r.status, r.json] as const;
+    },
+    history: async (supplierId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/suppliers/${encodeURIComponent(supplierId)}/facts`,
+      );
+      return (r.json.facts ?? []) as unknown[];
+    },
+    /** Which criteria a supplier must meet (the contract check is always included). */
+    setPolicy: async (
+      missionId: string,
+      required: string[],
+      idempotencyKey: string,
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/qualification-policy`,
+        { required, idempotencyKey },
       );
       return [r.status, r.json] as const;
     },
