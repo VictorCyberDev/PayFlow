@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { RestRequest, RestResponse } from "./rest.js";
 import type { Member, Permission } from "./rbac.js";
 import type { MissionCaller } from "../missions/service.js";
+import type { CounterofferService } from "../missions/counteroffer-service.js";
 import type {
   NResult,
   NegRefusal,
@@ -11,6 +12,7 @@ import type {
 /** HTTP surface of negotiation rulebooks. Tenant and identity come from the authenticated caller, never the path or body. */
 export interface NegotiationRouteDeps {
   readonly service: NegotiationService;
+  readonly counteroffers: CounterofferService;
   readonly reply: (
     requestId: string,
     status: number,
@@ -70,6 +72,25 @@ export function createNegotiationRoutes(deps: NegotiationRouteDeps) {
       `^/v1/admin/org/negotiations/(${NID})/check$`,
       "u",
     ).exec(request.path);
+    const timeline = new RegExp(
+      `^/v1/admin/org/negotiations/(${NID})/timeline$`,
+      "u",
+    ).exec(request.path);
+    if (timeline && request.method === "GET") {
+      const requestId = `req_${randomUUID()}`;
+      const gate = await deps.authorize(requestId, request, "view:missions");
+      if (!("member" in gate)) return gate;
+      const r = await deps.counteroffers.timeline(
+        {
+          organizationId: gate.member.organizationId,
+          environment: gate.member.environment,
+          id: gate.member.memberId,
+          kind: "MEMBER",
+        },
+        timeline[1]!,
+      );
+      return r.ok ? reply(requestId, 200, r.value) : refuse(requestId, r);
+    }
     if (!list && !decide && !revoke && !check) return null;
     const get = request.method === "GET";
     if (
@@ -132,6 +153,23 @@ export function createNegotiationRoutes(deps: NegotiationRouteDeps) {
       `^/v1/agent/negotiations/(${NID})/check$`,
       "u",
     ).exec(request.path);
+    const timeline = new RegExp(
+      `^/v1/agent/negotiations/(${NID})/timeline$`,
+      "u",
+    ).exec(request.path);
+    if (timeline && request.method === "GET") {
+      const requestId = `req_${randomUUID()}`;
+      const caller = await deps.agent(request);
+      if (!caller)
+        return reply(requestId, 401, {
+          reason: "AGENT_AUTH_REQUIRED",
+          recoverable: false,
+          humanSummary: "A valid agent credential is required.",
+          nextAction: "PRESENT_AGENT_CREDENTIAL",
+        });
+      const r = await deps.counteroffers.timeline(caller, timeline[1]!);
+      return r.ok ? reply(requestId, 200, r.value) : refuse(requestId, r);
+    }
     if (!list && !check) return null;
     const get = request.method === "GET";
     if (check && get) return null;

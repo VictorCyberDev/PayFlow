@@ -946,6 +946,14 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** The negotiation so far (our counters, the supplier's quotes) and what to do next. A recommendation only. Only the named negotiator. */
+  async negotiationTimeline(negotiationId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/negotiations/${encodeURIComponent(negotiationId)}/timeline`,
+    );
+    return [r.status, r.json] as const;
+  }
   async ledgerView(missionId: string) {
     const r = await this.call(
       "GET",

@@ -535,10 +535,11 @@ const scripted: ChannelAdapter = {
         "AMOUNT:500.00",
       ]);
       // the offered amount may be stated even when it happens to equal a number kept private (here the target, 400.00)
+      const fresh = await scene(); // the first counter of its own negotiation (rounds are counted per negotiation)
       const atTarget = await draft(
-        s.b,
-        s.id,
-        counter(s, 40_000, {
+        fresh.b,
+        fresh.id,
+        counter(fresh, 40_000, {
           body: "We offer 400.00 in total.",
           idempotencyKey: idemKey("m"),
         }),

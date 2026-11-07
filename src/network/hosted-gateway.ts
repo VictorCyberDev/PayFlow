@@ -71,6 +71,7 @@ import { createCommunicationRoutes } from "./communication-routes.js";
 import { CommunicationService } from "../missions/communication-service.js";
 import { builtinChannels, type ChannelRegistry } from "../missions/channels.js";
 import { NegotiationService } from "../missions/negotiation-service.js";
+import { CounterofferService } from "../missions/counteroffer-service.js";
 import { SourcingService } from "../missions/sourcing-service.js";
 import { QuoteService } from "../missions/quote-service.js";
 import { QualificationService } from "../missions/qualification-service.js";
@@ -1215,8 +1216,15 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     ledger: ledgerService,
     now: iso,
   });
+  const counterofferService = new CounterofferService({
+    sql,
+    missions: missionService,
+    negotiations: negotiationService,
+    quotes: quoteService,
+  });
   const negotiationRoutes = createNegotiationRoutes({
     service: negotiationService,
+    counteroffers: counterofferService,
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(

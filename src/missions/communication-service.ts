@@ -10,6 +10,11 @@ import {
   type MessageStatus,
   type Secrets,
 } from "./communication.js";
+import {
+  expectedRound,
+  previousOffer,
+  type OurCounter,
+} from "./counteroffers.js";
 import type { LedgerService } from "./ledger-service.js";
 import { MoveSchema, type NegotiationService } from "./negotiation-service.js";
 import { NegotiationDocSchema } from "./negotiation.js";
@@ -227,6 +232,43 @@ export class CommunicationService {
       where g.message_id = ${id} and x.organization_id = ${t.organizationId} and x.environment = ${t.environment}`;
     return m ?? null;
   }
+  /**
+   * The counters already on file for this negotiation that still count toward its rounds (not rejected, not failed), earlier than
+   * `self` (or all of them when the message is not stored yet). Rounds are counted here, not declared by the sender.
+   */
+  private async earlierCounters(
+    sql: Sql,
+    negotiationId: string,
+    self: { seq: number } | null,
+  ): Promise<OurCounter[]> {
+    const rows =
+      await sql`select message_id, move, status, created_at, timeline_seq from mission_messages
+      where negotiation_id = ${negotiationId} and kind = 'NEGOTIATION' and status in ('PENDING_APPROVAL','APPROVED','SENDING','SENT','DELIVERY_UNKNOWN')
+      and (${self?.seq ?? null}::bigint is null or timeline_seq < ${self?.seq ?? null}::bigint)
+      order by timeline_seq`;
+    return rows.map((r, i) => ({
+      messageId: String(r.message_id),
+      round: i + 1,
+      totalMinor: Number((r.move as { totalMinor: number }).totalMinor),
+      status: r.status as OurCounter["status"],
+      at: iso(r.created_at),
+      seq: Number(r.timeline_seq),
+    }));
+  }
+  private async roundProblem(
+    sql: Sql,
+    negotiationId: string,
+    move: { round: number; totalMinor: number },
+    self: { seq: number } | null,
+  ): Promise<string | null> {
+    const earlier = await this.earlierCounters(sql, negotiationId, self);
+    const want = expectedRound(earlier.length);
+    if (move.round !== want) return `ROUND_MISMATCH:expected ${want}`;
+    const prev = previousOffer(earlier);
+    if (prev !== null && move.totalMinor < prev)
+      return `OFFER_BELOW_PREVIOUS_OFFER:${prev}`;
+    return null;
+  }
   /** What an agent must not reveal, as known right now. */
   private async secretsFor(
     t: Tenant,
@@ -281,6 +323,7 @@ export class CommunicationService {
       authorKind: string;
     },
     guardAs: MissionCaller,
+    self: { seq: number } | null = null,
   ): Promise<CommResult<true>> {
     const [mission] = await this.deps
       .sql`select status from missions where mission_id = ${row.missionId}`;
@@ -324,6 +367,16 @@ export class CommunicationService {
       const found = leakFindings(`${row.subject}\n${row.body}`, s);
       if (found.length)
         return { ok: false, refusal: "LEAK_BLOCKED", detail: found.join(",") };
+    }
+    if (row.kind === "NEGOTIATION") {
+      // Rounds are counted here, not declared by the sender, and our offers never go backwards.
+      const p = await this.roundProblem(
+        this.deps.sql,
+        row.negotiationId!,
+        row.move as { round: number; totalMinor: number },
+        self,
+      );
+      if (p) return { ok: false, refusal: "RULES_REFUSE", detail: p };
     }
     return { ok: true, value: true };
   }
@@ -471,6 +524,17 @@ export class CommunicationService {
           return prior.request_digest === digest
             ? { ok: true, value: { row: prior, replayed: true } }
             : { ok: false, refusal: "IDEMPOTENCY_KEY_REUSED" };
+        if (d.kind === "NEGOTIATION") {
+          // Two drafts at once must not both take the same round: count again under a lock for this negotiation.
+          await tx`select pg_advisory_xact_lock(hashtext(${"round|" + d.negotiationId!}))`;
+          const p = await this.roundProblem(
+            tx,
+            d.negotiationId!,
+            d.move!,
+            null,
+          );
+          if (p) return { ok: false, refusal: "RULES_REFUSE", detail: p };
+        }
         const [row] =
           await tx`insert into mission_messages (message_id, mission_id, supplier_id, contact_id, direction, kind, subject, body, move, negotiation_id, status,
           authored_by_kind, authored_by, idempotency_key, request_digest, created_at)
@@ -550,6 +614,7 @@ export class CommunicationService {
           authorKind: String(row.authored_by_kind),
         },
         this.reader(caller),
+        { seq: Number(row.timeline_seq) },
       );
       if (!pre.ok) return pre;
     }
@@ -646,6 +711,7 @@ export class CommunicationService {
         authorKind: String(row.authored_by_kind),
       },
       this.reader(caller),
+      { seq: Number(row.timeline_seq) },
     );
     if (!pre.ok) return pre;
     const claimed = await this.move(

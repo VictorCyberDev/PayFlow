@@ -1686,6 +1686,37 @@ paths:
           }
       responses:
         "200": { description: Status after the attempt }
+  /v1/admin/org/negotiations/{negotiationId}/timeline:
+    get:
+      operationId: negotiationTimeline
+      summary: Our counters (rounds counted by PayFlow) and the supplier's quotes in order, with a recommendation - review for acceptance, counter, wait, walk away or escalate. A recommendation only.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: negotiationId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Timeline and recommendation }
+  /v1/agent/negotiations/{negotiationId}/timeline:
+    get:
+      operationId: agentNegotiationTimeline
+      summary: The same for the named negotiator (needs NEGOTIATE).
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: negotiationId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Timeline and recommendation }
+        "403": { description: Not the named negotiator }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem
