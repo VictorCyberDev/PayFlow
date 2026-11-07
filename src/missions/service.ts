@@ -915,13 +915,19 @@ export class MissionService {
     missionId: string,
     agentId: string,
     capability: Capability,
+    /**
+     * Run the check on an existing connection (a caller already inside a transaction MUST pass its own: asking the pool for a
+     * second connection while holding one starves the pool under concurrency). In that case a past deadline is still refused,
+     * but recording EXPIRED is left to the next unlocked read.
+     */
+    executor?: Sql | TransactionSql,
   ): Promise<
     { allowed: true; version: number } | { allowed: false; reason: string }
   > {
     if (!CAPABILITIES.includes(capability))
       return { allowed: false, reason: "UNKNOWN_CAPABILITY" };
-    await this.expireDue().catch(() => 0);
-    const sql = this.deps.sql;
+    if (!executor) await this.expireDue().catch(() => 0);
+    const sql = executor ?? this.deps.sql;
     const [m] =
       await sql`select status, active_version from missions where mission_id = ${missionId}
       and organization_id = ${tenant.organizationId} and environment = ${tenant.environment}`;
@@ -929,6 +935,10 @@ export class MissionService {
     if (m.status !== "ACTIVE")
       return { allowed: false, reason: `MISSION_${String(m.status)}` };
     const version = Number(m.active_version);
+    const [due] =
+      await sql`select 1 from mission_versions where mission_id = ${missionId} and version = ${version}
+      and (contract->>'expiresAt')::timestamptz <= ${this.deps.now()}::timestamptz`;
+    if (due) return { allowed: false, reason: "MISSION_EXPIRED" };
     const [agent] =
       await sql`select lifecycle from organization_agents where organization_id = ${tenant.organizationId}
       and environment = ${tenant.environment} and agent_id = ${agentId}`;

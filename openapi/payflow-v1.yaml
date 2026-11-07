@@ -635,6 +635,128 @@ paths:
       responses:
         "202": { description: Proposal stored; nothing changed }
         "403": { description: The agent lacks REQUEST_APPROVAL on this mission }
+  /v1/admin/org/missions/{missionId}/plans:
+    post:
+      operationId: createMissionPlan
+      summary: Create a plan. Needs mission:plan. `source` TEMPLATE derives it from the contract alone; HUMAN supplies a draft. Active at once.
+      description: >-
+        A plan is validated whole or refused whole: cycles, unknown or self dependencies, duplicate keys, agents or capabilities the contract
+        did not grant, unapproved provider types and deadlines past the mission are refused. An estimate is labelled and is never a quote.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Active }
+        "422": { description: Plan invalid; `problems` lists why }
+    get:
+      operationId: getMissionPlan
+      summary: The active plan with tasks, dependencies, readiness and progress (reconciled with the mission first), plus every plan version.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: The plan }
+  /v1/admin/org/missions/{missionId}/plans/{planVersion}/{decision}:
+    post:
+      operationId: decideMissionPlan
+      summary: Activate or reject a plan PROPOSED by an agent. Needs mission:plan. Revalidated against the contract in force at that moment.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            in: path,
+            name: planVersion,
+            required: true,
+            schema: { type: integer },
+          }
+        - {
+            in: path,
+            name: decision,
+            required: true,
+            schema: { type: string, enum: [activate, reject] },
+          }
+      responses:
+        "200": { description: Decided }
+        "409": { description: Not a proposed plan }
+  /v1/admin/org/tasks/{taskId}/{operation}:
+    post:
+      operationId: memberTaskAction
+      summary: "approve (mission:approve) | confirm-handoff | skip | invalidate | retry (mission:control). confirm-handoff records OWNER_REPORTED evidence."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: taskId, required: true, schema: { type: string } }
+        - {
+            in: path,
+            name: operation,
+            required: true,
+            schema:
+              {
+                type: string,
+                enum: [approve, confirm-handoff, skip, invalidate, retry],
+              },
+          }
+      responses:
+        "200": { description: Done }
+  /v1/agent/tasks:
+    get:
+      operationId: agentListTasks
+      summary: Tasks assigned to this agent on missions in force.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      responses:
+        "200": { description: The agent's tasks }
+  /v1/agent/tasks/{taskId}/{operation}:
+    post:
+      operationId: agentTaskAction
+      summary: "claim | complete | fail | handoff. Only the assigned agent, only while the mission is ACTIVE and the agent still holds every required capability. runKey makes retries replays."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: taskId, required: true, schema: { type: string } }
+        - {
+            in: path,
+            name: operation,
+            required: true,
+            schema: { type: string, enum: [claim, complete, fail, handoff] },
+          }
+      responses:
+        "200": { description: Done or replayed }
+        "409": { description: Wrong state or another run holds the task }
+        "422": { description: Required evidence missing }
+  /v1/agent/missions/{missionId}/plans:
+    post:
+      operationId: agentProposeMissionPlan
+      summary: An agent holding DRAFT proposes a plan labelled MODEL. It is inert until a member activates it.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "202": { description: PROPOSED }
   /v1/issuer/directory:
     get:
       operationId: issuerDirectory
