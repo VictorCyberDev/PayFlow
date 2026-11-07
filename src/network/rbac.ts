@@ -30,6 +30,7 @@ export const PERMISSIONS = [
   "view:audit",
   "view:credentials",
   "view:members",
+  "view:missions",
   "credential:issue",
   "credential:revoke",
   "authority:provision",
@@ -42,6 +43,11 @@ export const PERMISSIONS = [
   "org:pause",
   "org:resume",
   "member:manage",
+  "mission:create",
+  "mission:revise",
+  "mission:approve",
+  "mission:control",
+  "mission:contain",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -56,6 +62,7 @@ const READ_ALL: readonly Permission[] = [
   "view:audit",
   "view:credentials",
   "view:members",
+  "view:missions",
 ];
 
 /** Least privilege per role. Anything not listed is denied. */
@@ -77,6 +84,12 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "authority:delegate_revoke",
     "decision:approve",
     "decision:reject",
+    // Missions: may draft, revise, submit and run them, but cannot put a version in force (owner only).
+    "view:missions",
+    "mission:create",
+    "mission:revise",
+    "mission:control",
+    "mission:contain",
   ],
   // Contains blast radius: revoke credentials, pause/resume, see agents and exposure.
   // Cannot widen Authority or approve spend.
@@ -93,6 +106,9 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "authority:delegate_revoke",
     "org:pause",
     "org:resume",
+    // Contains blast radius: may pause or revoke a mission; cannot create, revise, approve or resume one.
+    "view:missions",
+    "mission:contain",
   ],
   // Builds integrations. May issue and revoke agent credentials. CANNOT provision or widen
   // Authority, approve a decision, or read the finance/audit views.
@@ -101,18 +117,20 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "view:funnel",
     "view:unknown",
     "view:credentials",
+    "view:missions",
     "credential:issue",
     "credential:revoke",
   ],
   APPROVER: [
     "view:authorities",
     "view:decisions",
+    "view:missions",
     "decision:approve",
     "decision:reject",
   ],
   // Reads everything, changes nothing.
   AUDITOR: READ_ALL,
-  VIEWER: ["view:agents", "view:finance", "view:authorities"],
+  VIEWER: ["view:agents", "view:finance", "view:authorities", "view:missions"],
 };
 
 export function can(role: Role, permission: Permission): boolean {

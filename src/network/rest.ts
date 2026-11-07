@@ -11,6 +11,8 @@ export interface RestRequest {
   readonly path: string;
   readonly authorization?: string;
   readonly body?: unknown;
+  /** Raw query string including the leading "?", when present. Only routes that declare filters read it. */
+  readonly query?: string;
 }
 
 export interface RestResponse {
