@@ -7,6 +7,7 @@ const appPaths = [
   "/app",
   "/new",
   "/authorities",
+  "/missions",
   "/activity",
   "/agents",
   "/proof",

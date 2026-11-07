@@ -1,0 +1,44 @@
+/* Mission Workspace. Tokens come from globals.css; nothing here defines a new colour. */
+.field {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+.field > span {
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+.mission-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px 24px;
+  margin: 0 0 16px;
+}
+.mission-facts dt {
+  color: var(--ink-3);
+  font-size: 0.85rem;
+}
+.mission-facts dd {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  overflow-wrap: anywhere;
+}
+.mission-status {
+  font-weight: 600;
+}
+.mission-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.mission-list .h3 a {
+  overflow-wrap: anywhere;
+}
+.mission-connect {
+  max-width: 34rem;
+}
+.mission-connect .input,
+.mission-connect input {
+  width: 100%;
+}
