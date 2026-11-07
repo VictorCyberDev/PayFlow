@@ -798,6 +798,115 @@ paths:
             or illegal start stage,
           }
         "422": { description: Currency mismatch or insufficient evidence }
+  /v1/admin/org/connectors:
+    get:
+      operationId: listConnectors
+      summary: Connectors this host offers and their state for your organization. Credential references are never returned.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200":
+          {
+            description: Connectors with status (NOT_INSTALLED,
+            READY,
+            DISABLED,
+            SUSPENDED,
+            NEEDS_CREDENTIAL,
+            DEGRADED),
+          }
+  /v1/admin/org/connectors/{connectorId}/install:
+    post:
+      operationId: installConnector
+      summary: Install and enable a connector after acknowledging what its data may be used for.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: connectorId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: Installed }
+        "200": { description: Already installed (replay) }
+        "409":
+          {
+            description: Credential reference required,
+            or a sandbox connector in production,
+          }
+  /v1/admin/org/connectors/{connectorId}/{action}:
+    post:
+      operationId: setConnectorState
+      summary: Enable, disable (manage) or suspend (containment) an installed connector.
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: connectorId,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            in: path,
+            name: action,
+            required: true,
+            schema: { type: string, enum: [enable, disable, suspend] },
+          }
+      responses:
+        "200": { description: New state }
+  /v1/admin/org/connector-calls:
+    get:
+      operationId: listConnectorCalls
+      summary: Recent connector calls (outcome and counts only, never the data returned).
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      responses:
+        "200": { description: Calls }
+  /v1/agent/connectors:
+    get:
+      operationId: agentConnectors
+      summary: What connectors exist and which are usable now.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      responses:
+        "200": { description: Connectors }
+  /v1/agent/missions/{missionId}/connectors/invoke:
+    post:
+      operationId: agentObserve
+      summary: Observe through a connector (SEARCH, READ, COMPARE, STATUS or VERIFY only). The result is an untrusted observation, never a quote or commitment.
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: Observation (or the stored one, on replay) }
+        "403":
+          {
+            description: Mission does not grant it,
+            provider type not approved,
+            or capability is not observe-only,
+          }
+        "409":
+          {
+            description: Connector not installed/disabled,
+            or idempotency key reused,
+          }
+        "423": { description: Connector suspended or organization paused }
+        "429":
+          {
+            description: Hourly allowance for this mission and connector used up,
+          }
+        "502":
+          { description: Connector failed or returned something unsafe to show }
+        "503": { description: Connector circuit open after repeated failures }
+        "504": { description: Connector timed out }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem

@@ -194,8 +194,24 @@ export class PlanService {
       missions: MissionService;
       now: () => string;
       connectors?: ConnectorCatalog;
+      /**
+       * The connectors that are READY for this organization right now (M31). Resolved BEFORE a transaction starts, because it reads
+       * the database and a transaction that holds a pooled connection must not ask for another.
+       */
+      connectorsFor?: (tenant: {
+        organizationId: string;
+        environment: Environment;
+      }) => Promise<ConnectorCatalog>;
     },
   ) {}
+  private async catalogOf(tenant: {
+    organizationId: string;
+    environment: Environment;
+  }): Promise<ConnectorCatalog> {
+    return this.deps.connectorsFor
+      ? this.deps.connectorsFor(tenant)
+      : (this.deps.connectors ?? NO_CONNECTORS);
+  }
 
   // ----------------------------------------------------------------------------------------------- helpers
   private async lockMission(
@@ -438,6 +454,7 @@ export class PlanService {
       ...body.data,
       draft: body.data.draft ?? null,
     });
+    const catalog = await this.catalogOf(caller);
     const out = await this.deps.sql.begin(
       async (
         tx,
@@ -487,11 +504,7 @@ export class PlanService {
               .map((i) => `${i.path.join(".")}:${i.message}`)
               .join(" | "),
           };
-        const checked = validatePlan(
-          contract,
-          parsed.data,
-          this.deps.connectors ?? NO_CONNECTORS,
-        );
+        const checked = validatePlan(contract, parsed.data, catalog);
         if (!checked.ok)
           return {
             ok: false,
@@ -595,6 +608,7 @@ export class PlanService {
         detail: "ONLY_A_MEMBER_ACTIVATES_A_PLAN",
       };
     const now = this.deps.now();
+    const catalog = await this.catalogOf(caller);
     const out = await this.deps.sql.begin(
       async (tx): Promise<PResult<{ planVersion: number; status: string }>> => {
         const m = await this.lockMission(tx, caller, missionId);
@@ -646,11 +660,7 @@ export class PlanService {
               .map((d) => ({ key: d.depends_on_key, kind: d.kind })),
           })),
         });
-        const checked = validatePlan(
-          contract,
-          draft,
-          this.deps.connectors ?? NO_CONNECTORS,
-        );
+        const checked = validatePlan(contract, draft, catalog);
         if (!checked.ok)
           return {
             ok: false,
