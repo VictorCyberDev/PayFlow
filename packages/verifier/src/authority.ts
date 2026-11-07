@@ -49,6 +49,8 @@ export interface RootClaims {
   readonly nbf: string;
   readonly exp: string;
   readonly maxDepth: number;
+  /** Provenance: the stored Authority this credential was issued from, and its fingerprint at issuance. */
+  readonly ref?: { readonly authority: string; readonly fingerprint: string };
 }
 export interface LinkClaims {
   readonly jti: string;

@@ -43,6 +43,15 @@ function mcpResourceFor(origin: string): { mcpResource?: string } {
   return url.protocol === "https:" || loopback ? { mcpResource: url.href } : {};
 }
 
+/** The credential issuer id is the host's own origin, and only when it is https or loopback (a verifier needs TLS). */
+function credentialIssuerFor(origin: string): { credentialIssuer?: string } {
+  const url = new URL(origin);
+  const loopback = ["127.0.0.1", "localhost"].includes(url.hostname);
+  return url.protocol === "https:" || loopback
+    ? { credentialIssuer: url.origin }
+    : {};
+}
+
 /** Hosted NON-PRODUCTION demo configuration. Every value is operator-supplied privately; none
  * is ever logged, rendered or returned. */
 const HostedConfigSchema = z.object({
@@ -298,6 +307,7 @@ export function createHostedConsole(
         agentId: config.PAYFLOW_M5_AGENT_ID,
         ...(simulated ? { simulated } : {}),
         ...mcpResourceFor(config.PAYFLOW_M5_ORIGIN),
+        ...credentialIssuerFor(config.PAYFLOW_M5_ORIGIN),
         ...(config.mcpProfile ? { mcpProfile: config.mcpProfile } : {}),
         organizationId: "payflow-sandbox",
         ...(config.gatewayAdminToken

@@ -53,6 +53,7 @@ import { PostgresNetworkStore } from "./postgres-adapters.js";
 import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
 import { verifyProofRequest } from "./hosted-verify.js";
+import { PortableCredentialIssuer } from "./credential-issuance.js";
 import { createExecutingRestHandler } from "./rest-execution.js";
 import { createMcpHttpHandler } from "../protocols/mcp-http.js";
 import { protectedResourceMetadata } from "../protocols/chatgpt-app.js";
@@ -86,6 +87,11 @@ export interface HostedGatewayOptions {
   /** Issuers of OAuth authorization servers for MCP clients. Empty until one is commissioned; never invented. */
   /** "verify-only" removes every tool that can start a payment from the MCP surface. Default "full". */
   readonly mcpProfile?: "full" | "verify-only";
+  /**
+   * The issuer id (an https or loopback ORIGIN) that portable Authority credentials are issued under and that verifiers
+   * fetch a directory for. When absent, credential issuance is disabled (503), not guessed.
+   */
+  readonly credentialIssuer?: string;
   readonly mcpAuthorizationServers?: readonly string[];
   /** One alert webhook. When absent, alerts are persisted and visible but not delivered anywhere. */
   readonly alertWebhookUrl?: string;
@@ -229,6 +235,20 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     keyId: key.keyId,
     privateKey: demo.signingForProofs().privateKey,
   });
+  const credentialIssuer = options.credentialIssuer
+    ? new PortableCredentialIssuer({
+        sql,
+        repo,
+        audit,
+        now: iso,
+        issuer: {
+          id: options.credentialIssuer,
+          kid: key.keyId,
+          privateKey: demo.signingForProofs().privateKey,
+          publicJwk: key.jwk,
+        },
+      })
+    : undefined;
   const registry = new SigningKeyRegistry(sql);
   const members = new MemberStore(sql);
   const alerts = new AlertEngine(sql);
@@ -741,6 +761,133 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     return null;
   }
 
+  /** An unexpected failure becomes a safe 500, never a request left hanging. */
+  async function safely(
+    run: () => Promise<RestResponse | null>,
+  ): Promise<RestResponse | null> {
+    try {
+      return await run();
+    } catch {
+      return reply(`req_${randomUUID()}`, 500, {
+        reason: "INTERNAL_ERROR",
+        recoverable: false,
+        humanSummary: "The request could not be completed. Nothing was issued.",
+        nextAction: "RETRY_LATER_OR_CONTACT_THE_OPERATOR",
+      });
+    }
+  }
+
+  /** Portable Authority credentials: issue from a stored Authority, list, revoke. Tenant and role come from the MEMBER. */
+  async function credentialRoute(
+    request: RestRequest,
+  ): Promise<RestResponse | null> {
+    const issue =
+      /^\/v1\/admin\/org\/authorities\/([A-Za-z0-9._:-]{1,128})\/credentials$/u.exec(
+        request.path,
+      );
+    const list = request.path === "/v1/admin/org/credentials";
+    const revoke =
+      /^\/v1\/admin\/org\/credentials\/(pac_[a-f0-9]{24})\/revoke$/u.exec(
+        request.path,
+      );
+    if (!issue && !list && !revoke) return null;
+    const requestId = `req_${randomUUID()}`;
+    if (!credentialIssuer)
+      return reply(requestId, 503, {
+        reason: "ISSUER_NOT_CONFIGURED",
+        recoverable: false,
+        humanSummary:
+          "This host does not issue portable Authority credentials.",
+        nextAction: "ASK_THE_PLATFORM_OPERATOR",
+      });
+    const wants: Permission =
+      issue && request.method === "POST"
+        ? "authority:attest"
+        : revoke
+          ? "authority:attest_revoke"
+          : "view:authorities";
+    const gate = await requireMember(
+      requestId,
+      await resolveActor(request),
+      wants,
+      request.path,
+    );
+    if (!("member" in gate)) return gate;
+    const actor = {
+      organizationId: gate.member.organizationId,
+      environment: gate.member.environment,
+      memberId: gate.member.memberId,
+    };
+    if (issue && request.method === "POST") {
+      const result = await credentialIssuer.issue(
+        actor,
+        issue[1]!,
+        request.body,
+      );
+      if (!result.ok)
+        return reply(
+          requestId,
+          result.refusal === "IDEMPOTENCY_KEY_REUSED"
+            ? 409
+            : result.refusal === "AUTHORITY_NOT_FOUND"
+              ? 404
+              : result.refusal === "MALFORMED_REQUEST"
+                ? 400
+                : 403,
+          {
+            reason: result.refusal,
+            recoverable: result.refusal === "MALFORMED_REQUEST",
+            humanSummary:
+              "No credential was issued. A credential can only say what the stored Authority already allows.",
+            nextAction: "CHECK_THE_AUTHORITY_AND_REQUEST",
+          },
+        );
+      return reply(requestId, result.value.replayed ? 200 : 201, {
+        credentialId: result.value.credentialId,
+        authorityId: result.value.authorityId,
+        expiresAt: result.value.expiresAt,
+        replayed: result.value.replayed,
+        credential: result.value.credential,
+      });
+    }
+    if (issue && request.method === "GET")
+      return reply(requestId, 200, {
+        credentials: await credentialIssuer.list(
+          actor.organizationId,
+          actor.environment,
+          issue[1],
+        ),
+      });
+    if (list && request.method === "GET")
+      return reply(requestId, 200, {
+        credentials: await credentialIssuer.list(
+          actor.organizationId,
+          actor.environment,
+        ),
+      });
+    if (revoke && request.method === "POST") {
+      const reason =
+        typeof (request.body as { reason?: unknown } | undefined)?.reason ===
+        "string"
+          ? String((request.body as { reason: string }).reason)
+          : "REVOKED_BY_MEMBER";
+      const done = await credentialIssuer.revoke(actor, revoke[1]!, reason);
+      return done.found
+        ? reply(requestId, 200, {
+            result: "REVOKED",
+            alreadyRevoked: done.alreadyRevoked,
+            note: "Verifiers learn of this when they next fetch the signed status list.",
+          })
+        : reply(requestId, 404, {
+            reason: "CREDENTIAL_NOT_FOUND",
+            recoverable: false,
+            humanSummary: "No credential with that id.",
+            nextAction: "LIST_CREDENTIALS",
+          });
+    }
+    return null;
+  }
+
   const cronAuthorized = (authorization: string | undefined): boolean => {
     if (!options.cronSecret) return false;
     const presented = authorization?.startsWith("Bearer ")
@@ -1190,6 +1337,25 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       res.end(Buffer.from(await reply.arrayBuffer()));
       return true;
     }
+    if (method === "GET" && path === "/v1/issuer/status") {
+      if (!credentialIssuer) {
+        send(res, {
+          status: 404,
+          headers: { "content-type": "application/json" },
+          body: { reason: "ISSUER_NOT_CONFIGURED" },
+        });
+        return true;
+      }
+      send(res, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "public, max-age=60",
+        },
+        body: await credentialIssuer.statusList(),
+      });
+      return true;
+    }
     if (method === "POST" && path === "/v1/verify/proofs") {
       // Public and read-only, so it is rate limited per address AND globally, and it fails closed: no working limiter
       // means no anonymous verification, never unmetered verification.
@@ -1324,7 +1490,9 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         return true;
       }
       const planeReply =
-        (await orgRoute(request)) ?? (await controlRoute(request));
+        (await orgRoute(request)) ??
+        (await safely(() => credentialRoute(request))) ??
+        (await controlRoute(request));
       if (planeReply) {
         send(res, planeReply);
         return true;
