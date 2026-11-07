@@ -27,6 +27,8 @@ import { ConsoleDemoAgent } from "./console-demo-agent.js";
 import { DemoShoppingAgent } from "./delegated-demo.js";
 import { createHostedGatewayHandler } from "./network/hosted-gateway.js";
 import { SimulatedPaymentProvider } from "./simulated-rail.js";
+import type { JWTVerifyGetKey } from "jose";
+import { remoteKeys } from "./protocols/oauth-resource.js";
 import { PayPalOAuthClient, type PaymentProvider } from "./paypal.js";
 import {
   PayPalVaultStore,
@@ -89,6 +91,11 @@ export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
   alertWebhookUrl?: string;
   /** MCP tool profile: "full" (default) or "verify-only", which never offers a tool that can start a payment. */
   mcpProfile?: "full" | "verify-only";
+  /** Verify-only profile only: serve the one public verification tool without a credential. */
+  mcpAnonymousVerify?: boolean;
+  /** External OAuth authorization server (PayFlow is only the resource server). Both are https. */
+  oauthIssuer?: string;
+  oauthJwksUrl?: string;
   /** Enables self-serve /v1/sandbox/start on a clearly labelled SIMULATED rail. Off by default. */
   publicSandbox?: boolean;
   demoAgent?: z.infer<typeof DemoAgentSchema>;
@@ -137,9 +144,23 @@ export function parseHostedConfig(
   const profile = env.PAYFLOW_MCP_PROFILE;
   if (profile !== undefined && profile !== "full" && profile !== "verify-only")
     throw new Error("PAYFLOW_MCP_PROFILE_INVALID");
+  const anonymous = env.PAYFLOW_MCP_ANONYMOUS_VERIFY;
+  if (anonymous !== undefined && anonymous !== "true" && anonymous !== "false")
+    throw new Error("PAYFLOW_MCP_ANONYMOUS_VERIFY_INVALID");
+  if (anonymous === "true" && profile !== "verify-only")
+    throw new Error("PAYFLOW_MCP_ANONYMOUS_VERIFY_REQUIRES_VERIFY_ONLY");
+  const issuer = env.PAYFLOW_OAUTH_ISSUER;
+  const jwks = env.PAYFLOW_OAUTH_JWKS_URL;
+  if ((issuer === undefined) !== (jwks === undefined))
+    throw new Error("PAYFLOW_OAUTH_ISSUER_AND_JWKS_URL_GO_TOGETHER");
+  for (const v of [issuer, jwks])
+    if (v !== undefined && !/^https:\/\/[^\s]+$/u.test(v))
+      throw new Error("PAYFLOW_OAUTH_MUST_BE_HTTPS");
   return {
     ...base,
     ...(profile ? { mcpProfile: profile } : {}),
+    ...(anonymous === "true" ? { mcpAnonymousVerify: true } : {}),
+    ...(issuer && jwks ? { oauthIssuer: issuer, oauthJwksUrl: jwks } : {}),
     ...(adminToken ? { gatewayAdminToken: adminToken } : {}),
     ...(cronSecret ? { cronSecret } : {}),
     ...(alertWebhookUrl ? { alertWebhookUrl } : {}),
@@ -193,6 +214,8 @@ export function createHostedConsole(
     paymentProvider?: PaymentProvider | null;
     /** Test seam for alert delivery. */
     sendAlert?: (url: string, init: RequestInit) => Promise<{ ok: boolean }>;
+    /** Test seam: the OAuth issuer's signing keys instead of fetching its JWKS URL. */
+    oauthKeys?: JWTVerifyGetKey;
   } = {},
 ) {
   const clock = deps.clock ?? (() => new Date());
@@ -309,6 +332,16 @@ export function createHostedConsole(
         ...mcpResourceFor(config.PAYFLOW_M5_ORIGIN),
         ...credentialIssuerFor(config.PAYFLOW_M5_ORIGIN),
         ...(config.mcpProfile ? { mcpProfile: config.mcpProfile } : {}),
+        ...(config.mcpAnonymousVerify ? { mcpAnonymousVerify: true } : {}),
+        ...(config.oauthIssuer && config.oauthJwksUrl
+          ? {
+              oauth: {
+                issuer: config.oauthIssuer,
+                keys: deps.oauthKeys ?? remoteKeys(config.oauthJwksUrl),
+              },
+              mcpAuthorizationServers: [config.oauthIssuer],
+            }
+          : {}),
         organizationId: "payflow-sandbox",
         ...(config.gatewayAdminToken
           ? { adminToken: config.gatewayAdminToken }

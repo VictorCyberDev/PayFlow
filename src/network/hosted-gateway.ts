@@ -54,6 +54,12 @@ import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
 import { verifyProofRequest } from "./hosted-verify.js";
 import { PortableCredentialIssuer } from "./credential-issuance.js";
+import type { JWTVerifyGetKey } from "jose";
+import type { ProtocolAuthenticator } from "../protocols/http-auth.js";
+import {
+  createTenantOAuthAuthenticator,
+  OAuthIdentityMappings,
+} from "../protocols/oauth-resource.js";
 import { IssuerDirectoryPublisher } from "./issuer-directory.js";
 import { createExecutingRestHandler } from "./rest-execution.js";
 import { createMcpHttpHandler } from "../protocols/mcp-http.js";
@@ -94,6 +100,20 @@ export interface HostedGatewayOptions {
    */
   readonly credentialIssuer?: string;
   readonly mcpAuthorizationServers?: readonly string[];
+  /**
+   * An external OAuth authorization server whose access tokens PayFlow accepts as a RESOURCE SERVER. PayFlow never issues
+   * OAuth tokens. `keys` resolves the issuer's signing keys (production: its JWKS URL; never taken from a token). Requires
+   * `mcpResource`, which is the `aud` every accepted token must carry. Tenant/agent/scope come from stored mappings only.
+   */
+  readonly oauth?: {
+    readonly issuer: string;
+    readonly keys: JWTVerifyGetKey;
+  };
+  /**
+   * With the "verify-only" profile, lets a caller with NO credential use the one stateless, public verification tool
+   * (the same check as the public /v1/verify/proofs). It can never reach a payment, tenant data or any other tool.
+   */
+  readonly mcpAnonymousVerify?: boolean;
   /** One alert webhook. When absent, alerts are persisted and visible but not delivered anywhere. */
   readonly alertWebhookUrl?: string;
   /** Test seam for alert delivery. */
@@ -299,23 +319,58 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       keys: await registry.published(options.organizationId),
     };
   };
+
+  /** Bearer credential, or an OAuth access token from the configured external issuer, or (verify-only) anonymous. */
+  const oauthAuthenticate =
+    options.oauth && options.mcpResource
+      ? createTenantOAuthAuthenticator({
+          issuer: options.oauth.issuer,
+          resource: options.mcpResource,
+          keys: options.oauth.keys,
+          accessAudience: GATEWAY_AUDIENCE,
+          sql,
+          now: () => Date.parse(iso()),
+        })
+      : undefined;
+  const authenticateProtocol: ProtocolAuthenticator = async (request) => {
+    const header = request.headers.get("authorization") ?? undefined;
+    // A JWT has two dots; a PayFlow credential is `pf_...`. Each is tried only for its own shape.
+    if (header && /^Bearer [\w-]+\.[\w-]+\.[\w-]+$/u.test(header))
+      return oauthAuthenticate ? oauthAuthenticate(request) : null;
+    if (header) {
+      try {
+        const access = await store.authenticate(header, iso());
+        return { subject: access.clientId, scopes: access.scopes, access };
+      } catch {
+        return null;
+      }
+    }
+    if (options.mcpAnonymousVerify && options.mcpProfile === "verify-only") {
+      const now = iso();
+      return {
+        subject: "anonymous-verifier",
+        scopes: ["proof:read"],
+        access: {
+          clientId: "anonymous-verifier",
+          agentId: "anonymous-verifier",
+          principalId: "anonymous-verifier",
+          audience: GATEWAY_AUDIENCE,
+          scopes: ["proof:read"],
+          issuedAt: now,
+          expiresAt: new Date(Date.parse(now) + 60_000).toISOString(),
+          status: "ACTIVE",
+        },
+      };
+    }
+    return null;
+  };
   const mcp = options.mcpResource
     ? createMcpHttpHandler({
         resource: options.mcpResource,
         audience: GATEWAY_AUDIENCE,
         resourceMetadataPath: "/v1/oauth-protected-resource",
         allowedOrigins: [],
-        authenticate: async (request) => {
-          try {
-            const access = await store.authenticate(
-              request.headers.get("authorization") ?? undefined,
-              iso(),
-            );
-            return { subject: access.clientId, scopes: access.scopes, access };
-          } catch {
-            return null;
-          }
-        },
+        authenticate: authenticateProtocol,
         servicesFor: (identity) =>
           createGatewayMcpServices({
             gateway,
@@ -340,17 +395,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         baseUrl: new URL(options.mcpResource).origin,
         basePath: a2aBase,
         audience: GATEWAY_AUDIENCE,
-        authenticate: async (request) => {
-          try {
-            const access = await store.authenticate(
-              request.headers.get("authorization") ?? undefined,
-              iso(),
-            );
-            return { subject: access.clientId, scopes: access.scopes, access };
-          } catch {
-            return null;
-          }
-        },
+        authenticate: authenticateProtocol,
         servicesFor: (identity) =>
           createGatewayMcpServices({
             gateway,
@@ -899,6 +944,128 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
             humanSummary: "No credential with that id.",
             nextAction: "LIST_CREDENTIALS",
           });
+    }
+    return null;
+  }
+
+  const identityMappings = new OAuthIdentityMappings(sql);
+  /** Who an external OAuth identity acts as. Owner-managed (member:manage); tenant comes from the MEMBER. */
+  async function oauthIdentityRoute(
+    request: RestRequest,
+  ): Promise<RestResponse | null> {
+    const base = request.path === "/v1/admin/org/oauth-identities";
+    const revoke =
+      /^\/v1\/admin\/org\/oauth-identities\/(oim_[a-f0-9]{24})\/revoke$/u.exec(
+        request.path,
+      );
+    if (!base && !revoke) return null;
+    const requestId = `req_${randomUUID()}`;
+    if (!options.oauth)
+      return reply(requestId, 503, {
+        reason: "OAUTH_NOT_CONFIGURED",
+        recoverable: false,
+        humanSummary: "No external authorization server is configured.",
+        nextAction: "ASK_THE_PLATFORM_OPERATOR",
+      });
+    const gate = await requireMember(
+      requestId,
+      await resolveActor(request),
+      base && request.method === "GET" ? "view:members" : "member:manage",
+      request.path,
+    );
+    if (!("member" in gate)) return gate;
+    const tenant = {
+      organizationId: gate.member.organizationId,
+      environment: gate.member.environment,
+    };
+    if (base && request.method === "GET")
+      return reply(requestId, 200, {
+        issuer: options.oauth.issuer,
+        identities: await identityMappings.list(tenant),
+      });
+    if (base && request.method === "POST") {
+      const b = (request.body ?? {}) as {
+        subject?: unknown;
+        agentId?: unknown;
+        maxScopes?: unknown;
+      };
+      if (
+        typeof b.subject !== "string" ||
+        typeof b.agentId !== "string" ||
+        !Array.isArray(b.maxScopes) ||
+        !b.maxScopes.every((x) => typeof x === "string")
+      )
+        return reply(requestId, 400, {
+          reason: "MALFORMED",
+          recoverable: true,
+          humanSummary: "subject, agentId and maxScopes are required.",
+          nextAction: "FIX_THE_REQUEST",
+        });
+      const now = iso();
+      const r = await identityMappings.create(
+        tenant,
+        gate.member.memberId,
+        options.oauth.issuer,
+        {
+          subject: b.subject,
+          agentId: b.agentId,
+          maxScopes: b.maxScopes,
+        },
+        now,
+      );
+      if (!r.ok)
+        return reply(
+          requestId,
+          r.reason === "IDENTITY_ALREADY_MAPPED" ? 409 : 400,
+          {
+            reason: r.reason,
+            recoverable: r.reason === "MALFORMED",
+            humanSummary: "No identity mapping was created.",
+            nextAction: "CHECK_THE_REQUEST",
+          },
+        );
+      await audit.append({
+        organizationId: tenant.organizationId,
+        environment: tenant.environment,
+        actorKind: "MEMBER",
+        actorId: gate.member.memberId,
+        action: "OAUTH_IDENTITY_MAPPED",
+        subjectKind: "OAUTH_IDENTITY",
+        subjectId: r.mapping.mappingId,
+        detail: {
+          agentId: r.mapping.agentId,
+          scopes: r.mapping.maxScopes.join(" "),
+        },
+        occurredAt: now,
+      });
+      return reply(requestId, 201, { identity: r.mapping });
+    }
+    if (revoke && request.method === "POST") {
+      const now = iso();
+      const done = await identityMappings.revoke(tenant, revoke[1]!, now);
+      if (!done.found)
+        return reply(requestId, 404, {
+          reason: "IDENTITY_NOT_FOUND",
+          recoverable: false,
+          humanSummary: "No such identity mapping.",
+          nextAction: "LIST_IDENTITIES",
+        });
+      if (!done.alreadyRevoked)
+        await audit.append({
+          organizationId: tenant.organizationId,
+          environment: tenant.environment,
+          actorKind: "MEMBER",
+          actorId: gate.member.memberId,
+          action: "OAUTH_IDENTITY_REVOKED",
+          subjectKind: "OAUTH_IDENTITY",
+          subjectId: revoke[1]!,
+          detail: {},
+          occurredAt: now,
+        });
+      return reply(requestId, 200, {
+        result: "REVOKED",
+        alreadyRevoked: done.alreadyRevoked,
+      });
     }
     return null;
   }
@@ -1540,6 +1707,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       const planeReply =
         (await orgRoute(request)) ??
         (await safely(() => credentialRoute(request))) ??
+        (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {
         send(res, planeReply);
