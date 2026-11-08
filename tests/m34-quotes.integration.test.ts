@@ -537,6 +537,46 @@ describe("M34 landed cost (pure)", () => {
       expect((await cmp(stranger, "/v1/admin/org/missions")).status).toBe(404);
     });
 
+    it("heavy concurrency never fails: many simultaneous puts of the same quote in the budget all succeed and land on one item", async () => {
+      const { owner, a, id } = await mission();
+      const sid = await supplier(owner, id);
+      let previous: string | undefined;
+      for (let round = 0; round < 20; round++) {
+        h.advance(120_000); // past the request rate-limit window; each round is its own burst
+        const rec = await record(
+          owner,
+          id,
+          sid,
+          previous ? { supersedes: previous } : {},
+        );
+        expect(rec.status, JSON.stringify(rec.json)).toBe(201);
+        const q = rec.json.quote;
+        previous = q.quoteId;
+        const key = idemKey("l");
+        const go = (t: string, base = "/v1/admin/org/quotes") =>
+          post(t, `${base}/${q.quoteId}/ledger`, { idempotencyKey: key });
+        const results = await Promise.all(
+          Array.from({ length: 40 }, (_, i) =>
+            i % 2 === 0 ? go(owner) : go(a, "/v1/agent/quotes"),
+          ),
+        );
+        for (const r of results)
+          expect([200, 201], await r.clone().text()).toContain(r.status);
+        const ids = new Set(
+          await Promise.all(
+            results.map(
+              async (r) => ((await r.json()) as { itemId: string }).itemId,
+            ),
+          ),
+        );
+        expect(ids.size).toBe(1);
+        const [n] = await h.repo.sql<
+          { n: number }[]
+        >`select count(*)::int n from mission_quote_ledger where quote_id = ${q.quoteId}`;
+        expect(n!.n).toBe(1);
+      }
+    });
+
     it("putting a quote in the budget creates exactly one QUOTED, unverified ledger item that holds nothing until a person approves it", async () => {
       const { owner, a, c, id } = await mission();
       const sid = await supplier(owner, id);
