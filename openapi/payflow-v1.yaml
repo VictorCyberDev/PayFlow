@@ -2809,6 +2809,169 @@ paths:
         - { in: path, name: offerId, required: true, schema: { type: string } }
       responses:
         "200": { description: "Withdrawn" }
+  /v1/admin/org/missions/{missionId}/contracts:
+    get:
+      operationId: listTalentContracts
+      summary: "Contracts with each milestone's state (not started, submitted, rejected, accepted, payment issued, paid, cancelled), its budget stage and deliverables."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Contracts" }
+  /v1/admin/org/contracts/{contractId}/milestones/{index}/deliverables:
+    post:
+      operationId: submitDeliverable
+      summary: "Submit a deliverable for a milestone. A claim; one open submission per milestone."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: contractId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: path, name: index, required: true, schema: { type: string } }
+      responses:
+        "201": { description: "Submitted" }
+        "409":
+          {
+            description: "Already open, already accepted, or contract terminated",
+          }
+  /v1/admin/org/deliverables/{deliverableId}/decide:
+    post:
+      operationId: decideDeliverable
+      summary: "A person accepts (with evidence) or rejects a deliverable, once."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: deliverableId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Decided (or replayed)" }
+        "422": { description: "Evidence required" }
+  /v1/admin/org/deliverables/{deliverableId}/payment:
+    post:
+      operationId: issueContractorPayment
+      summary: "Issue the payment instruction for an accepted deliverable: milestone amount, payee, agent and stored Authority. An instruction, not a payment."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: deliverableId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Issued" }
+        "422": { description: "No Authority, above it, or payee not in it" }
+        "409":
+          {
+            description: "Not accepted, already issued, or milestone not committed",
+          }
+  /v1/admin/org/contractor-payments/{paymentId}/reconcile:
+    post:
+      operationId: reconcileContractorPayment
+      summary: "Compare a payment (by proposal id) to the instruction using PayFlow's own trace and move the milestone's budget item with the evidence the ledger requires."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: paymentId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Reconciled (or replayed)" }
+        "409": { description: "PayFlow has no trace for that payment" }
+  /v1/admin/org/contracts/{contractId}/terminate:
+    post:
+      operationId: terminateTalentContract
+      summary: "Cancel the milestones that have no payment instruction and release their budget; keep the rest. Once."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: contractId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Terminated (or replayed)" }
+  /v1/agent/missions/{missionId}/contracts:
+    get:
+      operationId: agentTalentContracts
+      summary: "Contracts and milestone states (needs READ)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Contracts" }
+  /v1/agent/contracts/{contractId}/milestones/{index}/deliverables:
+    post:
+      operationId: agentSubmitDeliverable
+      summary: "Submit a deliverable (needs READ). A claim a person decides."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: contractId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: path, name: index, required: true, schema: { type: string } }
+      responses:
+        "201": { description: "Submitted" }
+  /v1/agent/deliverables/{deliverableId}/payment:
+    post:
+      operationId: agentIssueContractorPayment
+      summary: "Issue the payment instruction (needs PURCHASE; you are the payer agent)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: deliverableId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Issued" }
+  /v1/agent/contractor-payments/{paymentId}/reconcile:
+    post:
+      operationId: agentReconcileContractorPayment
+      summary: "Reconcile your payment against the instruction (only the instruction's agent; needs PURCHASE)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: paymentId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Reconciled" }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem

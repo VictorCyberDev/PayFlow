@@ -985,6 +985,54 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** Submit a deliverable for a milestone (needs READ). It is a claim; a person accepts it with evidence. */
+  async submitDeliverable(
+    contractId: string,
+    milestoneIndex: number,
+    submission: { summary: string; refs?: string[] },
+    idempotencyKey: string,
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/contracts/${encodeURIComponent(contractId)}/milestones/${milestoneIndex}/deliverables`,
+      { submission, idempotencyKey },
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Issue the payment instruction for an accepted deliverable (needs PURCHASE). Then pay through the usual path under the instruction's Authority and reconcile. */
+  async issueContractorPayment(
+    deliverableId: string,
+    body: {
+      payee: string;
+      purpose: string;
+      ttlMinutes?: number;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/deliverables/${encodeURIComponent(deliverableId)}/payment`,
+      body,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Ask PayFlow to compare your payment (its proposal id) with the instruction. PayFlow reads its own trace; your report is not believed. */
+  async reconcileContractorPayment(paymentId: string, proposalId: string) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/contractor-payments/${encodeURIComponent(paymentId)}/reconcile`,
+      { proposalId },
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Contracts with each milestone's state (needs READ). */
+  async talentContracts(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/contracts`,
+    );
+    return [r.status, r.json] as const;
+  }
   /** Draft an offer for a shortlisted candidate (needs DRAFT). A person approves it, sends it and records the answer. */
   async draftTalentOffer(
     missionId: string,
@@ -2020,6 +2068,79 @@ export class PayFlowMemberClient {
       const r = await this.call(
         "POST",
         `/v1/admin/org/talent-scopes/${encodeURIComponent(scopeId)}/revoke`,
+        { reason },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Deliverables, payment instructions and termination for contracts. A person accepts deliverables; payment goes through PayFlow's Authority. */
+  readonly contracts = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/contracts`,
+      );
+      return r.json;
+    },
+    submitDeliverable: async (
+      contractId: string,
+      milestoneIndex: number,
+      submission: { summary: string; refs?: string[] },
+      idempotencyKey: string,
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/contracts/${encodeURIComponent(contractId)}/milestones/${milestoneIndex}/deliverables`,
+        { submission, idempotencyKey },
+      );
+      return [r.status, r.json] as const;
+    },
+    decideDeliverable: async (
+      deliverableId: string,
+      body: {
+        decision: "ACCEPT" | "REJECT";
+        evidenceKind?: "OWNER_ATTESTATION" | "DOCUMENT_REF";
+        evidenceRef?: string;
+        note?: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/deliverables/${encodeURIComponent(deliverableId)}/decide`,
+        body,
+      );
+      return [r.status, r.json] as const;
+    },
+    issuePayment: async (
+      deliverableId: string,
+      body: {
+        agentId: string;
+        payee: string;
+        purpose: string;
+        ttlMinutes?: number;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/deliverables/${encodeURIComponent(deliverableId)}/payment`,
+        body,
+      );
+      return [r.status, r.json] as const;
+    },
+    reconcilePayment: async (paymentId: string, proposalId: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/contractor-payments/${encodeURIComponent(paymentId)}/reconcile`,
+        { proposalId },
+      );
+      return [r.status, r.json] as const;
+    },
+    terminate: async (contractId: string, reason: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/contracts/${encodeURIComponent(contractId)}/terminate`,
         { reason },
       );
       return [r.status, r.json] as const;
