@@ -2324,6 +2324,315 @@ paths:
             description: "Spend by supplier, concentration, flags and close-out blockers",
           }
         "400": { description: "maxShareBps is not an integer from 1 to 10000" }
+  /v1/admin/org/missions/{missionId}/talent-scopes:
+    get:
+      operationId: listTalentScopes
+      summary: "Talent scope versions and the one in force."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Scopes" }
+    post:
+      operationId: proposeTalentScope
+      summary: "Propose a talent scope version (roles, skills, caps, checks). It waits for the owner and may not screen on protected attributes."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Proposed" }
+        "422": { description: "Scope invalid for this mission" }
+  /v1/admin/org/talent-scopes/{scopeId}/approve:
+    post:
+      operationId: approveTalentScope
+      summary: "Owner approves a scope version; checked against the mission again. Supersedes the one in force."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: scopeId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Approved (or replayed)" }
+        "422": { description: "Scope no longer valid" }
+  /v1/admin/org/talent-scopes/{scopeId}/reject:
+    post:
+      operationId: rejectTalentScope
+      summary: "Owner rejects a pending scope version."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: scopeId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Rejected" }
+  /v1/admin/org/talent-scopes/{scopeId}/revoke:
+    post:
+      operationId: revokeTalentScope
+      summary: "Revoke the scope in force."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: scopeId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Revoked" }
+  /v1/agent/missions/{missionId}/talent-scopes:
+    get:
+      operationId: agentTalentScopes
+      summary: "Talent scopes and the one in force (needs READ)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Scopes" }
+    post:
+      operationId: agentProposeTalentScope
+      summary: "Propose a talent scope version (needs DRAFT). It waits for the owner."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Proposed" }
+  /v1/admin/org/missions/{missionId}/talent-sources:
+    get:
+      operationId: listTalentSources
+      summary: "Talent sources and whether each can be used here. Only the fictional sandbox source ships; live marketplaces need the owner's credentials."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Sources" }
+  /v1/admin/org/missions/{missionId}/talent-candidates/import:
+    post:
+      operationId: importTalentCandidates
+      summary: "Import candidates for a role of the scope in force from a source. Sources only observe; results are strictly parsed, bounded and stored as claims."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Imported, with what was skipped" }
+        "403": { description: "Source not allowed here" }
+        "409": { description: "No scope in force" }
+        "502": { description: "Source failed" }
+  /v1/admin/org/missions/{missionId}/talent-candidates:
+    get:
+      operationId: listTalentCandidates
+      summary: "Candidates, optionally for one role (?roleId=)."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: query, name: roleId, required: false, schema: { type: string } }
+      responses:
+        "200": { description: "Candidates" }
+    post:
+      operationId: addTalentCandidate
+      summary: "Add a candidate by hand. Stored as a claim."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Added" }
+        "200": { description: "Replayed" }
+  /v1/agent/missions/{missionId}/talent-sources:
+    get:
+      operationId: agentTalentSources
+      summary: "Talent sources (needs SEARCH or READ on the mission)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Sources" }
+  /v1/agent/missions/{missionId}/talent-candidates/import:
+    post:
+      operationId: agentImportTalentCandidates
+      summary: "Import candidates from a source (needs SEARCH)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Imported" }
+  /v1/agent/missions/{missionId}/talent-candidates:
+    get:
+      operationId: agentTalentCandidates
+      summary: "Candidates (needs READ)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: query, name: roleId, required: false, schema: { type: string } }
+      responses:
+        "200": { description: "Candidates" }
+    post:
+      operationId: agentAddTalentCandidate
+      summary: "Add a candidate (needs SEARCH). Stored as a claim."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Added" }
+  /v1/admin/org/missions/{missionId}/talent-roles/{roleId}/ranking:
+    get:
+      operationId: rankTalentCandidates
+      summary: "Candidates for a role ranked by the scope's checks (skills claimed, price stated, preferred skills, portfolio). Unknown is never met; years of experience is never used."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: path, name: roleId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Ranking" }
+        "409": { description: "No scope in force" }
+        "422": { description: "No such role" }
+  /v1/admin/org/missions/{missionId}/talent-shortlists:
+    get:
+      operationId: listTalentShortlists
+      summary: "Adopted shortlists."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Shortlists" }
+    post:
+      operationId: adoptTalentShortlist
+      summary: "A person adopts one to five ranked candidates for a role. One active shortlist per role. Contacts no one."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Adopted" }
+        "422": { description: "Candidates not shortlistable" }
+        "409": { description: "A shortlist is already active" }
+  /v1/admin/org/talent-shortlists/{shortlistId}/withdraw:
+    post:
+      operationId: withdrawTalentShortlist
+      summary: "Withdraw an active shortlist."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: shortlistId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Withdrawn" }
+  /v1/agent/missions/{missionId}/talent-roles/{roleId}/ranking:
+    get:
+      operationId: agentRankTalentCandidates
+      summary: "The same ranking (needs COMPARE)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: path, name: roleId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Ranking" }
+  /v1/agent/missions/{missionId}/talent-shortlists:
+    get:
+      operationId: agentTalentShortlists
+      summary: "Adopted shortlists (needs READ)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Shortlists" }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem
