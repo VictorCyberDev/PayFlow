@@ -985,6 +985,36 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** Draft an offer for a shortlisted candidate (needs DRAFT). A person approves it, sends it and records the answer. */
+  async draftTalentOffer(
+    missionId: string,
+    candidateId: string,
+    terms: Record<string, unknown>,
+    idempotencyKey: string,
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/talent-offers`,
+      { candidateId, terms, idempotencyKey },
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Offers and contracts (needs READ). */
+  async talentOffers(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/talent-offers`,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Which required checks a candidate has passed, failed or is missing (needs READ). Agents cannot record checks. */
+  async talentChecks(missionId: string, candidateId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/talent-candidates/${encodeURIComponent(candidateId)}/checks`,
+    );
+    return [r.status, r.json] as const;
+  }
   /** Rank the candidates for a role by the scope's checks (needs COMPARE). A recommendation only: a person adopts a shortlist. */
   async rankTalentCandidates(missionId: string, roleId: string) {
     const r = await this.call(
@@ -1991,6 +2021,96 @@ export class PayFlowMemberClient {
         "POST",
         `/v1/admin/org/talent-scopes/${encodeURIComponent(scopeId)}/revoke`,
         { reason },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Checks, offers and contracts. A person records every check, approves, sends and records the answer; PayFlow sends nothing. */
+  readonly talentOffers = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-offers`,
+      );
+      return r.json;
+    },
+    recordCheck: async (
+      missionId: string,
+      body: {
+        candidateId: string;
+        kind: string;
+        result: "PASSED" | "FAILED";
+        evidenceKind: "OWNER_ATTESTATION" | "DOCUMENT_REF";
+        evidenceRef?: string;
+        note?: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-checks`,
+        body,
+      );
+      return [r.status, r.json] as const;
+    },
+    checks: async (missionId: string, candidateId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-candidates/${encodeURIComponent(candidateId)}/checks`,
+      );
+      return r.json;
+    },
+    draft: async (
+      missionId: string,
+      candidateId: string,
+      terms: Record<string, unknown>,
+      idempotencyKey: string,
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-offers`,
+        { candidateId, terms, idempotencyKey },
+      );
+      return [r.status, r.json] as const;
+    },
+    approve: async (offerId: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/talent-offers/${encodeURIComponent(offerId)}/approve`,
+        {},
+      );
+      return [r.status, r.json] as const;
+    },
+    markSent: async (offerId: string, note = "") => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/talent-offers/${encodeURIComponent(offerId)}/sent`,
+        { note },
+      );
+      return [r.status, r.json] as const;
+    },
+    answer: async (
+      offerId: string,
+      body: {
+        outcome: "ACCEPTED" | "DECLINED";
+        evidenceKind: "OWNER_ATTESTATION" | "DOCUMENT_REF";
+        evidenceRef?: string;
+        note?: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/talent-offers/${encodeURIComponent(offerId)}/answer`,
+        body,
+      );
+      return [r.status, r.json] as const;
+    },
+    withdraw: async (offerId: string, note = "") => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/talent-offers/${encodeURIComponent(offerId)}/withdraw`,
+        { note },
       );
       return [r.status, r.json] as const;
     },

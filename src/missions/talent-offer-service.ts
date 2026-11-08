@@ -306,7 +306,7 @@ export class TalentOfferService {
     try {
       const [row] =
         await sql`insert into mission_talent_offers (offer_id, mission_id, scope_id, role_id, candidate_id, shortlist_id, terms, terms_digest, total_minor, currency, drafted_by_kind, drafted_by, idempotency_key, drafted_at, expires_at)
-        values (${id}, ${missionId}, ${scope.scopeId}, ${role.roleId}, ${b.data.candidateId}, ${String(sl.shortlist_id)}, ${sql.json(b.data.terms as never)}, ${sha(b.data.terms)}, ${totalOf(b.data.terms)}, ${b.data.terms.currency},
+        values (${id}, ${missionId}, ${scope.scopeId}, ${role.roleId}, ${b.data.candidateId}, ${String(sl.shortlist_id)}, ${sql.json(b.data.terms)}, ${sha(b.data.terms)}, ${totalOf(b.data.terms)}, ${b.data.terms.currency},
          ${caller.kind}, ${caller.id}, ${b.data.idempotencyKey}, ${now}, ${b.data.terms.expiresAt}) returning *`;
       await this.log(caller, "TALENT_OFFER_DRAFTED", id, now);
       return {
@@ -438,7 +438,7 @@ export class TalentOfferService {
     const r = await this.offerRow(caller, offerId);
     if (!r) return { ok: false, refusal: "NOT_FOUND" };
     const sql = this.deps.sql;
-    const finish = async (o: { offer: OfferView; replayed: boolean }) => ({
+    const finish = (o: { offer: OfferView; replayed: boolean }) => ({
       ok: true as const,
       value: {
         offer: o.offer,
@@ -493,7 +493,7 @@ export class TalentOfferService {
       }));
       await sql.begin(async (tx) => {
         await tx`insert into mission_talent_contracts (contract_id, mission_id, offer_id, candidate_id, role_id, currency, total_minor, milestones, created_by, created_at)
-          values (${contractId}, ${String(r.mission_id)}, ${offerId}, ${String(r.candidate_id)}, ${String(r.role_id)}, ${terms.currency}, ${Number(r.total_minor)}, ${tx.json(milestones as never)}, ${caller.id}, ${now})
+          values (${contractId}, ${String(r.mission_id)}, ${offerId}, ${String(r.candidate_id)}, ${String(r.role_id)}, ${terms.currency}, ${Number(r.total_minor)}, ${tx.json(milestones)}, ${caller.id}, ${now})
           on conflict (offer_id) do nothing`;
         await tx`update mission_talent_offers set status = 'ACCEPTED', resolved_by = ${caller.id}, resolved_at = ${now}, resolution_evidence_kind = ${b.data.evidenceKind},
           resolution_evidence_ref = ${b.data.evidenceRef ?? null}, resolution_note = ${b.data.note || null} where offer_id = ${offerId} and status = 'SENT'`;
@@ -544,7 +544,7 @@ export class TalentOfferService {
           roleId: String(c.role_id),
           currency: String(c.currency).trim(),
           totalMinor: Number(c.total_minor),
-          milestones: c.milestones,
+          milestones: c.milestones as unknown,
           createdAt: iso(c.created_at),
         })),
       },

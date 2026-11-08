@@ -483,6 +483,27 @@ describe("M49 checks and terms (pure)", () => {
       expect((await draft(s.owner, s.id, s.ada)).status).toBe(201);
     });
 
+    it("an offer cannot be approved once the scope it was drafted under is no longer in force", async () => {
+      const s = await scene();
+      await check(s.owner, s.id, s.ada, "IDENTITY_VERIFIED");
+      await check(s.owner, s.id, s.ada, "PORTFOLIO_REVIEWED");
+      const o = (await body(await draft(s.owner, s.id, s.ada))).offer;
+      const v2 = (
+        await body(
+          await post(s.owner, `/v1/admin/org/missions/${s.id}/talent-scopes`, {
+            document: scopeDoc({ requiredChecks: ["IDENTITY_VERIFIED"] }),
+            idempotencyKey: idemKey("t"),
+          }),
+        )
+      ).scope;
+      await post(s.owner, `/v1/admin/org/talent-scopes/${v2.scopeId}/approve`);
+      const r = await act(s.owner, o.offerId, "approve");
+      expect([r.status, (await body(r)).reason]).toEqual([
+        409,
+        "SCOPE_CHANGED",
+      ]);
+    });
+
     it("an agent may withdraw only its own draft; an expired offer cannot be approved or answered", async () => {
       const s = await scene();
       const mine = (await body(await draft(s.a, s.id, s.ada, {}, "/v1/agent")))

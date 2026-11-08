@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isDate } from "./obligations.js";
 import type { Role } from "./shortlist.js";
-import { CHECKS } from "./talent-scope.js";
+import type { CHECKS } from "./talent-scope.js";
 
 /**
  * V3 M49 — offers and checks. Pure and deterministic.
