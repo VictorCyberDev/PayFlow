@@ -78,6 +78,12 @@ import { createDisputeRoutes } from "./dispute-routes.js";
 import { createObligationRoutes } from "./obligation-routes.js";
 import { createPortfolioRoutes } from "./portfolio-routes.js";
 import { createTalentScopeRoutes } from "./talent-scope-routes.js";
+import { createTalentCandidateRoutes } from "./talent-candidate-routes.js";
+import { TalentCandidateService } from "../missions/talent-candidate-service.js";
+import {
+  sandboxTalentSource,
+  TalentSourceRegistry,
+} from "../missions/talent-candidates.js";
 import { TalentScopeService } from "../missions/talent-scope-service.js";
 import { PortfolioService } from "../missions/portfolio-service.js";
 import { ObligationService } from "../missions/obligation-service.js";
@@ -183,6 +189,8 @@ export interface HostedGatewayOptions {
   readonly connectors?: ConnectorRegistry;
   /** Channels messages can leave through. Defaults to the sandbox channel, which sends nothing anywhere. */
   readonly channels?: ChannelRegistry;
+  /** Test seam: the talent sources candidates can be imported from instead of the built-in fictional sandbox source. */
+  readonly talentSources?: TalentSourceRegistry;
   /** Test seam: how long a send may take before its outcome is recorded as unknown. */
   readonly sendTimeoutMs?: number;
 }
@@ -1494,6 +1502,33 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         caller.environment,
       )) !== null,
   });
+  const talentCandidateService = new TalentCandidateService({
+    sql,
+    audit,
+    missions: missionService,
+    scopes: talentScopeService,
+    sources:
+      options.talentSources ??
+      new TalentSourceRegistry().register(sandboxTalentSource),
+    now: iso,
+  });
+  const talentCandidateRoutes = createTalentCandidateRoutes({
+    service: talentCandidateService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
   /** An authenticated agent credential → its tenant and agent id. Null for anything else. */
   async function resolveAgentCaller(
     request: RestRequest,
@@ -2550,7 +2585,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => disputeRoutes.agent(request))) ??
           (await safely(() => obligationRoutes.agent(request))) ??
           (await safely(() => portfolioRoutes.agent(request))) ??
-          (await safely(() => talentScopeRoutes.agent(request))) ?? {
+          (await safely(() => talentScopeRoutes.agent(request))) ??
+          (await safely(() => talentCandidateRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2589,6 +2625,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => obligationRoutes.member(request))) ??
         (await safely(() => portfolioRoutes.member(request))) ??
         (await safely(() => talentScopeRoutes.member(request))) ??
+        (await safely(() => talentCandidateRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {

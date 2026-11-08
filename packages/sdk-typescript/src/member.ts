@@ -985,6 +985,32 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** Import candidates for a role from a talent source (needs SEARCH). What a source returns is a claim; nothing is contacted. */
+  async importTalentCandidates(
+    missionId: string,
+    body: {
+      sourceId: string;
+      roleId: string;
+      text?: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/talent-candidates/import`,
+      body,
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Candidates, optionally for one role (needs READ). */
+  async talentCandidates(missionId: string, roleId?: string) {
+    const q = roleId ? `?roleId=${encodeURIComponent(roleId)}` : "";
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/talent-candidates${q}`,
+    );
+    return [r.status, r.json] as const;
+  }
   /** Propose a talent scope (needs DRAFT). It takes effect only when the owner approves it. */
   async proposeTalentScope(
     missionId: string,
@@ -1957,6 +1983,58 @@ export class PayFlowMemberClient {
         "POST",
         `/v1/admin/org/talent-scopes/${encodeURIComponent(scopeId)}/revoke`,
         { reason },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Talent sources and candidates. Candidates are claims; importing contacts no one. */
+  readonly talentCandidates = {
+    sources: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-sources`,
+      );
+      return r.json;
+    },
+    list: async (missionId: string, roleId?: string) => {
+      const q = roleId ? `?roleId=${encodeURIComponent(roleId)}` : "";
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-candidates${q}`,
+      );
+      return r.json;
+    },
+    import: async (
+      missionId: string,
+      body: {
+        sourceId: string;
+        roleId: string;
+        text?: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-candidates/import`,
+        body,
+      );
+      return [r.status, r.json] as const;
+    },
+    add: async (
+      missionId: string,
+      body: {
+        roleId: string;
+        handle: string;
+        sourceRef?: string;
+        profile: Record<string, unknown>;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-candidates`,
+        body,
       );
       return [r.status, r.json] as const;
     },

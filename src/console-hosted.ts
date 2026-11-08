@@ -1,5 +1,6 @@
 import type { ConnectorRegistry } from "./missions/connectors.js";
 import type { ChannelRegistry } from "./missions/channels.js";
+import type { TalentSourceRegistry } from "./missions/talent-candidates.js";
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import postgres, { type Sql } from "postgres";
@@ -240,6 +241,8 @@ export function createHostedConsole(
     connectors?: ConnectorRegistry;
     /** Test seam: the channels messages leave through instead of the built-in sandbox channel. */
     channels?: ChannelRegistry;
+    /** Test seam: the talent sources candidates are imported from instead of the built-in fictional sandbox source. */
+    talentSources?: TalentSourceRegistry;
     sendTimeoutMs?: number;
   } = {},
 ) {
@@ -353,6 +356,7 @@ export function createHostedConsole(
         demo,
         ...(deps.connectors ? { connectors: deps.connectors } : {}),
         ...(deps.channels ? { channels: deps.channels } : {}),
+        ...(deps.talentSources ? { talentSources: deps.talentSources } : {}),
         ...(deps.sendTimeoutMs ? { sendTimeoutMs: deps.sendTimeoutMs } : {}),
         principalId: config.PAYFLOW_M5_PRINCIPAL_ID,
         agentId: config.PAYFLOW_M5_AGENT_ID,

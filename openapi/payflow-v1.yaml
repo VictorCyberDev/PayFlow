@@ -2414,6 +2414,130 @@ paths:
           }
       responses:
         "201": { description: "Proposed" }
+  /v1/admin/org/missions/{missionId}/talent-sources:
+    get:
+      operationId: listTalentSources
+      summary: "Talent sources and whether each can be used here. Only the fictional sandbox source ships; live marketplaces need the owner's credentials."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Sources" }
+  /v1/admin/org/missions/{missionId}/talent-candidates/import:
+    post:
+      operationId: importTalentCandidates
+      summary: "Import candidates for a role of the scope in force from a source. Sources only observe; results are strictly parsed, bounded and stored as claims."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Imported, with what was skipped" }
+        "403": { description: "Source not allowed here" }
+        "409": { description: "No scope in force" }
+        "502": { description: "Source failed" }
+  /v1/admin/org/missions/{missionId}/talent-candidates:
+    get:
+      operationId: listTalentCandidates
+      summary: "Candidates, optionally for one role (?roleId=)."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: query, name: roleId, required: false, schema: { type: string } }
+      responses:
+        "200": { description: "Candidates" }
+    post:
+      operationId: addTalentCandidate
+      summary: "Add a candidate by hand. Stored as a claim."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Added" }
+        "200": { description: "Replayed" }
+  /v1/agent/missions/{missionId}/talent-sources:
+    get:
+      operationId: agentTalentSources
+      summary: "Talent sources (needs SEARCH or READ on the mission)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Sources" }
+  /v1/agent/missions/{missionId}/talent-candidates/import:
+    post:
+      operationId: agentImportTalentCandidates
+      summary: "Import candidates from a source (needs SEARCH)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Imported" }
+  /v1/agent/missions/{missionId}/talent-candidates:
+    get:
+      operationId: agentTalentCandidates
+      summary: "Candidates (needs READ)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: query, name: roleId, required: false, schema: { type: string } }
+      responses:
+        "200": { description: "Candidates" }
+    post:
+      operationId: agentAddTalentCandidate
+      summary: "Add a candidate (needs SEARCH). Stored as a claim."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Added" }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem

@@ -11,6 +11,7 @@ import {
 import { VerticalProvider } from "../m4-vertical-fixture.js";
 import type { ConnectorRegistry } from "../../src/missions/connectors.js";
 import type { ChannelRegistry } from "../../src/missions/channels.js";
+import type { TalentSourceRegistry } from "../../src/missions/talent-candidates.js";
 import { truncateTenantData } from "./reset.js";
 
 /**
@@ -31,6 +32,7 @@ export function hostHarness(
     /** Replace the host's connector registry (a test double must never be in a production registry). */
     connectors?: () => ConnectorRegistry;
     channels?: () => ChannelRegistry;
+    talentSources?: () => TalentSourceRegistry;
     sendTimeoutMs?: number;
   } = {},
 ) {
@@ -76,6 +78,9 @@ export function hostHarness(
         paymentProvider: provider,
         ...(options.connectors ? { connectors: options.connectors() } : {}),
         ...(options.channels ? { channels: options.channels() } : {}),
+        ...(options.talentSources
+          ? { talentSources: options.talentSources() }
+          : {}),
         ...(options.sendTimeoutMs
           ? { sendTimeoutMs: options.sendTimeoutMs }
           : {}),
