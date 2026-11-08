@@ -985,6 +985,14 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** Rank the candidates for a role by the scope's checks (needs COMPARE). A recommendation only: a person adopts a shortlist. */
+  async rankTalentCandidates(missionId: string, roleId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/talent-roles/${encodeURIComponent(roleId)}/ranking`,
+    );
+    return [r.status, r.json] as const;
+  }
   /** Import candidates for a role from a talent source (needs SEARCH). What a source returns is a claim; nothing is contacted. */
   async importTalentCandidates(
     missionId: string,
@@ -1982,6 +1990,48 @@ export class PayFlowMemberClient {
       const r = await this.call(
         "POST",
         `/v1/admin/org/talent-scopes/${encodeURIComponent(scopeId)}/revoke`,
+        { reason },
+      );
+      return [r.status, r.json] as const;
+    },
+  };
+
+  /** Ranking and shortlists. The ranking never uses years of experience; only a person adopts a shortlist. */
+  readonly shortlists = {
+    ranking: async (missionId: string, roleId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-roles/${encodeURIComponent(roleId)}/ranking`,
+      );
+      return r.json;
+    },
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-shortlists`,
+      );
+      return r.json;
+    },
+    adopt: async (
+      missionId: string,
+      body: {
+        roleId: string;
+        candidateIds: string[];
+        note?: string;
+        idempotencyKey: string;
+      },
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-shortlists`,
+        body,
+      );
+      return [r.status, r.json] as const;
+    },
+    withdraw: async (shortlistId: string, reason: string) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/talent-shortlists/${encodeURIComponent(shortlistId)}/withdraw`,
         { reason },
       );
       return [r.status, r.json] as const;

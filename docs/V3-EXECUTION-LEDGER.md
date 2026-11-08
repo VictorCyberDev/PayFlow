@@ -28,13 +28,14 @@ Source of truth for resuming the V3 program (ADR-018). Update at every milestone
 | M45 Multi-vendor portfolio | COMPLETE_LOCAL (computed read model)                                                                                                | next PR | —         | integer-bps shares; concentration only with >1 supplier; close-out blockers named per supplier                                                   |
 | M46 Talent scope           | COMPLETE_LOCAL                                                                                                                      | this PR | 048       | owner-approved immutable versions; checked against the mission twice; no protected-attribute criteria (best-effort screen, not legal compliance) |
 | M47 Talent marketplace     | COMPLETE_LOCAL (fictional sandbox source); live marketplaces BLOCKED_EXTERNAL                                                       | next PR | 049       | sources only observe; output strictly parsed, bounded, stored as claims; sandbox refused in PRODUCTION                                           |
-| M48–M50                    | NOT STARTED                                                                                                                         | —       | —         | see ADR-018                                                                                                                                      |
+| M48 Shortlisting           | COMPLETE_LOCAL                                                                                                                      | this PR | 050       | deterministic checks (unknown never met); years of experience never ranked; person adopts; contacts no one                                       |
+| M49–M50                    | NOT STARTED                                                                                                                         | —       | —         | see ADR-018                                                                                                                                      |
 
 ## Next executable actions (in order)
 
 1. **M30 follow-up (deferred, not blocking):** UI actions (create, approve/reject a pending revision, pause/resume/cancel) and an approvals queue.
    Deliberately not in v1: a UI that can approve is a second approval surface. Revisit after M31-M40 when more state needs a human.
-2. **M48 shortlisting** (next; M47 is done locally; M41 is done locally; real PayPal Sandbox needs the owner's credentials) + a real adapter only where authorized access exists (eBay Browse needs developer keys - owner action).
+2. **M49 offers/contracts** (next; M48 is done locally; M41 is done locally; real PayPal Sandbox needs the owner's credentials) + a real adapter only where authorized access exists (eBay Browse needs developer keys - owner action).
 3. Procurement pack on the live path (extend the purchase request with SKU/costCenter/purpose/invoice, compare to the trusted offer).
 4. M32–M50 as ADR-018. M40 real PayPal Sandbox needs the owner's Sandbox credentials (never in chat).
 

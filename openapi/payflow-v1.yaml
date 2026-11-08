@@ -2538,6 +2538,101 @@ paths:
           }
       responses:
         "201": { description: "Added" }
+  /v1/admin/org/missions/{missionId}/talent-roles/{roleId}/ranking:
+    get:
+      operationId: rankTalentCandidates
+      summary: "Candidates for a role ranked by the scope's checks (skills claimed, price stated, preferred skills, portfolio). Unknown is never met; years of experience is never used."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: path, name: roleId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Ranking" }
+        "409": { description: "No scope in force" }
+        "422": { description: "No such role" }
+  /v1/admin/org/missions/{missionId}/talent-shortlists:
+    get:
+      operationId: listTalentShortlists
+      summary: "Adopted shortlists."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Shortlists" }
+    post:
+      operationId: adoptTalentShortlist
+      summary: "A person adopts one to five ranked candidates for a role. One active shortlist per role. Contacts no one."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Adopted" }
+        "422": { description: "Candidates not shortlistable" }
+        "409": { description: "A shortlist is already active" }
+  /v1/admin/org/talent-shortlists/{shortlistId}/withdraw:
+    post:
+      operationId: withdrawTalentShortlist
+      summary: "Withdraw an active shortlist."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: shortlistId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Withdrawn" }
+  /v1/agent/missions/{missionId}/talent-roles/{roleId}/ranking:
+    get:
+      operationId: agentRankTalentCandidates
+      summary: "The same ranking (needs COMPARE)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: path, name: roleId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Ranking" }
+  /v1/agent/missions/{missionId}/talent-shortlists:
+    get:
+      operationId: agentTalentShortlists
+      summary: "Adopted shortlists (needs READ)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Shortlists" }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem
