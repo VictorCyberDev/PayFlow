@@ -2633,6 +2633,345 @@ paths:
           }
       responses:
         "200": { description: "Shortlists" }
+  /v1/admin/org/missions/{missionId}/talent-checks:
+    post:
+      operationId: recordTalentCheck
+      summary: "A person records a finding about a candidate (identity, portfolio, references, work authorization, classification) with evidence. Append-only; the latest per kind counts."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Recorded" }
+        "200": { description: "Replayed" }
+  /v1/admin/org/missions/{missionId}/talent-candidates/{candidateId}/checks:
+    get:
+      operationId: talentCandidateChecks
+      summary: "Standing of each check the scope requires for this candidate: PASSED, FAILED or MISSING."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            in: path,
+            name: candidateId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Standing" }
+  /v1/admin/org/missions/{missionId}/talent-offers:
+    get:
+      operationId: listTalentOffers
+      summary: "Offers and contracts."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Offers and contracts" }
+    post:
+      operationId: draftTalentOffer
+      summary: "Draft an offer (milestones, dates, rate for hourly roles) for a shortlisted candidate, inside the role's limits."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Drafted" }
+        "422": { description: "Not shortlisted, or terms invalid" }
+        "409": { description: "A live offer exists" }
+  /v1/admin/org/talent-offers/{offerId}/approve:
+    post:
+      operationId: approveTalentOffer
+      summary: "Owner approves a drafted offer; needs every required check PASSED and the same scope still in force."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: offerId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Done (or replayed)" }
+        "409": { description: "Illegal move" }
+        "422": { description: "Checks not passed" }
+  /v1/admin/org/talent-offers/{offerId}/sent:
+    post:
+      operationId: sentTalentOffer
+      summary: "A person records that the offer was sent. PayFlow sends nothing."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: offerId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Done (or replayed)" }
+        "409": { description: "Illegal move" }
+        "422": { description: "Checks not passed" }
+  /v1/admin/org/talent-offers/{offerId}/answer:
+    post:
+      operationId: answerTalentOffer
+      summary: "A person records the candidate's answer with evidence. Acceptance commits every milestone in the budget ledger and records the contract; it pays no one."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: offerId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Done (or replayed)" }
+        "409": { description: "Illegal move" }
+        "422": { description: "Checks not passed" }
+  /v1/admin/org/talent-offers/{offerId}/withdraw:
+    post:
+      operationId: withdrawTalentOffer
+      summary: "Withdraw an offer that has not been answered."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: offerId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Done (or replayed)" }
+        "409": { description: "Illegal move" }
+        "422": { description: "Checks not passed" }
+  /v1/agent/missions/{missionId}/talent-offers:
+    get:
+      operationId: agentTalentOffers
+      summary: "Offers and contracts (needs READ)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Offers and contracts" }
+    post:
+      operationId: agentDraftTalentOffer
+      summary: "Draft an offer (needs DRAFT). A person approves, sends and records the answer."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Drafted" }
+  /v1/agent/missions/{missionId}/talent-candidates/{candidateId}/checks:
+    get:
+      operationId: agentTalentCandidateChecks
+      summary: "Standing of the required checks (needs READ). Agents record none."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            in: path,
+            name: candidateId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Standing" }
+  /v1/agent/talent-offers/{offerId}/withdraw:
+    post:
+      operationId: agentWithdrawTalentOffer
+      summary: "Withdraw an offer you drafted."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - { in: path, name: offerId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Withdrawn" }
+  /v1/admin/org/missions/{missionId}/contracts:
+    get:
+      operationId: listTalentContracts
+      summary: "Contracts with each milestone's state (not started, submitted, rejected, accepted, payment issued, paid, cancelled), its budget stage and deliverables."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Contracts" }
+  /v1/admin/org/contracts/{contractId}/milestones/{index}/deliverables:
+    post:
+      operationId: submitDeliverable
+      summary: "Submit a deliverable for a milestone. A claim; one open submission per milestone."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: contractId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: path, name: index, required: true, schema: { type: string } }
+      responses:
+        "201": { description: "Submitted" }
+        "409":
+          {
+            description: "Already open, already accepted, or contract terminated",
+          }
+  /v1/admin/org/deliverables/{deliverableId}/decide:
+    post:
+      operationId: decideDeliverable
+      summary: "A person accepts (with evidence) or rejects a deliverable, once."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: deliverableId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Decided (or replayed)" }
+        "422": { description: "Evidence required" }
+  /v1/admin/org/deliverables/{deliverableId}/payment:
+    post:
+      operationId: issueContractorPayment
+      summary: "Issue the payment instruction for an accepted deliverable: milestone amount, payee, agent and stored Authority. An instruction, not a payment."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: deliverableId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Issued" }
+        "422": { description: "No Authority, above it, or payee not in it" }
+        "409":
+          {
+            description: "Not accepted, already issued, or milestone not committed",
+          }
+  /v1/admin/org/contractor-payments/{paymentId}/reconcile:
+    post:
+      operationId: reconcileContractorPayment
+      summary: "Compare a payment (by proposal id) to the instruction using PayFlow's own trace and move the milestone's budget item with the evidence the ledger requires."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: paymentId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Reconciled (or replayed)" }
+        "409": { description: "PayFlow has no trace for that payment" }
+  /v1/admin/org/contracts/{contractId}/terminate:
+    post:
+      operationId: terminateTalentContract
+      summary: "Cancel the milestones that have no payment instruction and release their budget; keep the rest. Once."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: contractId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Terminated (or replayed)" }
+  /v1/agent/missions/{missionId}/contracts:
+    get:
+      operationId: agentTalentContracts
+      summary: "Contracts and milestone states (needs READ)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Contracts" }
+  /v1/agent/contracts/{contractId}/milestones/{index}/deliverables:
+    post:
+      operationId: agentSubmitDeliverable
+      summary: "Submit a deliverable (needs READ). A claim a person decides."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: contractId,
+            required: true,
+            schema: { type: string },
+          }
+        - { in: path, name: index, required: true, schema: { type: string } }
+      responses:
+        "201": { description: "Submitted" }
+  /v1/agent/deliverables/{deliverableId}/payment:
+    post:
+      operationId: agentIssueContractorPayment
+      summary: "Issue the payment instruction (needs PURCHASE; you are the payer agent)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: deliverableId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Issued" }
+  /v1/agent/contractor-payments/{paymentId}/reconcile:
+    post:
+      operationId: agentReconcileContractorPayment
+      summary: "Reconcile your payment against the instruction (only the instruction's agent; needs PURCHASE)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: paymentId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Reconciled" }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem

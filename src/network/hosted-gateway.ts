@@ -80,6 +80,10 @@ import { createPortfolioRoutes } from "./portfolio-routes.js";
 import { createTalentScopeRoutes } from "./talent-scope-routes.js";
 import { createTalentCandidateRoutes } from "./talent-candidate-routes.js";
 import { createShortlistRoutes } from "./shortlist-routes.js";
+import { createTalentOfferRoutes } from "./talent-offer-routes.js";
+import { createContractorRoutes } from "./contractor-routes.js";
+import { ContractorService } from "../missions/contractor-service.js";
+import { TalentOfferService } from "../missions/talent-offer-service.js";
 import { ShortlistService } from "../missions/shortlist-service.js";
 import { TalentCandidateService } from "../missions/talent-candidate-service.js";
 import {
@@ -92,7 +96,10 @@ import { ObligationService } from "../missions/obligation-service.js";
 import { DisputeService } from "../missions/dispute-service.js";
 import { FulfillmentService } from "../missions/fulfillment-service.js";
 import { OrderService } from "../missions/order-service.js";
-import { ProcurementService } from "../missions/procurement-service.js";
+import {
+  ProcurementService,
+  type TraceReader,
+} from "../missions/procurement-service.js";
 import { traceFactsOf } from "../missions/purchase.js";
 import { CommunicationService } from "../missions/communication-service.js";
 import { builtinChannels, type ChannelRegistry } from "../missions/channels.js";
@@ -1332,24 +1339,25 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       )) !== null,
   });
   const traceService = new OperationTraceService(repo, demo.keys);
+  const traceReader: TraceReader = {
+    read: async (proposalId) => {
+      try {
+        const facts = traceFactsOf(
+          await traceService.project({ proposalId }, iso()),
+        );
+        // PayFlow knows no such payment: there is nothing to reconcile against.
+        return facts.references.proposalId === null ? null : facts;
+      } catch {
+        return null;
+      }
+    },
+  };
   const procurementService = new ProcurementService({
     sql,
     audit,
     missions: missionService,
     ledger: ledgerService,
-    traces: {
-      read: async (proposalId) => {
-        try {
-          const facts = traceFactsOf(
-            await traceService.project({ proposalId }, iso()),
-          );
-          // PayFlow knows no such payment: there is nothing to reconcile against.
-          return facts.references.proposalId === null ? null : facts;
-        } catch {
-          return null;
-        }
-      },
-    },
+    traces: traceReader,
     now: iso,
   });
   const procurementRoutes = createProcurementRoutes({
@@ -1549,6 +1557,56 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         request.path,
       ),
     agent: (request) => resolveAgentCaller(request),
+  });
+  const talentOfferService = new TalentOfferService({
+    sql,
+    audit,
+    missions: missionService,
+    scopes: talentScopeService,
+    ledger: ledgerService,
+    now: iso,
+  });
+  const talentOfferRoutes = createTalentOfferRoutes({
+    service: talentOfferService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
+  const contractorService = new ContractorService({
+    sql,
+    audit,
+    missions: missionService,
+    ledger: ledgerService,
+    traces: traceReader,
+    now: iso,
+  });
+  const contractorRoutes = createContractorRoutes({
+    service: contractorService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
   });
   /** An authenticated agent credential → its tenant and agent id. Null for anything else. */
   async function resolveAgentCaller(
@@ -2584,7 +2642,11 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path.startsWith("/v1/agent/acceptances/") ||
       path.startsWith("/v1/agent/purchase-orders/") ||
       path.startsWith("/v1/agent/orders/") ||
-      path.startsWith("/v1/agent/disputes/")
+      path.startsWith("/v1/agent/disputes/") ||
+      path.startsWith("/v1/agent/talent-offers/") ||
+      path.startsWith("/v1/agent/contracts/") ||
+      path.startsWith("/v1/agent/deliverables/") ||
+      path.startsWith("/v1/agent/contractor-payments/")
     ) {
       send(
         res,
@@ -2608,7 +2670,9 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => portfolioRoutes.agent(request))) ??
           (await safely(() => talentScopeRoutes.agent(request))) ??
           (await safely(() => talentCandidateRoutes.agent(request))) ??
-          (await safely(() => shortlistRoutes.agent(request))) ?? {
+          (await safely(() => shortlistRoutes.agent(request))) ??
+          (await safely(() => talentOfferRoutes.agent(request))) ??
+          (await safely(() => contractorRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2649,6 +2713,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => talentScopeRoutes.member(request))) ??
         (await safely(() => talentCandidateRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
+        (await safely(() => talentOfferRoutes.member(request))) ??
+        (await safely(() => contractorRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {

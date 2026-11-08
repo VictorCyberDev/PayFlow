@@ -452,9 +452,11 @@ export class QuoteService {
       return { ok: false, refusal: "LEDGER_REFUSED", detail: created.refusal };
     }
     const itemId = (created.value as unknown as { itemId: string }).itemId;
+    // The link row has two unique keys (quote and item). Concurrent callers all hold the same item, so a conflict on EITHER key means the
+    // link already exists: ignore both, not just the quote key, or the loser of a race fails with a unique violation.
     const [linked] =
       await sql`insert into mission_quote_ledger (quote_id, item_id, linked_by, linked_at) values (${quoteId}, ${itemId}, ${caller.id}, ${now})
-      on conflict (quote_id) do nothing returning item_id`;
+      on conflict do nothing returning item_id`;
     if (linked)
       await this.log(
         caller,
