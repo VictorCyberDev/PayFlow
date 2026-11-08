@@ -80,6 +80,8 @@ import { createPortfolioRoutes } from "./portfolio-routes.js";
 import { createTalentScopeRoutes } from "./talent-scope-routes.js";
 import { createTalentCandidateRoutes } from "./talent-candidate-routes.js";
 import { createShortlistRoutes } from "./shortlist-routes.js";
+import { createTalentOfferRoutes } from "./talent-offer-routes.js";
+import { TalentOfferService } from "../missions/talent-offer-service.js";
 import { ShortlistService } from "../missions/shortlist-service.js";
 import { TalentCandidateService } from "../missions/talent-candidate-service.js";
 import {
@@ -1550,6 +1552,31 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       ),
     agent: (request) => resolveAgentCaller(request),
   });
+  const talentOfferService = new TalentOfferService({
+    sql,
+    audit,
+    missions: missionService,
+    scopes: talentScopeService,
+    ledger: ledgerService,
+    now: iso,
+  });
+  const talentOfferRoutes = createTalentOfferRoutes({
+    service: talentOfferService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
   /** An authenticated agent credential → its tenant and agent id. Null for anything else. */
   async function resolveAgentCaller(
     request: RestRequest,
@@ -2584,7 +2611,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path.startsWith("/v1/agent/acceptances/") ||
       path.startsWith("/v1/agent/purchase-orders/") ||
       path.startsWith("/v1/agent/orders/") ||
-      path.startsWith("/v1/agent/disputes/")
+      path.startsWith("/v1/agent/disputes/") ||
+      path.startsWith("/v1/agent/talent-offers/")
     ) {
       send(
         res,
@@ -2608,7 +2636,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => portfolioRoutes.agent(request))) ??
           (await safely(() => talentScopeRoutes.agent(request))) ??
           (await safely(() => talentCandidateRoutes.agent(request))) ??
-          (await safely(() => shortlistRoutes.agent(request))) ?? {
+          (await safely(() => shortlistRoutes.agent(request))) ??
+          (await safely(() => talentOfferRoutes.agent(request))) ?? {
             status: 404,
             headers: { "content-type": "application/json" },
             body: { reason: "ROUTE_NOT_FOUND" },
@@ -2649,6 +2678,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => talentScopeRoutes.member(request))) ??
         (await safely(() => talentCandidateRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
+        (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => oauthIdentityRoute(request))) ??
         (await controlRoute(request));
       if (planeReply) {
