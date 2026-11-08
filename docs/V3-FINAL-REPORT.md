@@ -8,8 +8,8 @@ required topics (A–C context, D–AB one section per milestone M26–M50, AC�
 ## A. Repository, pull requests, CI
 
 Repo `VictorCyberDev/PayFlow`. Work went through milestone branches and bundled PRs, each merged only after the three CI checks (`verify`,
-`console`, `console-e2e`) were green on the exact head, with the head SHA pinned in the merge: Phase 0 (#41, #42), M26–M29 (#43–#46),
-M30 (#47), M31 (#48), M32–M34 (#50), M35–M36 (#51), M37–M38 (#52), M39–M40 (#53), M41 (#54), M42–M43 (#55), M44–M45 (#56),
+`console`, `console-e2e`) were green on the exact head, with the head SHA pinned in the merge: ADR-018 adoption (#41) and Phase 0 hardening (#42), M26–M29 (#43–#46),
+M30 (#47), M31 (#48), M32–M34 (#50; #49 was an earlier M32-only PR, closed unmerged and superseded by #50), M35–M36 (#51), M37–M38 (#52), M39–M40 (#53), M41 (#54), M42–M43 (#55), M44–M45 (#56),
 M46–M48 (#57), M49–M50 (#58). Development used the milestone branches, not the session's designated
 `claude/eloquent-einstein-dw0mxk` branch. Squash merges.
 
@@ -20,7 +20,7 @@ was not started.
 
 ## C. Phase 0 recovery
 
-Closure ledger, security hardening items and the ADR (PRs #41–#42). The resumable ledger is `docs/V3-EXECUTION-LEDGER.md`.
+The Authority-ceiling test, issuer-endpoint outage alerts, address-keyed abuse limits, a key-separation review (documented as a recommendation; key separation itself is **not** implemented, an owner decision) and the closure ledger (#42); the ADR was #41. The resumable ledger is `docs/V3-EXECUTION-LEDGER.md`.
 
 ## D–AB. Milestones
 
