@@ -27,10 +27,11 @@ const norm = (s: string) => s.trim().toLowerCase();
 
 export function evaluate(role: Role, profile: Profile): Evaluation {
   const has = new Set(profile.skills.map(norm));
-  const requiredSkills = role.requiredSkills.map((skill) => ({
-    skill,
-    check: has.has(norm(skill)) ? "MET" : "NOT_MET",
-  }));
+  const requiredSkills: { skill: string; check: Check }[] =
+    role.requiredSkills.map((skill) => ({
+      skill,
+      check: has.has(norm(skill)) ? "MET" : "NOT_MET",
+    }));
   // The price that applies: hourly roles compare an hourly rate to the maximum rate; others compare a fixed quote to the budget cap.
   const hourly = role.engagement === "HOURLY";
   const amount = hourly
