@@ -985,6 +985,27 @@ export class PayFlowAgentMissionClient {
     );
     return [r.status, r.json] as const;
   }
+  /** Propose a talent scope (needs DRAFT). It takes effect only when the owner approves it. */
+  async proposeTalentScope(
+    missionId: string,
+    document: Record<string, unknown>,
+    idempotencyKey: string,
+  ) {
+    const r = await this.call(
+      "POST",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/talent-scopes`,
+      { document, idempotencyKey },
+    );
+    return [r.status, r.json] as const;
+  }
+  /** Talent scope versions and the one in force (needs READ). */
+  async talentScopes(missionId: string) {
+    const r = await this.call(
+      "GET",
+      `/v1/agent/missions/${encodeURIComponent(missionId)}/talent-scopes`,
+    );
+    return [r.status, r.json] as const;
+  }
   /** The multi-vendor view: spend by supplier, concentration, trouble per supplier and close-out blockers. Needs READ. */
   async portfolio(missionId: string, maxShareBps?: number) {
     const q = maxShareBps === undefined ? "" : `?maxShareBps=${maxShareBps}`;
@@ -1891,6 +1912,53 @@ export class PayFlowMemberClient {
         `/v1/admin/org/messages/${encodeURIComponent(messageId)}/events`,
       );
       return (r.json.events ?? []) as unknown[];
+    },
+  };
+
+  /** What contractor work a mission may look for. The owner approves; one version is in force at a time. */
+  readonly talentScopes = {
+    list: async (missionId: string) => {
+      const r = await this.call(
+        "GET",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-scopes`,
+      );
+      return r.json;
+    },
+    propose: async (
+      missionId: string,
+      document: Record<string, unknown>,
+      idempotencyKey: string,
+    ) => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/missions/${encodeURIComponent(missionId)}/talent-scopes`,
+        { document, idempotencyKey },
+      );
+      return [r.status, r.json] as const;
+    },
+    approve: async (scopeId: string, reason = "") => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/talent-scopes/${encodeURIComponent(scopeId)}/approve`,
+        { reason },
+      );
+      return [r.status, r.json] as const;
+    },
+    reject: async (scopeId: string, reason = "") => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/talent-scopes/${encodeURIComponent(scopeId)}/reject`,
+        { reason },
+      );
+      return [r.status, r.json] as const;
+    },
+    revoke: async (scopeId: string, reason = "") => {
+      const r = await this.call(
+        "POST",
+        `/v1/admin/org/talent-scopes/${encodeURIComponent(scopeId)}/revoke`,
+        { reason },
+      );
+      return [r.status, r.json] as const;
     },
   };
 

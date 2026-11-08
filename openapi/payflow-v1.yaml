@@ -2324,6 +2324,96 @@ paths:
             description: "Spend by supplier, concentration, flags and close-out blockers",
           }
         "400": { description: "maxShareBps is not an integer from 1 to 10000" }
+  /v1/admin/org/missions/{missionId}/talent-scopes:
+    get:
+      operationId: listTalentScopes
+      summary: "Talent scope versions and the one in force."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Scopes" }
+    post:
+      operationId: proposeTalentScope
+      summary: "Propose a talent scope version (roles, skills, caps, checks). It waits for the owner and may not screen on protected attributes."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Proposed" }
+        "422": { description: "Scope invalid for this mission" }
+  /v1/admin/org/talent-scopes/{scopeId}/approve:
+    post:
+      operationId: approveTalentScope
+      summary: "Owner approves a scope version; checked against the mission again. Supersedes the one in force."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: scopeId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Approved (or replayed)" }
+        "422": { description: "Scope no longer valid" }
+  /v1/admin/org/talent-scopes/{scopeId}/reject:
+    post:
+      operationId: rejectTalentScope
+      summary: "Owner rejects a pending scope version."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: scopeId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Rejected" }
+  /v1/admin/org/talent-scopes/{scopeId}/revoke:
+    post:
+      operationId: revokeTalentScope
+      summary: "Revoke the scope in force."
+      x-hosted-only: true
+      security: [{ adminAuth: [] }]
+      parameters:
+        - { in: path, name: scopeId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Revoked" }
+  /v1/agent/missions/{missionId}/talent-scopes:
+    get:
+      operationId: agentTalentScopes
+      summary: "Talent scopes and the one in force (needs READ)."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200": { description: "Scopes" }
+    post:
+      operationId: agentProposeTalentScope
+      summary: "Propose a talent scope version (needs DRAFT). It waits for the owner."
+      x-hosted-only: true
+      security: [{ credentialAuth: [action:request] }]
+      parameters:
+        - {
+            in: path,
+            name: missionId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "201": { description: "Proposed" }
   /v1/admin/org/ledger/items/{itemId}/transition:
     post:
       operationId: transitionLedgerItem
