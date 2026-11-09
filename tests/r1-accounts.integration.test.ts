@@ -285,6 +285,56 @@ describe("R1a password hashing and cookies (pure)", () => {
       expect(denied[0]!.n).toBeGreaterThanOrEqual(1);
     });
 
+    it("agents: enrolled only by a role that may, listed only within the organization, and a credential is never issued across tenants", async () => {
+      const a = await signedIn();
+      const b = await signedIn();
+      const post = (who: Signed, path: string, body: unknown = {}) =>
+        send("POST", path, { cookie: who.cookie, csrf: who.csrf, body });
+      const made = await post(a, "/v1/app/agents", { displayName: "Buyer" });
+      expect(made.status).toBe(201);
+      const { agentId } = (await made.json()) as { agentId: string };
+      expect(
+        (await post(a, "/v1/app/agents", { displayName: "" })).status,
+      ).toBe(400);
+      expect(
+        (await post(a, "/v1/app/agents", { displayName: "x", extra: 1 }))
+          .status,
+      ).toBe(400);
+      const mine = (await (
+        await send("GET", "/v1/app/agents", { cookie: a.cookie })
+      ).json()) as { agents: { agentId: string }[] };
+      const theirs = (await (
+        await send("GET", "/v1/app/agents", { cookie: b.cookie })
+      ).json()) as { agents: unknown[] };
+      expect(mine.agents.map((x) => x.agentId)).toEqual([agentId]);
+      expect(theirs.agents).toEqual([]);
+      // b cannot obtain a credential for a's agent
+      const cross = await post(b, `/v1/app/agents/${agentId}/credentials`);
+      expect(cross.status).toBe(404);
+      const none = await h.repo
+        .sql`select count(*)::int n from agent_credentials where agent_id = ${agentId}`;
+      expect(none[0]!.n).toBe(0);
+      // a can, and the token is shown once and stored only as a digest
+      const ok = await post(a, `/v1/app/agents/${agentId}/credentials`);
+      expect(ok.status).toBe(201);
+      const tok = ((await ok.json()) as { token: string }).token;
+      const stored = await h.repo
+        .sql`select secret_hash from agent_credentials where agent_id = ${agentId}`;
+      expect(JSON.stringify(stored)).not.toContain(tok.split(".")[1]!);
+      // without the CSRF token nothing is enrolled
+      const noCsrf = await send("POST", "/v1/app/agents", {
+        cookie: a.cookie,
+        body: { displayName: "Sneaky" },
+      });
+      expect(noCsrf.status).toBe(403);
+      expect(
+        (
+          await h.repo
+            .sql`select count(*)::int n from agent_passports where display_name = 'Sneaky'`
+        )[0]!.n,
+      ).toBe(0);
+    });
+
     it("logout revokes the session; an idle session expires; a disabled account's sessions stop working", async () => {
       const s = await signedIn();
       expect(

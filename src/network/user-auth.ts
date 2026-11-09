@@ -86,6 +86,10 @@ export async function verifyPassword(
 // A fixed hash to spend the same work on an unknown email.
 const DECOY = `scrypt$${N}$${R}$${P}$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
 
+/** The principal that sponsors an organization's agents. Derived, so no extra mapping table is needed. */
+export const principalIdOf = (organizationId: string) =>
+  `pfp_${organizationId.replace(/^org_/u, "")}`;
+
 export const EmailSchema = z
   .string()
   .trim()
@@ -148,7 +152,8 @@ export class UserAuthService {
     const b = parsed.data;
     if (
       b.password.toLowerCase() === b.email ||
-      b.password.toLowerCase().includes(b.email.split("@")[0]!) ||
+      (b.email.split("@")[0]!.length >= 4 &&
+        b.password.toLowerCase().includes(b.email.split("@")[0]!)) ||
       new Set(b.password).size < 5
     )
       return { ok: false, refusal: "WEAK_PASSWORD" };
@@ -160,6 +165,8 @@ export class UserAuthService {
     try {
       await this.deps.sql.begin(async (tx) => {
         await tx`insert into organizations (id, display_name) values (${organizationId}, ${b.organizationName})`;
+        // The organization's principal: the legal owner that agents are sponsored by and Authorities are issued for.
+        await tx`insert into principals (id, display_name) values (${principalIdOf(organizationId)}, ${b.organizationName})`;
         await tx`insert into user_accounts (user_id, email, display_name, password_hash, created_at)
           values (${userId}, ${b.email}, ${b.displayName}, ${hash}, ${now})`;
         // The member's bearer secret is random, discarded and never shown: this member is reachable only through a session.

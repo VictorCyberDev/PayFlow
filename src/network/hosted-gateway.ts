@@ -4,11 +4,14 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { z } from "zod";
 import {
   UserAuthService,
   SESSION_ABSOLUTE_MS,
   clearedSessionCookie,
   csrfFor,
+  principalIdOf,
   readSessionCookie,
   sessionCookie,
 } from "./user-auth.js";
@@ -251,6 +254,38 @@ function send(res: ServerResponse, reply: RestResponse): void {
     "x-content-type-options": "nosniff",
   });
   res.end(JSON.stringify(reply.body));
+}
+
+const APP_FILES: Record<string, string> = {
+  "/workspace": "index.html",
+  "/workspace/": "index.html",
+  "/workspace/index.html": "index.html",
+  "/workspace/app.js": "app.js",
+  "/workspace/app.css": "app.css",
+};
+const APP_TYPES: Record<string, string> = {
+  html: "text/html; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8",
+};
+const appCache = new Map<string, { type: string; body: Buffer }>();
+/** The customer web app: three static files, read once from `app-ui/`. Anything not in the table is a 404 (no path traversal). */
+function appAsset(path: string): { type: string; body: Buffer } | null {
+  const file = APP_FILES[path];
+  if (!file) return null;
+  const cached = appCache.get(file);
+  if (cached) return cached;
+  for (const rel of ["../../app-ui/", "../../../app-ui/", "../app-ui/"]) {
+    try {
+      const body = readFileSync(new URL(rel + file, import.meta.url));
+      const entry = { type: APP_TYPES[file.split(".").pop()!]!, body };
+      appCache.set(file, entry);
+      return entry;
+    } catch {
+      /* try the next layout (source vs. compiled) */
+    }
+  }
+  return null;
 }
 
 /**
@@ -2251,6 +2286,35 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     const path = url.pathname
       .replace(/^\/api(?=\/v1\/)/u, "")
       .replace(/\/+$/u, "");
+    if (path === "/workspace" || path.startsWith("/workspace/")) {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        res.writeHead(405, { allow: "GET, HEAD" });
+        res.end();
+        return true;
+      }
+      const asset = appAsset(path);
+      if (!asset) {
+        res.writeHead(404, {
+          "content-type": "text/plain",
+          "cache-control": "no-store",
+        });
+        res.end("Not found");
+        return true;
+      }
+      res.writeHead(200, {
+        "content-type": asset.type,
+        "cache-control": asset.type.startsWith("text/html")
+          ? "no-store"
+          : "no-cache",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "x-frame-options": "DENY",
+        "content-security-policy":
+          "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      });
+      res.end(req.method === "HEAD" ? undefined : asset.body);
+      return true;
+    }
     if (!path.startsWith("/v1/")) return false;
     const method = req.method === "GET" ? "GET" : "POST";
     if (req.method !== "GET" && req.method !== "POST") {
@@ -2528,6 +2592,142 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           csrfToken: csrfFor(sessionTokenIn),
           expiresAt: view.expiresAt,
         });
+        return true;
+      }
+      // ---- agents: a person enrolls the agents their missions will use, and issues each one a credential (shown once).
+      const agentRoute =
+        /^\/v1\/app\/agents(?:\/(agt_[a-f0-9]{24})\/credentials)?$/u.exec(path);
+      if (agentRoute) {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        const m = view.member;
+        const tenant = {
+          organizationId: m.organizationId,
+          environment: m.environment,
+        };
+        if (method === "GET" && !agentRoute[1]) {
+          if (!can(m.role, "view:agents")) {
+            json(403, {
+              reason: "PERMISSION_DENIED",
+              requiredPermission: "view:agents",
+            });
+            return true;
+          }
+          const rows =
+            await sql`select oa.agent_id, a.display_name, oa.lifecycle, a.expires_at
+            from organization_agents oa join agent_passports a on a.id = oa.agent_id
+            where oa.organization_id = ${tenant.organizationId} and oa.environment = ${tenant.environment}
+            order by a.display_name, oa.agent_id`;
+          json(200, {
+            agents: rows.map((r) => ({
+              agentId: String(r.agent_id),
+              displayName: String(r.display_name),
+              lifecycle: String(r.lifecycle),
+            })),
+          });
+          return true;
+        }
+        if (!can(m.role, "credential:issue")) {
+          await audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action: "PERMISSION_DENIED",
+            subjectKind: "ROUTE",
+            subjectId: path.slice(0, 120),
+            detail: { permission: "credential:issue", role: m.role },
+            occurredAt: iso(),
+          });
+          json(403, {
+            reason: "PERMISSION_DENIED",
+            requiredPermission: "credential:issue",
+          });
+          return true;
+        }
+        if (method === "POST" && !agentRoute[1]) {
+          const parsed = z
+            .object({ displayName: z.string().trim().min(1).max(80) })
+            .strict()
+            .safeParse(body);
+          if (!parsed.success) {
+            json(400, { reason: "REQUEST_MALFORMED" });
+            return true;
+          }
+          const now = clock();
+          const agentId = `agt_${randomBytes(12).toString("hex")}`;
+          const principalId = principalIdOf(m.organizationId);
+          await repo.saveAgent({
+            id: agentId,
+            principalId,
+            displayName: parsed.data.displayName,
+            issuedAt: new Date(now.getTime() - 60_000).toISOString(),
+            expiresAt: new Date(now.getTime() + 365 * 86_400_000).toISOString(),
+            status: "ACTIVE",
+            capabilities: ["CREATE_ORDER", "CAPTURE_PAYMENT"],
+          });
+          await sql`insert into organization_agents (organization_id, agent_id, environment, sponsor_principal_id, lifecycle)
+            values (${m.organizationId}, ${agentId}, ${m.environment}, ${principalId}, 'ACTIVE')`;
+          await audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action: "AGENT_ENROLLED",
+            subjectKind: "AGENT",
+            subjectId: agentId,
+            detail: {},
+            occurredAt: now.toISOString(),
+          });
+          json(201, { agentId, displayName: parsed.data.displayName });
+          return true;
+        }
+        if (method === "POST" && agentRoute[1]) {
+          // The agent must belong to THIS organization: a credential is never issued across tenants.
+          const [owned] = await sql`select 1 from organization_agents
+            where organization_id = ${m.organizationId} and environment = ${m.environment} and agent_id = ${agentRoute[1]}
+              and lifecycle not in ('SUSPENDED','REVOKED','RETIRED')`;
+          if (!owned) {
+            json(404, { reason: "AGENT_NOT_FOUND" });
+            return true;
+          }
+          const issued = await store.issue(
+            {
+              organizationId: m.organizationId,
+              environment: m.environment,
+              agentId: agentRoute[1],
+              scopes: ["action:request", "proof:read"],
+              ttlSeconds: 30 * 86_400,
+              label: `issued by ${m.displayName}`.slice(0, 128),
+            },
+            iso(),
+          );
+          await audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action: "CREDENTIAL_ISSUED",
+            subjectKind: "CREDENTIAL",
+            subjectId: issued.credential.credentialId,
+            detail: { agentId: agentRoute[1] },
+            occurredAt: iso(),
+          });
+          json(201, {
+            credentialId: issued.credential.credentialId,
+            // Shown exactly once. PayFlow stores only a digest.
+            token: issued.token,
+            expiresAt: issued.credential.expiresAt,
+            notice: "Store this token now. It cannot be retrieved again.",
+          });
+          return true;
+        }
+        json(404, { reason: "ROUTE_NOT_FOUND" });
         return true;
       }
       if (method === "POST" && path === "/v1/app/logout") {

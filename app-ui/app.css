@@ -1,0 +1,259 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #fff;
+  --ink: #14181f;
+  --muted: #4b5563;
+  --line: #d7dce3;
+  --accent: #1f4fd8;
+  --accent-ink: #fff;
+  --ok: #146c43;
+  --warn: #8a5a00;
+  --bad: #a11d33;
+  --focus: #1f4fd8;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1218;
+    --panel: #171b23;
+    --ink: #eef1f6;
+    --muted: #a8b0bd;
+    --line: #2a3140;
+    --accent: #7ea0ff;
+    --accent-ink: #0b1020;
+    --ok: #5fd197;
+    --warn: #f0b955;
+    --bad: #ff8a9b;
+    --focus: #7ea0ff;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.5;
+}
+.skip {
+  position: absolute;
+  left: -999px;
+}
+.skip:focus {
+  left: 8px;
+  top: 8px;
+  background: var(--panel);
+  padding: 8px;
+  z-index: 10;
+}
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+header.bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+header.bar nav {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+header.bar a,
+.link {
+  color: var(--accent);
+  text-decoration: none;
+  padding: 8px 10px;
+  border-radius: 6px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+header.bar a[aria-current="page"] {
+  background: var(--bg);
+  font-weight: 600;
+  color: var(--ink);
+}
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+h1 {
+  font-size: 1.5rem;
+  margin: 8px 0 16px;
+}
+h2 {
+  font-size: 1.15rem;
+  margin: 24px 0 8px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 12px 0;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+label {
+  display: block;
+  font-weight: 600;
+  margin: 12px 0 4px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 2px 0 0;
+}
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 10px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  min-height: 44px;
+}
+button,
+.btn {
+  font: inherit;
+  padding: 10px 16px;
+  min-height: 44px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+button.danger {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+button[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  border: 1px solid var(--line);
+}
+.badge.ACTIVE {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.badge.PAUSED,
+.badge.PENDING_OWNER_APPROVAL {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.badge.REVOKED,
+.badge.CANCELLED,
+.badge.FAILED,
+.badge.EXPIRED {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.notice {
+  border-left: 4px solid var(--accent);
+  padding: 8px 12px;
+  background: var(--bg);
+  margin: 12px 0;
+}
+.notice.bad {
+  border-color: var(--bad);
+}
+.notice.ok {
+  border-color: var(--ok);
+}
+.secret {
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px dashed var(--line);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.steps {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0;
+  list-style: none;
+}
+.steps li {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+.steps li[aria-current="step"] {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.check input {
+  width: 22px;
+  min-height: 22px;
+}
+@media (max-width: 480px) {
+  main {
+    padding: 12px;
+  }
+  .row {
+    align-items: stretch;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .card {
+    transition: border-color 0.15s;
+  }
+}
