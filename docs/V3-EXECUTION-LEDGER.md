@@ -71,3 +71,4 @@ Dated addendum. Evidence levels and honest not-done lists: `docs/M51-M53-STATUS.
 - Migrations added this stretch: 055 workspace discovery, 056 bookings, 057 automation, 058 quorum. None is applied to any public database.
 - Full local regression on PostgreSQL at the last local head: 151 files passed, 2668 tests passed, 3 files and 4 tests skipped (no credentials).
 - Not delivered: no live provider, no public deployment, no notification delivery, no product-research outputs, and the milestones listed as not done in the status docs.
+- **PR #64** (M68 readiness on the Agents screen, partial M1–M90 matrix, this ledger) squash-merged as `a3cfed6`, pinned to head `c86594f`: `verify` (23:12–23:32Z), `console`, `console-e2e` green.

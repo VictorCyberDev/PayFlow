@@ -2531,6 +2531,198 @@ function recordActions(key, rec, redraw, out, cur) {
       ? h("div", {}, f, h("div", { class: "actions" }, btns))
       : null;
   }
+  if (key === "disputes" && rec.status === "OPEN") {
+    const base = `/v1/admin/org/disputes/${rec.disputeId}`;
+    const f = h(
+      "form",
+      {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          const x = new FormData(f);
+          const refund = String(x.get("decision")) === "REFUND";
+          const ref = String(x.get("ref")).trim();
+          await ask(`${base}/resolve`, {
+            decision: String(x.get("decision")),
+            ...(refund
+              ? {
+                  refundMinor: Math.round(Number(x.get("amount")) * 100),
+                  evidenceKind: String(x.get("kind")),
+                  evidenceRef: ref,
+                }
+              : {}),
+            note: String(x.get("note")),
+          });
+        },
+      },
+      h("label", { for: `rd-${rec.disputeId}`, text: "How it was settled" }),
+      h(
+        "select",
+        { id: `rd-${rec.disputeId}`, name: "decision" },
+        h("option", { value: "REFUND", text: "A refund was made" }),
+        h("option", { value: "NO_REFUND", text: "No refund" }),
+      ),
+      h("label", {
+        for: `ra-${rec.disputeId}`,
+        text: `Refund amount (${cur}), if any`,
+      }),
+      h("input", {
+        id: `ra-${rec.disputeId}`,
+        name: "amount",
+        type: "number",
+        min: "0.01",
+        step: "0.01",
+      }),
+      h("label", {
+        for: `rk-${rec.disputeId}`,
+        text: "What proves the refund",
+      }),
+      h(
+        "select",
+        { id: `rk-${rec.disputeId}`, name: "kind" },
+        h("option", {
+          value: "PROVIDER_CONFIRMATION",
+          text: "The provider confirmed it",
+        }),
+        h("option", { value: "PAYFLOW_PROOF", text: "A PayFlow Proof" }),
+      ),
+      h("label", {
+        for: `rr-${rec.disputeId}`,
+        text: "Reference for that proof",
+      }),
+      h("input", { id: `rr-${rec.disputeId}`, name: "ref", maxlength: "200" }),
+      h("label", { for: `rn-${rec.disputeId}`, text: "A short note" }),
+      h("input", { id: `rn-${rec.disputeId}`, name: "note", maxlength: "500" }),
+      h("button", {
+        class: "primary",
+        type: "submit",
+        text: "Record the outcome",
+      }),
+      h("p", {
+        class: "hint",
+        text: "A refund is recorded only with proof, and never for more than you claimed.",
+      }),
+    );
+    return h(
+      "div",
+      {},
+      h("details", {}, h("summary", { text: "Settle this dispute" }), f),
+      h(
+        "div",
+        { class: "actions" },
+        h("button", {
+          type: "button",
+          text: "Withdraw this dispute",
+          onclick: () =>
+            ask(`${base}/withdraw`, { reason: "Withdrawn by the owner" }),
+        }),
+      ),
+    );
+  }
+  if (key === "contractors") {
+    const blocks = [];
+    for (const ms of rec.milestones ?? []) {
+      const subs = (ms.deliverables ?? []).filter(
+        (d) => d.status === "SUBMITTED",
+      );
+      blocks.push(
+        h(
+          "section",
+          {},
+          h("h4", {
+            text: `Milestone ${ms.index}: ${wordsOf(ms.state)}`,
+          }),
+          h("dl", {}, scalarRows(ms, cur)),
+          (ms.deliverables ?? []).length === 0
+            ? h("p", { class: "hint", text: "Nothing has been submitted yet." })
+            : h(
+                "ul",
+                {},
+                ms.deliverables.map((d) =>
+                  h("li", {
+                    text: `${wordsOf(d.status)}${d.decisionNote ? ": " + d.decisionNote : ""}`,
+                  }),
+                ),
+              ),
+          subs.map((d) => {
+            const f = h(
+              "form",
+              {
+                onsubmit: async (e) => {
+                  e.preventDefault();
+                  const x = new FormData(f);
+                  const ref = String(x.get("ref")).trim();
+                  await ask(
+                    `/v1/admin/org/deliverables/${d.deliverableId}/decide`,
+                    {
+                      decision: String(x.get("decision")),
+                      evidenceKind: String(x.get("kind")),
+                      ...(ref ? { evidenceRef: ref } : {}),
+                      note: String(x.get("note")),
+                    },
+                  );
+                },
+              },
+              h("label", {
+                for: `dd-${d.deliverableId}`,
+                text: "Your decision on the submitted work",
+              }),
+              h(
+                "select",
+                { id: `dd-${d.deliverableId}`, name: "decision" },
+                h("option", { value: "ACCEPT", text: "Accept it" }),
+                h("option", { value: "REJECT", text: "Reject it" }),
+              ),
+              h("label", {
+                for: `dk-${d.deliverableId}`,
+                text: "What shows it",
+              }),
+              h(
+                "select",
+                { id: `dk-${d.deliverableId}`, name: "kind" },
+                h("option", {
+                  value: "OWNER_ATTESTATION",
+                  text: "My word only",
+                }),
+                h("option", {
+                  value: "DOCUMENT_REF",
+                  text: "A document I have",
+                }),
+              ),
+              h("label", {
+                for: `dr-${d.deliverableId}`,
+                text: "Document name or link (if any)",
+              }),
+              h("input", {
+                id: `dr-${d.deliverableId}`,
+                name: "ref",
+                maxlength: "500",
+              }),
+              h("label", {
+                for: `dn-${d.deliverableId}`,
+                text: "A short note",
+              }),
+              h("input", {
+                id: `dn-${d.deliverableId}`,
+                name: "note",
+                maxlength: "300",
+              }),
+              h("button", {
+                class: "primary",
+                type: "submit",
+                text: "Record my decision",
+              }),
+              h("p", {
+                class: "hint",
+                text: "Accepting only records that the work is acceptable. It pays nothing by itself.",
+              }),
+            );
+            return f;
+          }),
+        ),
+      );
+    }
+    return blocks.length ? h("div", {}, blocks) : null;
+  }
   if (key === "orders") {
     const f = h(
       "form",
@@ -2704,8 +2896,214 @@ function recordsNav(id) {
         {},
         h("a", {
           class: "link",
+          href: `#/missions/${id}/launch`,
+          text: "Launch board: where each part stands",
+        }),
+      ),
+      h(
+        "li",
+        {},
+        h("a", {
+          class: "link",
           href: `#/missions/${id}/proof`,
           text: "Proof: the history of every change",
+        }),
+      ),
+    ),
+  );
+}
+/**
+ * Launch board (M55): where each part of a launch stands, in one place. Every line is derived from a real record and says who has to act.
+ * "PayFlow waits" means nothing is owed from you; "You" means the next step is yours; "Outside PayFlow" marks work PayFlow cannot do.
+ * Nothing here is invented: an empty record reads as not started, and services are search-only because nothing can be bought through them.
+ */
+function launchLines(d) {
+  const lines = [];
+  const b = d.bookings ?? [];
+  const live = b.find(
+    (x) => !["DECLINED", "CANCELLED", "EXPIRED"].includes(x.state),
+  );
+  lines.push(
+    !live
+      ? {
+          area: "A place to work",
+          who: "You",
+          state: "Not started",
+          detail: "Search for a workspace and propose a booking.",
+          href: "workspaces",
+        }
+      : live.state === "UNKNOWN"
+        ? {
+            area: "A place to work",
+            who: "You",
+            state: "Needs checking",
+            detail: live.headline,
+            href: "workspaces",
+          }
+        : live.state === "CONFIRMED"
+          ? {
+              area: "A place to work",
+              who: "PayFlow waits",
+              state: "Confirmed",
+              detail: live.headline,
+              href: "workspaces",
+            }
+          : {
+              area: "A place to work",
+              who: live.state === "PROPOSED" ? "You" : "Outside PayFlow",
+              state: "In progress",
+              detail: live.headline,
+              href: "workspaces",
+            },
+  );
+  const o = d.orders ?? [];
+  lines.push(
+    o.length === 0
+      ? {
+          area: "Equipment",
+          who: "You",
+          state: "Not started",
+          detail: "No purchase has been placed.",
+          href: "orders",
+        }
+      : o.every((x) => x.status === "DELIVERED")
+        ? {
+            area: "Equipment",
+            who: "PayFlow waits",
+            state: "Delivered",
+            detail: `${o.length} order${o.length === 1 ? "" : "s"} delivered.`,
+            href: "orders",
+          }
+        : o.some((x) => x.status === "IN_DISPUTE")
+          ? {
+              area: "Equipment",
+              who: "You",
+              state: "In dispute",
+              detail: "An order is in dispute.",
+              href: "disputes",
+            }
+          : {
+              area: "Equipment",
+              who: "Outside PayFlow",
+              state: "In progress",
+              detail: `${o.length} order${o.length === 1 ? "" : "s"} placed; waiting for the supplier.`,
+              href: "orders",
+            },
+  );
+  const ms = (d.contracts ?? []).flatMap((c) =>
+    c.terminated ? [] : (c.milestones ?? []),
+  );
+  lines.push(
+    (d.contracts ?? []).length === 0
+      ? {
+          area: "Specialist help",
+          who: "You",
+          state: "Not started",
+          detail: "No contractor work has been agreed.",
+          href: "contractors",
+        }
+      : ms.some((m) => m.state === "SUBMITTED")
+        ? {
+            area: "Specialist help",
+            who: "You",
+            state: "Needs your decision",
+            detail: "Work has been submitted and is waiting for you.",
+            href: "contractors",
+          }
+        : ms.length > 0 &&
+            ms.every((m) => ["PAID", "CANCELLED"].includes(m.state))
+          ? {
+              area: "Specialist help",
+              who: "PayFlow waits",
+              state: "Done",
+              detail: "Every milestone is paid or cancelled.",
+              href: "contractors",
+            }
+          : {
+              area: "Specialist help",
+              who: "Outside PayFlow",
+              state: "In progress",
+              detail: "Work is under way.",
+              href: "contractors",
+            },
+  );
+  lines.push({
+    area: "Professional services",
+    who: "You",
+    state: "Search only",
+    detail:
+      "PayFlow can compare packages. Engaging a provider, and any professional advice, happens outside PayFlow.",
+    href: "services",
+  });
+  if (d.summary)
+    lines.push({
+      area: "Money",
+      who: "PayFlow waits",
+      state: d.summary.overCommittedMinor > 0 ? "Over budget" : "Within budget",
+      detail: `${money(d.summary.exposureMinor, d.currency)} set aside or committed of ${money(d.summary.ceilingMinor, d.currency)}.`,
+      href: "finance",
+    });
+  return lines;
+}
+async function launchBoardPage(id) {
+  const m = await api(`/v1/admin/org/missions/${id}`);
+  if (!m.ok)
+    return shell(
+      "#/missions",
+      h("h1", { text: "Mission not found" }),
+      notice("bad", "That mission doesn't exist, or you can't see it."),
+    );
+  const c = m.data.mission.activeContract ?? m.data.mission.latestContract;
+  const get = async (p) =>
+    (await api(`/v1/admin/org/missions/${id}/${p}`)).data ?? {};
+  const [b, o, k, l] = await Promise.all([
+    get("bookings"),
+    get("orders"),
+    get("contracts"),
+    get("ledger"),
+  ]);
+  const lines = launchLines({
+    bookings: b.bookings,
+    orders: o.orders,
+    contracts: k.contracts,
+    summary: l.summary,
+    currency: c?.currency ?? "USD",
+  });
+  shell(
+    "#/missions",
+    h(
+      "div",
+      { class: "row" },
+      h("h1", { text: "Launch board" }),
+      h("a", {
+        class: "link",
+        href: `#/missions/${id}`,
+        text: "Back to mission",
+      }),
+    ),
+    h("p", {
+      text: "Where each part stands, from the records themselves. It shows what you need to do and what happens outside PayFlow.",
+    }),
+    lines.map((x) =>
+      h(
+        "article",
+        { class: "card" },
+        h(
+          "div",
+          { class: "row" },
+          h("h2", { text: x.area }),
+          h("span", { class: "badge" }, glyph("dot"), x.state),
+        ),
+        h(
+          "dl",
+          {},
+          row("Next step is with", x.who),
+          row("What we know", x.detail),
+        ),
+        h("a", {
+          class: "link",
+          href: `#/missions/${id}/${x.href}`,
+          text: "Open",
         }),
       ),
     ),
@@ -2765,10 +3163,15 @@ async function proofPage(id) {
 async function checkingPage() {
   const ms = (await api("/v1/admin/org/missions")).data?.missions ?? [];
   const unclearBookings = [];
+  const orderChecks = [];
   for (const m of ms.slice(0, 25)) {
     const r = await api(`/v1/admin/org/missions/${m.missionId}/bookings`);
     for (const b of r.data?.bookings ?? [])
       if (b.state === "UNKNOWN") unclearBookings.push({ m, b });
+    const o = await api(`/v1/admin/org/missions/${m.missionId}/orders`);
+    for (const x of o.data?.orders ?? [])
+      if (x.overdue || (x.claimedStatus && x.claimedStatus !== x.status))
+        orderChecks.push({ m, x });
   }
   const jobsR = await api("/v1/admin/org/automation/jobs");
   const unclearJobs = (jobsR.data?.jobs ?? []).filter(
@@ -2824,9 +3227,28 @@ async function checkingPage() {
       text: "These are things where PayFlow cannot tell what happened. It will not try again or guess. The money involved stays set aside until you settle them.",
     }),
     out,
-    unclearBookings.length === 0 && unclearJobs.length === 0
+    unclearBookings.length === 0 &&
+      unclearJobs.length === 0 &&
+      orderChecks.length === 0
       ? h("p", { text: "Nothing needs checking." })
       : null,
+    orderChecks.map(({ m, x }) =>
+      h(
+        "article",
+        { class: "card" },
+        h("h3", { text: "An order to check" }),
+        h("p", {
+          text: x.overdue
+            ? "This order is past its expected delivery and nothing has been recorded."
+            : `Someone reported it as ${wordsOf(x.claimedStatus)}. PayFlow records it as ${wordsOf(x.status)} until you record evidence.`,
+        }),
+        h("a", {
+          class: "link",
+          href: `#/missions/${m.missionId}/orders`,
+          text: "Open the order",
+        }),
+      ),
+    ),
     unclearBookings.map(({ m, b }) =>
       h(
         "article",
@@ -3015,6 +3437,7 @@ async function render() {
     if (hash === "#/help") return helpPage();
     const sec = /^#\/missions\/(msn_[a-f0-9]{24})\/([a-z]+)$/.exec(hash);
     if (sec && sec[2] === "proof") return await proofPage(sec[1]);
+    if (sec && sec[2] === "launch") return await launchBoardPage(sec[1]);
     if (sec && sec[2] === "services") return await servicesPage(sec[1]);
     if (sec && SECTIONS[sec[2]]) return await recordsPage(sec[1], sec[2]);
     const w = /^#\/missions\/(msn_[a-f0-9]{24})\/workspaces$/.exec(hash);
