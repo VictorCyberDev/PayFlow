@@ -594,6 +594,23 @@ const chromePath = [
       await page.goto(`${h.origin}/workspace#/missions/${mid}/finance`);
       await page.getByRole("heading", { name: "Finance", level: 1 }).waitFor();
       expect(await page.locator("main").innerText()).toContain("£");
+      expect(
+        await page
+          .getByRole("button", { name: "Download for your bookkeeper (CSV)" })
+          .count(),
+      ).toBe(1);
+      const csv = await page.evaluate(
+        (u: string) =>
+          fetch(u, { credentials: "same-origin" }).then((r) => r.text()),
+        `/v1/admin/org/missions/${mid}/ledger/export`,
+      );
+      const exported = JSON.parse(csv) as { csv: string; filename: string };
+      expect(exported.csv.split("\r\n")[0]).toBe(
+        '"Item","Kind","Description","Currency","Amount","Refunded","At risk now","Stage","Verification","Recorded at"',
+      );
+      expect(exported.csv).toContain("Harbour Studio (fictional)");
+      expect(exported.csv).toContain('"1485.00"');
+      expect(exported.filename).toBe(`payflow-ledger-${mid}.csv`);
       // services: a search lists fictional packages honestly, and an unstated price is shown as unstated
       await page.goto(`${h.origin}/workspace#/missions/${mid}/services`);
       await page.getByRole("heading", { name: "Services", level: 1 }).waitFor();

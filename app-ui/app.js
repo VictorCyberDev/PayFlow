@@ -2551,6 +2551,33 @@ async function recordsPage(id, key) {
     ),
     h("p", { text: sec.blurb }),
     out,
+    key === "finance"
+      ? h(
+          "div",
+          { class: "actions" },
+          h("button", {
+            type: "button",
+            text: "Download for your bookkeeper (CSV)",
+            onclick: async () => {
+              const x = await api(`/v1/admin/org/missions/${id}/ledger/export`);
+              if (!x.ok)
+                return out.replaceChildren(
+                  notice("bad", reasonText(x.data?.reason)),
+                );
+              const a = h("a", {
+                href: URL.createObjectURL(
+                  new Blob([x.data.csv], { type: "text/csv" }),
+                ),
+                download: x.data.filename,
+              });
+              document.body.append(a);
+              a.click();
+              a.remove();
+              out.replaceChildren(notice("ok", x.data.notice));
+            },
+          }),
+        )
+      : null,
     ...body.flat(),
   );
 }

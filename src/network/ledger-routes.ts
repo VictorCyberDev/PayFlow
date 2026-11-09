@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { toCsv } from "../missions/ap-export.js";
 import type { RestRequest, RestResponse } from "./rest.js";
 import type { Member, Permission } from "./rbac.js";
 import type { MissionCaller } from "../missions/service.js";
@@ -60,7 +61,7 @@ export function createLedgerRoutes(deps: LedgerRouteDeps) {
 
   async function member(request: RestRequest): Promise<RestResponse | null> {
     const list = new RegExp(
-      `^/v1/admin/org/missions/(${MID})/ledger(?:/(items))?$`,
+      `^/v1/admin/org/missions/(${MID})/ledger(?:/(items|export))?$`,
       "u",
     ).exec(request.path);
     const item = new RegExp(
@@ -86,6 +87,16 @@ export function createLedgerRoutes(deps: LedgerRouteDeps) {
       if (read && !list[2]) {
         const r = await service.overview(caller, list[1]!);
         return r.ok ? reply(requestId, 200, r.value) : refuse(requestId, r);
+      }
+      if (read && list[2] === "export") {
+        const r = await service.overview(caller, list[1]!);
+        if (!r.ok) return refuse(requestId, r);
+        return reply(requestId, 200, {
+          filename: `payflow-ledger-${list[1]!}.csv`,
+          csv: toCsv(r.value.items),
+          notice:
+            "An export for your bookkeeping. It is not connected to any accounting system and records nothing as booked.",
+        });
       }
       if (!read && list[2] === "items") {
         const r = await service.createItem(caller, list[1]!, request.body);
