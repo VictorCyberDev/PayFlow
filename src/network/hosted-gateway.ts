@@ -4,6 +4,8 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { createBookingRoutes } from "./booking-routes.js";
+import { BookingService } from "../missions/booking-service.js";
 import { createWorkspaceRoutes } from "./workspace-routes.js";
 import { WorkspaceService } from "../missions/workspace-service.js";
 import {
@@ -1597,6 +1599,30 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     sources: options.workspaceSources ?? builtinWorkspaceSources(),
     now: iso,
   });
+  const bookingService = new BookingService({
+    sql,
+    audit,
+    missions: missionService,
+    ledger: ledgerService,
+    now: iso,
+  });
+  const bookingRoutes = createBookingRoutes({
+    service: bookingService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
   const workspaceRoutes = createWorkspaceRoutes({
     service: workspaceService,
     reply: (requestId, status, body) => reply(requestId, status, body),
@@ -3137,6 +3163,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path.startsWith("/v1/agent/delegations/") ||
       path === "/v1/agent/missions" ||
       path.startsWith("/v1/agent/missions/") ||
+      path.startsWith("/v1/agent/bookings/") ||
       path === "/v1/agent/tasks" ||
       path.startsWith("/v1/agent/tasks/") ||
       path.startsWith("/v1/agent/ledger/") ||
@@ -3178,6 +3205,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => talentScopeRoutes.agent(request))) ??
           (await safely(() => talentCandidateRoutes.agent(request))) ??
           (await safely(() => workspaceRoutes.agent(request))) ??
+          (await safely(() => bookingRoutes.agent(request))) ??
           (await safely(() => shortlistRoutes.agent(request))) ??
           (await safely(() => talentOfferRoutes.agent(request))) ??
           (await safely(() => contractorRoutes.agent(request))) ?? {
@@ -3213,6 +3241,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => talentScopeRoutes.member(request))) ??
         (await safely(() => talentCandidateRoutes.member(request))) ??
         (await safely(() => workspaceRoutes.member(request))) ??
+        (await safely(() => bookingRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
         (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => contractorRoutes.member(request))) ??
