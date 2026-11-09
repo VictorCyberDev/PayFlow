@@ -93,6 +93,10 @@
     {
       "path": "/v1/admin/ops/reconcile/tick/",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/v1/admin/ops/automation/run/",
+      "schedule": "30 6 * * *"
     }
   ],
   "redirects": [

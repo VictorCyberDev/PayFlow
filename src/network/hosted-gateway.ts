@@ -7,6 +7,14 @@ import {
 import { createBookingRoutes } from "./booking-routes.js";
 import { BookingService } from "../missions/booking-service.js";
 import { createWorkspaceRoutes } from "./workspace-routes.js";
+import {
+  AutomationService,
+  type Handler,
+} from "../automation/automation-service.js";
+import { PACKS, applyPack } from "../missions/policy-packs.js";
+import { QuorumService } from "../missions/quorum-service.js";
+import { createQuorumRoutes } from "./quorum-routes.js";
+import { createAutomationRoutes } from "./automation-routes.js";
 import { createServiceMarketRoutes } from "./service-market-routes.js";
 import { ServiceMarketService } from "../missions/service-market-service.js";
 import { sandboxServiceSource } from "../missions/service-market-sources.js";
@@ -168,7 +176,7 @@ export interface HostedGatewayOptions {
   readonly adminToken?: string;
   /**
    * A scheduler credential (for example Vercel Cron's `CRON_SECRET`). It can call ONE route, the
-   * observation-only `GET /v1/admin/ops/reconcile/tick`, and nothing else. It is not an operator token.
+   * observation-only `GET /v1/admin/ops/reconcile/tick` and `GET /v1/admin/ops/automation/run` (which can only run the registered handlers), and nothing else. It is not an operator token.
    */
   readonly cronSecret?: string;
   /**
@@ -1135,8 +1143,10 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     afterChange: (tenant, missionId) =>
       authorityCompiler.reconcile(tenant, missionId),
   });
+  const quorumService = new QuorumService({ sql, now: iso });
   const missionRoutes = createMissionRoutes({
     service: missionService,
+    quorum: quorumService,
     authorities: (caller, missionId) =>
       authorityCompiler.list(caller, missionId),
     reply: (requestId, status, body) => reply(requestId, status, body),
@@ -1602,13 +1612,33 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     sources: options.workspaceSources ?? builtinWorkspaceSources(),
     now: iso,
   });
+  const automation = new AutomationService({ sql, now: iso });
   const bookingService = new BookingService({
     sql,
     audit,
     missions: missionService,
     ledger: ledgerService,
     now: iso,
+    automation,
   });
+  // The only handlers that exist. A job kind with no handler FAILS; nothing here moves money or contacts anyone.
+  const automationHandlers: Record<string, Handler> = {
+    BOOKING_EXPIRE: async (job) => {
+      const missionId = job.payload.missionId;
+      if (typeof missionId !== "string")
+        return { outcome: "FAILED", note: "no mission" };
+      await bookingService.expireDue(
+        {
+          organizationId: job.organizationId,
+          environment: job.environment,
+          id: "automation",
+          kind: "MEMBER",
+        },
+        missionId,
+      );
+      return { outcome: "SUCCEEDED" };
+    },
+  };
   const bookingRoutes = createBookingRoutes({
     service: bookingService,
     reply: (requestId, status, body) => reply(requestId, status, body),
@@ -1662,6 +1692,28 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         caller.organizationId,
         caller.environment,
       )) !== null,
+  });
+  const quorumRoutes = createQuorumRoutes({
+    service: quorumService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+  });
+  const automationRoutes = createAutomationRoutes({
+    service: automation,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
   });
   const talentCandidateRoutes = createTalentCandidateRoutes({
     service: talentCandidateService,
@@ -2096,7 +2148,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     if (opsPath) {
       // The scheduler credential may call the observation-only tick and nothing else.
       const cronCall =
-        opsPath[1] === "reconcile/tick" &&
+        (opsPath[1] === "reconcile/tick" || opsPath[1] === "automation/run") &&
         request.method === "GET" &&
         cronAuthorized(request.authorization);
       if (!cronCall) {
@@ -2115,6 +2167,21 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           metrics: await reconciliationMetrics(sql, now),
           note: "Observation only. Reconciliation never creates or repeats a provider effect.",
         });
+      // Run due automation: turn due schedule slots into jobs, then run due jobs once. Repeating it is safe: a job is claimed under a
+      // lease, a repeated slot makes no second job, and only handlers listed above exist.
+      if (op === "automation/run") {
+        const ticked = await automation.tick();
+        const ran = await automation.runOnce(
+          `host-${randomUUID().slice(0, 8)}`,
+          automationHandlers,
+          20,
+        );
+        return reply(requestId, 200, {
+          ...ticked,
+          ...ran,
+          via: cronCall ? "SCHEDULER" : "OPERATOR",
+        });
+      }
       if (request.method === "GET" && op === "alerts")
         return reply(requestId, 200, { alerts: await alerts.list() });
       // GET is accepted so a plain scheduler (cron, a hosted cron service) can call it. A tick is
@@ -2685,6 +2752,50 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           expiresAt: view.expiresAt,
         });
         return true;
+      }
+      // ---- Safety packs (M69): named ceilings. Applying one only ever lowers what the person asked for, and says what it changed.
+      if (
+        path === "/v1/app/policy-packs" ||
+        path === "/v1/app/policy-packs/apply"
+      ) {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        if (method === "GET" && path === "/v1/app/policy-packs") {
+          json(200, { packs: PACKS });
+          return true;
+        }
+        if (method === "POST" && path === "/v1/app/policy-packs/apply") {
+          const Ask = z
+            .object({
+              pack: z.enum(["CAUTIOUS", "STANDARD", "EXPLORATORY_ONLY"]),
+              limits: z
+                .object({
+                  totalBudgetMinor: z.number().int().safe().min(0),
+                  maxPurchaseMinor: z.number().int().safe().min(0),
+                  approveAboveMinor: z.number().int().safe().min(0),
+                  durationDays: z.number().int().min(0).max(3650),
+                })
+                .strict(),
+            })
+            .strict();
+          const a = Ask.safeParse(body);
+          if (!a.success) {
+            json(400, { reason: "MALFORMED", recoverable: true });
+            return true;
+          }
+          json(200, {
+            ...applyPack(
+              PACKS.find((x) => x.id === a.data.pack)!,
+              a.data.limits,
+            ),
+          });
+          return true;
+        }
       }
       // ---- AI assist: a model SUGGESTS wording and rough numbers for the wizard. It decides nothing and is optional.
       if (method === "POST" && path === "/v1/app/missions/draft") {
@@ -3276,6 +3387,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => workspaceRoutes.member(request))) ??
         (await safely(() => bookingRoutes.member(request))) ??
         (await safely(() => serviceMarketRoutes.member(request))) ??
+        (await safely(() => automationRoutes.member(request))) ??
+        (await safely(() => quorumRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
         (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => contractorRoutes.member(request))) ??

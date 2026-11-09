@@ -42,6 +42,18 @@ interface Page {
   addScriptTag(o: { content: string }): Promise<unknown>;
   setViewportSize(s: { width: number; height: number }): Promise<void>;
   on(e: "dialog", h: (d: { accept(): Promise<void> }) => void): void;
+  route(
+    pattern: RegExp,
+    handler: (r: {
+      request(): { method(): string; postData(): string | null; url(): string };
+      fulfill(o: {
+        status: number;
+        contentType: string;
+        body: string;
+      }): Promise<void>;
+      continue(): Promise<void>;
+    }) => Promise<void> | void,
+  ): Promise<void>;
 }
 interface Ctx {
   newPage(): Promise<Page>;
@@ -582,6 +594,23 @@ const chromePath = [
       await page.goto(`${h.origin}/workspace#/missions/${mid}/finance`);
       await page.getByRole("heading", { name: "Finance", level: 1 }).waitFor();
       expect(await page.locator("main").innerText()).toContain("£");
+      expect(
+        await page
+          .getByRole("button", { name: "Download for your bookkeeper (CSV)" })
+          .count(),
+      ).toBe(1);
+      const csv = await page.evaluate(
+        (u: string) =>
+          fetch(u, { credentials: "same-origin" }).then((r) => r.text()),
+        `/v1/admin/org/missions/${mid}/ledger/export`,
+      );
+      const exported = JSON.parse(csv) as { csv: string; filename: string };
+      expect(exported.csv.split("\r\n")[0]).toBe(
+        '"Item","Kind","Description","Currency","Amount","Refunded","At risk now","Stage","Verification","Recorded at"',
+      );
+      expect(exported.csv).toContain("Harbour Studio (fictional)");
+      expect(exported.csv).toContain('"1485.00"');
+      expect(exported.filename).toBe(`payflow-ledger-${mid}.csv`);
       // services: a search lists fictional packages honestly, and an unstated price is shown as unstated
       await page.goto(`${h.origin}/workspace#/missions/${mid}/services`);
       await page.getByRole("heading", { name: "Services", level: 1 }).waitFor();
@@ -621,6 +650,303 @@ const chromePath = [
       }
       await ctx.close();
     }, 90_000);
+
+    it("a template only fills in the form: the owner's fields are prefilled and nothing is created", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "tpl@example.com",
+          password: "a long enough passphrase",
+          displayName: "Tess Template",
+          organizationName: "Template Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("tpl@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await page.goto(`${h.origin}/workspace#/launch`);
+      await page
+        .getByRole("heading", { name: "Start from a template", level: 1 })
+        .waitFor();
+      expect(await axe(page)).toEqual([]);
+      await page
+        .getByRole("button", {
+          name: "Use the template: Get a logo and brand basics",
+        })
+        .click();
+      await page.getByLabel("What should be done?").waitFor();
+      expect(
+        await page.evaluate(
+          () =>
+            (document.getElementById("w-objective") as HTMLInputElement).value,
+        ),
+      ).toBe("Commission a logo and brand basics");
+      await page.getByRole("button", { name: "Next" }).click();
+      expect(
+        await page.evaluate(
+          () => (document.getElementById("w-budget") as HTMLInputElement).value,
+        ),
+      ).toBe("1500");
+      expect(
+        Number((await h.repo.sql`select count(*)::int n from missions`)[0]!.n),
+      ).toBe(0);
+      await ctx.close();
+    }, 60_000);
+
+    it("record actions send the right request from the right button: approve or reject a negotiation, open a dispute (server rules are tested elsewhere)", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "act@example.com",
+          password: "a long enough passphrase",
+          displayName: "Al Action",
+          organizationName: "Action Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("act@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      const mid = "msn_" + "a".repeat(24);
+      const posts: { path: string; body: unknown }[] = [];
+      const ok = (body: unknown) => ({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+      await page.route(/\/v1\/admin\/org\//u, async (r) => {
+        const req = r.request();
+        const path = new URL(req.url()).pathname;
+        if (req.method() === "POST") {
+          posts.push({
+            path,
+            body: JSON.parse(req.postData() ?? "{}") as unknown,
+          });
+          return r.fulfill(ok({}));
+        }
+        if (path === `/v1/admin/org/missions/${mid}`)
+          return r.fulfill(
+            ok({ mission: { activeContract: { currency: "GBP" } } }),
+          );
+        if (path.endsWith("/negotiations"))
+          return r.fulfill(
+            ok({
+              negotiations: [
+                {
+                  negotiationId: "neg_" + "b".repeat(24),
+                  status: "WAITING_FOR_A_PERSON",
+                  revoked: false,
+                  inForce: null,
+                  pending: { version: 2 },
+                  versions: [],
+                },
+              ],
+            }),
+          );
+        if (path.endsWith("/orders"))
+          return r.fulfill(
+            ok({
+              orders: [
+                {
+                  orderId: "ord_" + "c".repeat(24),
+                  status: "SHIPPED",
+                  supplierId: "sup",
+                },
+              ],
+            }),
+          );
+        return r.continue();
+      });
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/negotiations`);
+      await page
+        .getByRole("heading", { name: "Negotiations", level: 1 })
+        .waitFor();
+      await page.getByLabel("Your reason (optional)").fill("too high");
+      await page.getByRole("button", { name: "Approve version 2" }).click();
+      await page.getByRole("button", { name: "Reject version 2" }).click();
+      expect(posts.map((p) => p.path)).toEqual([
+        `/v1/admin/org/negotiations/neg_${"b".repeat(24)}/versions/2/approve`,
+        `/v1/admin/org/negotiations/neg_${"b".repeat(24)}/versions/2/reject`,
+      ]);
+      expect(posts[0]!.body).toEqual({ reason: "too high" });
+      expect(await axe(page)).toEqual([]);
+      posts.length = 0;
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/orders`);
+      await page
+        .getByRole("heading", { name: "Purchases and orders", level: 1 })
+        .waitFor();
+      await page.getByText("Something wrong with this order?").click();
+      await page.getByLabel("What went wrong").selectOption("DAMAGED");
+      await page.getByLabel("Amount you say you are owed (GBP)").fill("12.50");
+      await page.getByLabel("Tell us what happened").fill("Box crushed");
+      await page.getByRole("button", { name: "Open a dispute" }).click();
+      expect(posts).toHaveLength(1);
+      expect(posts[0]!.path).toBe(
+        `/v1/admin/org/orders/ord_${"c".repeat(24)}/disputes`,
+      );
+      expect(posts[0]!.body).toMatchObject({
+        ground: "DAMAGED",
+        claimedMinor: 1250,
+        reason: "Box crushed",
+      });
+      expect(
+        (posts[0]!.body as { idempotencyKey: string }).idempotencyKey.length,
+      ).toBeGreaterThanOrEqual(16);
+      expect(await axe(page)).toEqual([]);
+      await ctx.close();
+    }, 60_000);
+
+    it("Needs checking lists unclear bookings and jobs, never retries them, and settles a job only with the person's words", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "chk@example.com",
+          password: "a long enough passphrase",
+          displayName: "Cy Check",
+          organizationName: "Check Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("chk@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      const mid = "msn_" + "d".repeat(24);
+      const jid = "job_" + "e".repeat(24);
+      const posts: { path: string; body: unknown }[] = [];
+      let settled = false;
+      const ok = (body: unknown) => ({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+      await page.route(/\/v1\/admin\/org\//u, async (r) => {
+        const req = r.request();
+        const path = new URL(req.url()).pathname;
+        if (req.method() === "POST") {
+          posts.push({
+            path,
+            body: JSON.parse(req.postData() ?? "{}") as unknown,
+          });
+          settled = true;
+          return r.fulfill(ok({}));
+        }
+        if (path === "/v1/admin/org/missions")
+          return r.fulfill(ok({ missions: [{ missionId: mid }] }));
+        if (path === `/v1/admin/org/missions/${mid}/bookings`)
+          return r.fulfill(
+            ok({
+              bookings: [
+                {
+                  bookingId: "bkg_" + "f".repeat(24),
+                  state: "UNKNOWN",
+                  headline: "Checking what happened. Don't book again yet.",
+                  heldMinor: 148500,
+                  frozen: { currency: "GBP" },
+                  listing: { name: "Harbour Studio (fictional)" },
+                },
+              ],
+            }),
+          );
+        if (path === "/v1/admin/org/automation/jobs")
+          return r.fulfill(
+            ok({
+              jobs: [
+                {
+                  jobId: jid,
+                  kind: "PAY_SUPPLIER",
+                  state: settled ? "SUCCEEDED" : "UNKNOWN",
+                  note: "the worker was lost; PayFlow cannot tell whether it acted",
+                },
+              ],
+            }),
+          );
+        return r.continue();
+      });
+      await page.goto(`${h.origin}/workspace#/checking`);
+      await page
+        .getByRole("heading", { name: "Needs checking", level: 1 })
+        .waitFor();
+      const text = await page.locator("main").innerText();
+      expect(text).toContain("Harbour Studio (fictional)");
+      expect(text).toContain("£1,485.00");
+      expect(text).toContain("PayFlow cannot tell whether it acted");
+      expect(await axe(page)).toEqual([]);
+      await page.getByLabel("What actually happened").selectOption("FAILED");
+      await page
+        .getByLabel("How do you know?")
+        .fill("Provider confirmed by phone it never ran");
+      await page.getByRole("button", { name: "Settle" }).click();
+      await page.getByText("Harbour Studio (fictional)").waitFor();
+      expect(posts).toEqual([
+        {
+          path: `/v1/admin/org/automation/jobs/${jid}/settle`,
+          body: {
+            outcome: "FAILED",
+            note: "Provider confirmed by phone it never ran",
+          },
+        },
+      ]);
+      expect(await page.locator("main").innerText()).not.toContain(
+        "PAY SUPPLIER",
+      );
+      await ctx.close();
+    }, 60_000);
+
+    it("a safety pack lowers limits above its ceiling, lists every change, never raises one, and Look only removes buying", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "pack@example.com",
+          password: "a long enough passphrase",
+          displayName: "Pat Pack",
+          organizationName: "Pack Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("pack@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await page.goto(`${h.origin}/workspace#/missions/new`);
+      await page.getByLabel("What should be done?").fill("Buy desks");
+      await page.getByLabel("What does done look like?").fill("Desks bought");
+      await page
+        .getByLabel("How will you judge it? (one per line)")
+        .fill("Cheap");
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByLabel("Total budget").fill("1000");
+      await page.getByLabel("Largest single purchase").fill("900");
+      await page.getByLabel("Ask me first above").fill("50");
+      await page.getByLabel("Ends after (days)").fill("60");
+      await page.getByLabel("Safety pack (optional)").selectOption("CAUTIOUS");
+      await page.getByRole("button", { name: "Apply pack" }).click();
+      await page.getByText("Lowered:").waitFor();
+      const val = (id: string) =>
+        page.evaluate(
+          (i: string) => (document.getElementById(i) as HTMLInputElement).value,
+          id,
+        );
+      expect(await val("w-maxOne")).toBe("200"); // 900 -> a fifth of 1000
+      expect(await val("w-approveAbove")).toBe("50"); // already below the ceiling: untouched, never raised
+      expect(await val("w-days")).toBe("14");
+      const shown = await page.locator("main").innerText();
+      expect(shown).toContain("Max purchase from");
+      expect(shown).not.toContain("Approve above from"); // not listed as changed
+      expect(await axe(page)).toEqual([]);
+      await ctx.close();
+    }, 60_000);
 
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();

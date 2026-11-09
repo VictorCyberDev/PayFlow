@@ -1,6 +1,6 @@
 // PayFlow customer app. No framework, no inline script, no innerHTML: every value from the server is placed with textContent.
 const root = document.getElementById("root");
-const state = { me: null, csrf: null };
+const state = { me: null, csrf: null, template: null };
 
 /** Element builder. Strings become text nodes (never HTML). */
 function h(tag, props, ...kids) {
@@ -182,7 +182,9 @@ function shell(active, ...content) {
   const nav = [
     ["#/", "Home"],
     ["#/missions", "Missions"],
+    ["#/launch", "Templates"],
     ["#/approvals", "Approvals"],
+    ["#/checking", "Needs checking"],
     ["#/agents", "Agents"],
     ["#/notifications", "Notifications"],
     ["#/settings", "Settings"],
@@ -582,6 +584,135 @@ async function missionList() {
   );
 }
 
+/**
+ * Mission templates (M58), including a Founder Launch starter pack. A template only fills in the form; it is NOT the orchestrated Founder Launch mission (M55), which does not exist yet. It never creates, approves,
+ * spends or contacts anyone: the owner still reads, edits and approves, and the server checks every field again. Amounts are
+ * starting points the owner is expected to change, not estimates of what anything costs.
+ */
+const TEMPLATES = [
+  {
+    key: "workspace",
+    pack: "Founder Launch",
+    title: "Find a place to work",
+    blurb:
+      "Compare desks and small offices in your city. Agents look and compare; you decide what to book.",
+    d: {
+      objective: "Find a workspace for my team",
+      outcome: "Three workspaces compared, with what each could cost me",
+      criteria:
+        "Fits my team size\nTotal cost and deposit are stated\nCancellation terms are clear",
+      budget: "3000",
+      maxOne: "1500",
+      approveAbove: "500",
+      category: "WORKSPACE",
+      providers: ["WORKSPACE_PROVIDER"],
+    },
+  },
+  {
+    key: "brand",
+    pack: "Founder Launch",
+    title: "Get a logo and brand basics",
+    blurb: "Compare fixed-price design packages from providers.",
+    d: {
+      objective: "Commission a logo and brand basics",
+      outcome: "A design package chosen and ready to approve",
+      criteria:
+        "Price and delivery time are stated\nRevisions are included\nRefund terms are clear",
+      budget: "1500",
+      maxOne: "1000",
+      approveAbove: "300",
+      category: "DESIGN",
+      providers: ["PROFESSIONAL_SERVICES"],
+    },
+  },
+  {
+    key: "equipment",
+    pack: "Founder Launch",
+    title: "Equip the team",
+    blurb: "Look for laptops, monitors or other equipment within a budget.",
+    d: {
+      objective: "Buy equipment for the team",
+      outcome: "Equipment ordered within budget",
+      criteria: "Under budget\nDelivered within two weeks",
+      budget: "4000",
+      maxOne: "1500",
+      approveAbove: "500",
+      category: "EQUIPMENT",
+      providers: ["COMMERCE_MARKETPLACE"],
+    },
+  },
+  {
+    key: "freelancer",
+    pack: "Founder Launch",
+    title: "Hire a freelancer for one task",
+    blurb: "Describe one piece of work and compare people who could do it.",
+    d: {
+      objective: "Hire a freelancer for a defined task",
+      outcome: "A freelancer chosen, with scope and price agreed",
+      criteria:
+        "Scope and price are written down\nPayment only after I accept the work",
+      budget: "2000",
+      maxOne: "1500",
+      approveAbove: "400",
+      category: "CONTRACTOR",
+      providers: ["TALENT_MARKETPLACE"],
+    },
+  },
+  {
+    key: "bookkeeping",
+    pack: "Everyday",
+    title: "Set up bookkeeping",
+    blurb: "Compare monthly bookkeeping packages.",
+    d: {
+      objective: "Find a bookkeeping service",
+      outcome: "A monthly bookkeeping package chosen",
+      criteria: "Monthly price is stated\nWhat is delivered is stated",
+      budget: "1000",
+      maxOne: "400",
+      approveAbove: "200",
+      category: "BOOKKEEPING",
+      providers: ["PROFESSIONAL_SERVICES"],
+    },
+  },
+];
+function launchPage() {
+  const packs = [...new Set(TEMPLATES.map((t) => t.pack))];
+  shell(
+    "#/launch",
+    h("h1", { text: "Start from a template" }),
+    h("p", {
+      text: "A template only fills in the form for you. Nothing is created, approved or spent until you review it and approve it yourself.",
+    }),
+    packs.map((pack) =>
+      h(
+        "section",
+        {},
+        h("h2", { text: pack }),
+        TEMPLATES.filter((t) => t.pack === pack).map((t) =>
+          h(
+            "article",
+            { class: "card" },
+            h("h3", { text: t.title }),
+            h("p", { text: t.blurb }),
+            h("div", { class: "actions" }, [
+              h("button", {
+                type: "button",
+                class: "primary",
+                text: "Use this template",
+                "aria-label": `Use the template: ${t.title}`,
+                onclick: () => {
+                  state.template = t.key;
+                  location.hash = "#/missions/new";
+                },
+              }),
+            ]),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 async function wizard() {
   const agentsR = await api("/v1/app/agents");
   const agents = agentsR.data?.agents ?? [];
@@ -599,7 +730,12 @@ async function wizard() {
     roles: {},
     providers: new Set(["COMMERCE_MARKETPLACE"]),
     currency: "USD",
+    lookOnly: false,
+    packNote: "",
   };
+  const tpl = TEMPLATES.find((t) => t.key === state.template);
+  state.template = null;
+  if (tpl) Object.assign(d, tpl.d, { providers: new Set(tpl.d.providers) });
   const steps = ["Goal", "Money", "Agents", "Review"];
   const err = h("div");
   const body = h("div");
@@ -696,27 +832,29 @@ async function wizard() {
                   "fieldset",
                   { class: "card" },
                   h("legend", { text: a.displayName }),
-                  Object.keys(CAPS).map((k) =>
-                    h(
-                      "label",
-                      { class: "check" },
-                      h("input", {
-                        type: "checkbox",
-                        ...(d.roles[a.agentId]?.has(k)
-                          ? { checked: true }
-                          : {}),
-                        onchange: (e) => {
-                          const s = (d.roles[a.agentId] ??= new Set());
-                          e.target.checked ? s.add(k) : s.delete(k);
-                        },
-                      }),
-                      {
-                        research: "Research and compare",
-                        negotiate: "Negotiate",
-                        buy: "Buy (within limits)",
-                      }[k],
+                  Object.keys(CAPS)
+                    .filter((k) => !(d.lookOnly && k === "buy"))
+                    .map((k) =>
+                      h(
+                        "label",
+                        { class: "check" },
+                        h("input", {
+                          type: "checkbox",
+                          ...(d.roles[a.agentId]?.has(k)
+                            ? { checked: true }
+                            : {}),
+                          onchange: (e) => {
+                            const s = (d.roles[a.agentId] ??= new Set());
+                            e.target.checked ? s.add(k) : s.delete(k);
+                          },
+                        }),
+                        {
+                          research: "Research and compare",
+                          negotiate: "Negotiate",
+                          buy: "Buy (within limits)",
+                        }[k],
+                      ),
                     ),
-                  ),
                 ),
               ),
             );
@@ -742,6 +880,7 @@ async function wizard() {
       panel,
       d.step === 1 ? currencyBox() : null,
       d.step === 1 ? providersBox() : null,
+      d.step === 1 ? packBox() : null,
       h(
         "div",
         { class: "actions" },
@@ -870,6 +1009,76 @@ async function wizard() {
           label,
         ),
       ),
+    );
+  }
+  /**
+   * Safety packs (M67). Applying one only lowers what you asked for (the server does the arithmetic) and lists every change. It cannot raise a
+   * limit, and "Look only" turns buying off.
+   */
+  function packBox() {
+    const note = h("div", { role: "status" });
+    const sel = h(
+      "select",
+      { id: "w-pack" },
+      h("option", { value: "", text: "No pack" }),
+      h("option", { value: "CAUTIOUS", text: "Cautious" }),
+      h("option", { value: "STANDARD", text: "Standard" }),
+      h("option", { value: "EXPLORATORY_ONLY", text: "Look only" }),
+    );
+    return h(
+      "div",
+      { class: "aside" },
+      h("label", { for: "w-pack", text: "Safety pack (optional)" }),
+      sel,
+      h("p", {
+        class: "hint",
+        text: "A pack lowers any limit above its ceiling. It never raises one.",
+      }),
+      h("button", {
+        type: "button",
+        text: "Apply pack",
+        onclick: async () => {
+          collect();
+          if (!sel.value) return note.replaceChildren();
+          const r = await api("/v1/app/policy-packs/apply", {
+            method: "POST",
+            body: {
+              pack: sel.value,
+              limits: {
+                totalBudgetMinor: toMinor(d.budget),
+                maxPurchaseMinor: toMinor(d.maxOne),
+                approveAboveMinor: toMinor(d.approveAbove),
+                durationDays: Number(d.days),
+              },
+            },
+          });
+          if (!r.ok)
+            return note.replaceChildren(
+              notice("bad", reasonText(r.data?.reason)),
+            );
+          const l = r.data.limits;
+          d.maxOne = String(l.maxPurchaseMinor / 100);
+          d.approveAbove = String(l.approveAboveMinor / 100);
+          d.days = String(l.durationDays);
+          d.lookOnly = r.data.lookOnly;
+          if (r.data.lookOnly)
+            for (const k of Object.keys(d.roles)) d.roles[k].delete("buy");
+          d.packNote = r.data.changes.length
+            ? "Lowered: " +
+              r.data.changes
+                .map(
+                  (c) =>
+                    `${humanKey(c.field)} from ${c.field === "durationDays" ? c.from + " days" : money(c.from, d.currency)} to ${c.field === "durationDays" ? c.to + " days" : money(c.to, d.currency)}`,
+                )
+                .join("; ")
+            : "Your limits were already within this pack.";
+          draw();
+        },
+      }),
+      d.packNote
+        ? h("p", { class: "notice", role: "status", text: d.packNote })
+        : null,
+      note,
     );
   }
   function currencyBox() {
@@ -2212,7 +2421,7 @@ function scalarRows(obj, cur) {
   }
   return rows;
 }
-function recordCard(rec, cur) {
+function recordCard(rec, cur, extra) {
   const stateKey = STATE_KEYS.find((k) => typeof rec[k] === "string");
   const titleKey = TITLE_KEYS.find((k) => typeof rec[k] === "string" && rec[k]);
   return h(
@@ -2229,7 +2438,132 @@ function recordCard(rec, cur) {
         : null,
     ),
     h("dl", {}, scalarRows(rec, cur)),
+    extra ?? null,
   );
+}
+const GROUND_WORDS = {
+  DAMAGED: "It arrived damaged",
+  WRONG_ITEM: "Wrong item",
+  SHORT_DELIVERY: "Fewer than ordered",
+  OVER_DELIVERY: "More than ordered",
+  NOT_DELIVERED_LATE: "Not delivered, or very late",
+};
+/** Decisions a person can make from a record. Every one calls the same route the API exposes; the server decides, this only asks. */
+function recordActions(key, rec, redraw, out, cur) {
+  const ask = async (path, body) => {
+    const r = await api(path, { method: "POST", body });
+    if (!r.ok)
+      return out.replaceChildren(notice("bad", reasonText(r.data?.reason)));
+    out.replaceChildren();
+    await redraw();
+  };
+  if (key === "negotiations") {
+    const f = h(
+      "form",
+      {
+        onsubmit: (e) => e.preventDefault(),
+      },
+      h("label", {
+        for: `nr-${rec.negotiationId}`,
+        text: "Your reason (optional)",
+      }),
+      h("input", {
+        id: `nr-${rec.negotiationId}`,
+        name: "reason",
+        maxlength: "300",
+      }),
+    );
+    const reason = () => String(new FormData(f).get("reason") ?? "");
+    const base = `/v1/admin/org/negotiations/${rec.negotiationId}`;
+    const btns = [];
+    if (rec.pending)
+      btns.push(
+        h("button", {
+          type: "button",
+          class: "primary",
+          text: `Approve version ${rec.pending.version}`,
+          onclick: () =>
+            ask(`${base}/versions/${rec.pending.version}/approve`, {
+              reason: reason(),
+            }),
+        }),
+        h("button", {
+          type: "button",
+          text: `Reject version ${rec.pending.version}`,
+          onclick: () =>
+            ask(`${base}/versions/${rec.pending.version}/reject`, {
+              reason: reason(),
+            }),
+        }),
+      );
+    if (!rec.revoked && rec.inForce)
+      btns.push(
+        h("button", {
+          type: "button",
+          text: "Withdraw the rules in force",
+          onclick: () => ask(`${base}/revoke`, { reason: reason() }),
+        }),
+      );
+    return btns.length
+      ? h("div", {}, f, h("div", { class: "actions" }, btns))
+      : null;
+  }
+  if (key === "orders") {
+    const f = h(
+      "form",
+      {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          const d = new FormData(f);
+          await ask(`/v1/admin/org/orders/${rec.orderId}/disputes`, {
+            ground: String(d.get("ground")),
+            claimedMinor: Math.round(Number(d.get("amount")) * 100),
+            reason: String(d.get("reason")),
+            idempotencyKey: idem("dp"),
+          });
+        },
+      },
+      h("label", { for: `dg-${rec.orderId}`, text: "What went wrong" }),
+      h(
+        "select",
+        { id: `dg-${rec.orderId}`, name: "ground" },
+        Object.entries(GROUND_WORDS).map(([v, t]) =>
+          h("option", { value: v, text: t }),
+        ),
+      ),
+      h("label", {
+        for: `da-${rec.orderId}`,
+        text: `Amount you say you are owed (${cur})`,
+      }),
+      h("input", {
+        id: `da-${rec.orderId}`,
+        name: "amount",
+        type: "number",
+        min: "0.01",
+        step: "0.01",
+        required: true,
+      }),
+      h("label", { for: `drs-${rec.orderId}`, text: "Tell us what happened" }),
+      h("input", {
+        id: `drs-${rec.orderId}`,
+        name: "reason",
+        maxlength: "500",
+        required: true,
+      }),
+      h("button", { type: "submit", text: "Open a dispute" }),
+      h("p", {
+        class: "hint",
+        text: "A dispute is a claim. Only you resolve it, and a refund is recorded only with proof.",
+      }),
+    );
+    return h(
+      "details",
+      {},
+      h("summary", { text: "Something wrong with this order?" }),
+      f,
+    );
+  }
+  return null;
 }
 async function recordsPage(id, key) {
   const sec = SECTIONS[key];
@@ -2244,6 +2578,8 @@ async function recordsPage(id, key) {
   const c =
     mission.data.mission.activeContract ?? mission.data.mission.latestContract;
   const cur = c?.currency ?? "USD";
+  const out = h("div");
+  const redraw = () => recordsPage(id, key);
   const body = [];
   if (!r.ok)
     body.push(
@@ -2272,7 +2608,9 @@ async function recordsPage(id, key) {
     body.push(
       items.length === 0
         ? h("p", { class: "hint", text: sec.empty })
-        : items.map((rec) => recordCard(rec, cur)),
+        : items.map((rec) =>
+            recordCard(rec, cur, recordActions(key, rec, redraw, out, cur)),
+          ),
     );
   }
   shell(
@@ -2288,6 +2626,34 @@ async function recordsPage(id, key) {
       }),
     ),
     h("p", { text: sec.blurb }),
+    out,
+    key === "finance"
+      ? h(
+          "div",
+          { class: "actions" },
+          h("button", {
+            type: "button",
+            text: "Download for your bookkeeper (CSV)",
+            onclick: async () => {
+              const x = await api(`/v1/admin/org/missions/${id}/ledger/export`);
+              if (!x.ok)
+                return out.replaceChildren(
+                  notice("bad", reasonText(x.data?.reason)),
+                );
+              const a = h("a", {
+                href: URL.createObjectURL(
+                  new Blob([x.data.csv], { type: "text/csv" }),
+                ),
+                download: x.data.filename,
+              });
+              document.body.append(a);
+              a.click();
+              a.remove();
+              out.replaceChildren(notice("ok", x.data.notice));
+            },
+          }),
+        )
+      : null,
     ...body.flat(),
   );
 }
@@ -2367,6 +2733,104 @@ async function proofPage(id) {
     ...(blocks.length
       ? blocks
       : [h("p", { class: "hint", text: "Nothing has been recorded yet." })]),
+  );
+}
+/**
+ * Needs checking (M71): everything whose outcome PayFlow could not see, in one place. PayFlow never retries these and never guesses; each one
+ * is settled by a person with what they know. Nothing here is hidden when it is unpleasant.
+ */
+async function checkingPage() {
+  const ms = (await api("/v1/admin/org/missions")).data?.missions ?? [];
+  const unclearBookings = [];
+  for (const m of ms.slice(0, 25)) {
+    const r = await api(`/v1/admin/org/missions/${m.missionId}/bookings`);
+    for (const b of r.data?.bookings ?? [])
+      if (b.state === "UNKNOWN") unclearBookings.push({ m, b });
+  }
+  const jobsR = await api("/v1/admin/org/automation/jobs");
+  const unclearJobs = (jobsR.data?.jobs ?? []).filter(
+    (j) => j.state === "UNKNOWN",
+  );
+  const out = h("div");
+  const settleJob = (j) => {
+    const f = h(
+      "form",
+      {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          const d = new FormData(f);
+          const r = await api(
+            `/v1/admin/org/automation/jobs/${j.jobId}/settle`,
+            {
+              method: "POST",
+              body: {
+                outcome: String(d.get("outcome")),
+                note: String(d.get("note")),
+              },
+            },
+          );
+          if (!r.ok)
+            return out.replaceChildren(
+              notice("bad", reasonText(r.data?.reason)),
+            );
+          await checkingPage();
+        },
+      },
+      h("label", { for: `jo-${j.jobId}`, text: "What actually happened" }),
+      h(
+        "select",
+        { id: `jo-${j.jobId}`, name: "outcome" },
+        h("option", { value: "SUCCEEDED", text: "It was done" }),
+        h("option", { value: "FAILED", text: "It was not done" }),
+      ),
+      h("label", { for: `jn-${j.jobId}`, text: "How do you know?" }),
+      h("input", {
+        id: `jn-${j.jobId}`,
+        name: "note",
+        maxlength: "300",
+        required: true,
+      }),
+      h("button", { class: "primary", type: "submit", text: "Settle" }),
+    );
+    return f;
+  };
+  shell(
+    "#/checking",
+    h("h1", { text: "Needs checking" }),
+    h("p", {
+      text: "These are things where PayFlow cannot tell what happened. It will not try again or guess. The money involved stays set aside until you settle them.",
+    }),
+    out,
+    unclearBookings.length === 0 && unclearJobs.length === 0
+      ? h("p", { text: "Nothing needs checking." })
+      : null,
+    unclearBookings.map(({ m, b }) =>
+      h(
+        "article",
+        { class: "card" },
+        h("h3", { text: b.listing.name }),
+        h("p", { text: b.headline }),
+        h(
+          "dl",
+          {},
+          row("Money set aside", money(b.heldMinor, b.frozen.currency)),
+        ),
+        h("a", {
+          class: "link",
+          href: `#/missions/${m.missionId}/workspaces`,
+          text: "Open the booking",
+        }),
+      ),
+    ),
+    unclearJobs.map((j) =>
+      h(
+        "article",
+        { class: "card" },
+        h("h3", { text: wordsOf(j.kind) }),
+        h("p", { text: j.note ?? "The outcome is not known." }),
+        settleJob(j),
+      ),
+    ),
   );
 }
 async function notificationsPage() {
@@ -2521,6 +2985,8 @@ async function render() {
     if (hash === "#/approvals") return await approvalsPage();
     if (hash === "#/missions") return await missionList();
     if (hash === "#/missions/new") return await wizard();
+    if (hash === "#/launch") return launchPage();
+    if (hash === "#/checking") return await checkingPage();
     if (hash === "#/notifications") return await notificationsPage();
     if (hash === "#/settings") return await settingsPage();
     if (hash === "#/help") return helpPage();

@@ -136,13 +136,19 @@ check(
     (r) => r.source === "/developers" && r.destination === "/docs/",
   ),
 );
-const cron = (vj.crons ?? [])[0];
+const crons = vj.crons ?? [];
+// Exactly two scheduled calls, both GET-able and both safe to repeat: the observation-only reconcile tick and the automation run, which can
+// only run the registered handlers (a job with an external effect is never re-run).
+const ALLOWED_CRONS = [
+  "/v1/admin/ops/reconcile/tick/",
+  "/v1/admin/ops/automation/run/",
+];
 check(
-  "vercel.json has one cron on the observation-only tick",
-  vj.crons?.length === 1 &&
-    cron.path === "/v1/admin/ops/reconcile/tick/" &&
-    cron.schedule.split(" ").length === 5,
-  { cron },
+  "vercel.json has exactly the reconcile tick and the automation run as crons",
+  crons.length === ALLOWED_CRONS.length &&
+    ALLOWED_CRONS.every((p) => crons.some((c) => c.path === p)) &&
+    crons.every((c) => c.schedule.split(" ").length === 5),
+  { crons },
 );
 check(
   "vercel.json builds the console static export",
