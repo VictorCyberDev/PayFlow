@@ -4,6 +4,12 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { createWorkspaceRoutes } from "./workspace-routes.js";
+import { WorkspaceService } from "../missions/workspace-service.js";
+import {
+  builtinWorkspaceSources,
+  type WorkspaceSourceRegistry,
+} from "../missions/workspace-sources.js";
 import { APP_ASSETS, APP_FONTS } from "./app-assets.generated.js";
 import { draftMission, type DraftModel } from "../missions/draft-assistant.js";
 import { z } from "zod";
@@ -222,6 +228,8 @@ export interface HostedGatewayOptions {
   readonly channels?: ChannelRegistry;
   /** Test seam: the talent sources candidates can be imported from instead of the built-in fictional sandbox source. */
   readonly talentSources?: TalentSourceRegistry;
+  /** Workspace listing sources. Default: the fictional SANDBOX fixture only. */
+  readonly workspaceSources?: WorkspaceSourceRegistry;
   /** Test seam: how long a send may take before its outcome is recorded as unknown. */
   readonly sendTimeoutMs?: number;
 }
@@ -1581,6 +1589,30 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       options.talentSources ??
       new TalentSourceRegistry().register(sandboxTalentSource),
     now: iso,
+  });
+  const workspaceService = new WorkspaceService({
+    sql,
+    audit,
+    missions: missionService,
+    sources: options.workspaceSources ?? builtinWorkspaceSources(),
+    now: iso,
+  });
+  const workspaceRoutes = createWorkspaceRoutes({
+    service: workspaceService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
   });
   const talentCandidateRoutes = createTalentCandidateRoutes({
     service: talentCandidateService,
@@ -3145,6 +3177,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => portfolioRoutes.agent(request))) ??
           (await safely(() => talentScopeRoutes.agent(request))) ??
           (await safely(() => talentCandidateRoutes.agent(request))) ??
+          (await safely(() => workspaceRoutes.agent(request))) ??
           (await safely(() => shortlistRoutes.agent(request))) ??
           (await safely(() => talentOfferRoutes.agent(request))) ??
           (await safely(() => contractorRoutes.agent(request))) ?? {
@@ -3179,6 +3212,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => portfolioRoutes.member(request))) ??
         (await safely(() => talentScopeRoutes.member(request))) ??
         (await safely(() => talentCandidateRoutes.member(request))) ??
+        (await safely(() => workspaceRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
         (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => contractorRoutes.member(request))) ??

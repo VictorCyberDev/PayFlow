@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach } from "vitest";
+import type { WorkspaceSourceRegistry } from "../../src/missions/workspace-sources.js";
 import type { DraftModel } from "../../src/missions/draft-assistant.js";
 import { generateKeyPairSync } from "node:crypto";
 import { createServer, type Server } from "node:http";
@@ -35,6 +36,7 @@ export function hostHarness(
     channels?: () => ChannelRegistry;
     talentSources?: () => TalentSourceRegistry;
     draftModel?: () => DraftModel;
+    workspaceSources?: () => WorkspaceSourceRegistry;
     sendTimeoutMs?: number;
   } = {},
 ) {
@@ -85,6 +87,9 @@ export function hostHarness(
           ? { talentSources: options.talentSources() }
           : {}),
         ...(options.draftModel ? { draftModel: options.draftModel() } : {}),
+        ...(options.workspaceSources
+          ? { workspaceSources: options.workspaceSources() }
+          : {}),
         ...(options.sendTimeoutMs
           ? { sendTimeoutMs: options.sendTimeoutMs }
           : {}),

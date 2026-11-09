@@ -340,6 +340,81 @@ const chromePath = [
       120_000,
     );
 
+    it("the approvals center shows what is waiting, answers the questions before the buttons, and approving puts the mission in force", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "approver@example.com",
+          password: "a long enough passphrase",
+          displayName: "Ada Approver",
+          organizationName: "Approvals Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("approver@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await page.goto(`${h.origin}/workspace#/agents`);
+      await page.getByLabel("Agent name").fill("Buyer");
+      await page.getByRole("button", { name: "Add agent" }).click();
+      await page.getByText("Buyer").first().waitFor();
+      // empty state first
+      await page.getByRole("link", { name: "Approvals" }).click();
+      await page.getByText("Nothing is waiting for you.").waitFor();
+      // create and submit a mission through the wizard: it now waits for the owner
+      await page.goto(`${h.origin}/workspace#/missions/new`);
+      await page.getByLabel("What should be done?").fill("Buy a standing desk");
+      await page.getByLabel("What does done look like?").fill("Desk ordered");
+      await page
+        .getByLabel("How will you judge it? (one per line)")
+        .fill("Under budget");
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByLabel("Buy (within limits)").check();
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByRole("button", { name: "Create mission" }).click();
+      await page.getByRole("button", { name: "Submit for approval" }).click();
+      await page
+        .getByText("Waiting for you", { exact: true })
+        .first()
+        .waitFor();
+      await page.getByRole("link", { name: "Approvals" }).click();
+      await page
+        .getByRole("heading", { name: "Put this mission to work?" })
+        .waitFor();
+      const card = await page.locator("main").innerText();
+      for (const q of [
+        "Who wants to act",
+        "Reversible?",
+        "Creates a binding obligation?",
+        "Most it can ever commit",
+        "You are asked first above",
+      ])
+        expect(card).toContain(q);
+      expect(await axe(page)).toEqual([]);
+      expect(
+        Number(
+          (
+            await h.repo.sql`select count(*)::int n from mission_authorities`
+          )[0]!.n,
+        ),
+      ).toBe(0);
+      await page.getByRole("button", { name: "Approve" }).click();
+      await page.getByText("Nothing is waiting for you.").waitFor();
+      expect(
+        Number(
+          (
+            await h.repo
+              .sql`select count(*)::int n from mission_authorities where status = 'ACTIVE'`
+          )[0]!.n,
+        ),
+      ).toBe(1);
+      await ctx.close();
+    }, 90_000);
+
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
       await page.goto(`${h.origin}/workspace`);

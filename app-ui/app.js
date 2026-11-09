@@ -164,6 +164,7 @@ function shell(active, ...content) {
   const nav = [
     ["#/", "Home"],
     ["#/missions", "Missions"],
+    ["#/approvals", "Approvals"],
     ["#/agents", "Agents"],
   ];
   root.replaceChildren(
@@ -1081,6 +1082,291 @@ async function missionPage(id) {
 const row = (k, v) =>
   h("div", { class: "row" }, h("dt", { text: k }), h("dd", { text: v }));
 
+/**
+ * Approvals center: every decision that is waiting for a person, in one place. Each card answers who wants to act, why, how much,
+ * whether it is reversible and whether it creates a binding obligation, BEFORE the buttons.
+ */
+async function approvalsPage() {
+  const out = h("div");
+  const list = (await api("/v1/admin/org/missions")).data?.missions ?? [];
+  const details = await Promise.all(
+    list.map((m) => api(`/v1/admin/org/missions/${m.missionId}`)),
+  );
+  const cards = [];
+  const reload = () => approvalsPage();
+  list.forEach((m, i) => {
+    const mission = details[i].data?.mission;
+    if (!mission) return;
+    if (m.status === "PENDING_OWNER_APPROVAL") {
+      const c = mission.pendingContract ?? mission.latestContract;
+      cards.push(
+        h(
+          "article",
+          { class: "card" },
+          h(
+            "div",
+            { class: "row" },
+            h("h2", { text: "Put this mission to work?" }),
+            badge(m.status),
+          ),
+          h(
+            "dl",
+            {},
+            row(
+              "Who wants to act",
+              "The mission's agents, inside the limits below",
+            ),
+            row("Goal", c.objective),
+            row(
+              "Most it can ever commit",
+              money(c.totalBudgetMinor, c.currency),
+            ),
+            row(
+              "Largest single purchase",
+              money(c.maxCommitmentMinor, c.currency),
+            ),
+            row(
+              "You are asked first above",
+              c.approvalConditions?.humanApprovalAboveMinor
+                ? money(
+                    c.approvalConditions.humanApprovalAboveMinor,
+                    c.currency,
+                  )
+                : "every purchase",
+            ),
+            row(
+              "Reversible?",
+              "Yes. You can pause or revoke at any time; nothing already paid is undone.",
+            ),
+            row(
+              "Creates a binding obligation?",
+              "Not by approving. Each purchase or contract is decided under these limits.",
+            ),
+          ),
+          mission.pendingReasons?.length
+            ? h("p", {
+                class: "hint",
+                text: `Why it needs you: ${mission.pendingReasons.join(", ").toLowerCase().replaceAll("_", " ")}.`,
+              })
+            : null,
+          h(
+            "div",
+            { class: "actions" },
+            decide(
+              "Approve",
+              `/v1/admin/org/missions/${m.missionId}/approve`,
+              {
+                version: mission.pendingVersion,
+                expectedRowVersion: mission.rowVersion,
+              },
+              true,
+            ),
+            decide(
+              "Reject",
+              `/v1/admin/org/missions/${m.missionId}/reject`,
+              {
+                version: mission.pendingVersion,
+                expectedRowVersion: mission.rowVersion,
+              },
+              false,
+              true,
+            ),
+            h("a", {
+              class: "btn",
+              href: `#/missions/${m.missionId}`,
+              text: "Open mission",
+            }),
+          ),
+        ),
+      );
+    }
+  });
+  const escalations = await Promise.all(
+    list
+      .filter((m) => m.status === "ACTIVE" || m.status === "PAUSED")
+      .map(async (m, i) => {
+        const r = await api(
+          `/v1/admin/org/missions/${m.missionId}/acceptances`,
+        );
+        const c = details[list.indexOf(m)].data?.mission?.activeContract;
+        return (r.data?.escalations ?? [])
+          .filter((e) => e.status === "OPEN")
+          .map((e) => ({ e, m, c }));
+      }),
+  );
+  for (const { e, m, c } of escalations.flat()) {
+    const snap = e.snapshot ?? {};
+    const reason = h("input", {
+      id: `why-${e.escalationId}`,
+      maxlength: "300",
+      "aria-label": "Reason, if you accept below the agent's floor",
+    });
+    cards.push(
+      h(
+        "article",
+        { class: "card" },
+        h(
+          "div",
+          { class: "row" },
+          h("h2", {
+            text:
+              e.kind === "ACCEPTANCE_REQUEST"
+                ? "Accept this quote?"
+                : "Walk away from this negotiation?",
+          }),
+          h("span", { class: "label", text: "Waiting for you" }),
+        ),
+        h(
+          "dl",
+          {},
+          row(
+            "Who wants to act",
+            `An agent (${e.requestedBy.replace(/^agent:/u, "")}) asked you to decide`,
+          ),
+          row("Why", e.reason),
+          snap.totalMinor
+            ? row(
+                "Total",
+                money(snap.totalMinor, snap.currency ?? c?.currency ?? "USD"),
+              )
+            : null,
+          snap.hardFailures?.length
+            ? row(
+                "Cannot be accepted because",
+                snap.hardFailures.join(", ").toLowerCase().replaceAll("_", " "),
+              )
+            : null,
+          snap.softFailures?.length
+            ? row(
+                "Below the agent's floor on",
+                snap.softFailures.join(", ").toLowerCase().replaceAll("_", " "),
+              )
+            : null,
+          row(
+            "Reversible?",
+            e.kind === "ACCEPTANCE_REQUEST"
+              ? "Until a purchase order is issued: you can withdraw the acceptance."
+              : "Yes.",
+          ),
+          row(
+            "Creates a binding obligation?",
+            e.kind === "ACCEPTANCE_REQUEST"
+              ? "It commits budget now. Nothing is paid until a purchase order is issued and paid inside the agent's authority."
+              : "No.",
+          ),
+        ),
+        snap.softFailures?.length
+          ? h(
+              "div",
+              {},
+              h("label", {
+                for: reason.id,
+                text: "Reason for accepting anyway",
+              }),
+              reason,
+            )
+          : null,
+        h(
+          "div",
+          { class: "actions" },
+          h(
+            "button",
+            {
+              class: "primary",
+              onclick: async () => {
+                const r = await api(
+                  `/v1/admin/org/escalations/${e.escalationId}/resolve`,
+                  {
+                    method: "POST",
+                    body: {
+                      decision: "ACCEPT",
+                      ...(reason.value ? { overrideReason: reason.value } : {}),
+                      idempotencyKey: idem("resolve"),
+                    },
+                  },
+                );
+                if (!r.ok)
+                  return out.replaceChildren(
+                    notice(
+                      "bad",
+                      `${reasonText(r.data?.reason)}${r.data?.detail ? " (" + r.data.detail + ")" : ""}`,
+                    ),
+                  );
+                reload();
+              },
+            },
+            "Accept",
+          ),
+          h(
+            "button",
+            {
+              onclick: async () => {
+                const r = await api(
+                  `/v1/admin/org/escalations/${e.escalationId}/resolve`,
+                  {
+                    method: "POST",
+                    body: {
+                      decision: "DECLINE",
+                      idempotencyKey: idem("resolve"),
+                    },
+                  },
+                );
+                if (!r.ok)
+                  return out.replaceChildren(
+                    notice("bad", reasonText(r.data?.reason)),
+                  );
+                reload();
+              },
+            },
+            "Decline",
+          ),
+          h("a", {
+            class: "btn",
+            href: `#/missions/${m.missionId}`,
+            text: "Open mission",
+          }),
+        ),
+      ),
+    );
+  }
+  function decide(label, path, body, primary, danger) {
+    return h(
+      "button",
+      {
+        class: primary ? "primary" : danger ? "danger" : "",
+        onclick: async () => {
+          const r = await api(path, { method: "POST", body });
+          if (!r.ok)
+            return out.replaceChildren(
+              notice(
+                "bad",
+                `${reasonText(r.data?.reason)}${r.data?.detail ? " (" + r.data.detail + ")" : ""}`,
+              ),
+            );
+          reload();
+        },
+      },
+      label,
+    );
+  }
+  shell(
+    "#/approvals",
+    h("h1", { text: "Approvals" }),
+    out,
+    cards.length === 0
+      ? h(
+          "div",
+          { class: "card" },
+          h("p", { text: "Nothing is waiting for you." }),
+          h("p", {
+            class: "hint",
+            text: "When an agent needs a decision, or a mission needs your approval, it appears here with everything you need to decide.",
+          }),
+        )
+      : cards,
+  );
+}
+
 // ------------------------------------------------------------------------------------------------ router
 async function render() {
   const hash = location.hash || "#/";
@@ -1096,6 +1382,7 @@ async function render() {
     return void (location.hash = "#/");
   try {
     if (hash === "#/agents") return await agentsPage();
+    if (hash === "#/approvals") return await approvalsPage();
     if (hash === "#/missions") return await missionList();
     if (hash === "#/missions/new") return await wizard();
     const m = /^#\/missions\/(msn_[a-f0-9]{24})$/.exec(hash);
