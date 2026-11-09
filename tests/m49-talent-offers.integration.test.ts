@@ -500,10 +500,14 @@ describe("M49 checks and terms (pure)", () => {
 
     it("R0: acceptance is one transaction — ACCEPT/ACCEPT commits once; ACCEPT/DECLINE ends in exactly one terminal state with no stray ledger items or contract", async () => {
       const ready = async () => {
+        h.advance(120_000); // past the request rate-limit window
         const s = await scene();
         await check(s.owner, s.id, s.ada, "IDENTITY_VERIFIED");
         await check(s.owner, s.id, s.ada, "PORTFOLIO_REVIEWED");
-        const o = (await body(await draft(s.owner, s.id, s.ada))).offer;
+        const dr = await draft(s.owner, s.id, s.ada);
+        const db = await body(dr);
+        const o = db.offer;
+        if (!o) throw new Error(`draft ${dr.status} ${JSON.stringify(db)}`);
         await act(s.owner, o.offerId, "approve");
         await act(s.owner, o.offerId, "sent");
         return { s, offerId: o.offerId as string };
