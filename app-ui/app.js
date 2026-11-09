@@ -1,6 +1,6 @@
 // PayFlow customer app. No framework, no inline script, no innerHTML: every value from the server is placed with textContent.
 const root = document.getElementById("root");
-const state = { me: null, csrf: null };
+const state = { me: null, csrf: null, template: null };
 
 /** Element builder. Strings become text nodes (never HTML). */
 function h(tag, props, ...kids) {
@@ -182,6 +182,7 @@ function shell(active, ...content) {
   const nav = [
     ["#/", "Home"],
     ["#/missions", "Missions"],
+    ["#/launch", "Templates"],
     ["#/approvals", "Approvals"],
     ["#/agents", "Agents"],
     ["#/notifications", "Notifications"],
@@ -582,6 +583,135 @@ async function missionList() {
   );
 }
 
+/**
+ * Mission templates, including the Founder Launch pack (M55/M60). A template only fills in the form. It never creates, approves,
+ * spends or contacts anyone: the owner still reads, edits and approves, and the server checks every field again. Amounts are
+ * starting points the owner is expected to change, not estimates of what anything costs.
+ */
+const TEMPLATES = [
+  {
+    key: "workspace",
+    pack: "Founder Launch",
+    title: "Find a place to work",
+    blurb:
+      "Compare desks and small offices in your city. Agents look and compare; you decide what to book.",
+    d: {
+      objective: "Find a workspace for my team",
+      outcome: "Three workspaces compared, with what each could cost me",
+      criteria:
+        "Fits my team size\nTotal cost and deposit are stated\nCancellation terms are clear",
+      budget: "3000",
+      maxOne: "1500",
+      approveAbove: "500",
+      category: "WORKSPACE",
+      providers: ["WORKSPACE_PROVIDER"],
+    },
+  },
+  {
+    key: "brand",
+    pack: "Founder Launch",
+    title: "Get a logo and brand basics",
+    blurb: "Compare fixed-price design packages from providers.",
+    d: {
+      objective: "Commission a logo and brand basics",
+      outcome: "A design package chosen and ready to approve",
+      criteria:
+        "Price and delivery time are stated\nRevisions are included\nRefund terms are clear",
+      budget: "1500",
+      maxOne: "1000",
+      approveAbove: "300",
+      category: "DESIGN",
+      providers: ["PROFESSIONAL_SERVICES"],
+    },
+  },
+  {
+    key: "equipment",
+    pack: "Founder Launch",
+    title: "Equip the team",
+    blurb: "Look for laptops, monitors or other equipment within a budget.",
+    d: {
+      objective: "Buy equipment for the team",
+      outcome: "Equipment ordered within budget",
+      criteria: "Under budget\nDelivered within two weeks",
+      budget: "4000",
+      maxOne: "1500",
+      approveAbove: "500",
+      category: "EQUIPMENT",
+      providers: ["COMMERCE_MARKETPLACE"],
+    },
+  },
+  {
+    key: "freelancer",
+    pack: "Founder Launch",
+    title: "Hire a freelancer for one task",
+    blurb: "Describe one piece of work and compare people who could do it.",
+    d: {
+      objective: "Hire a freelancer for a defined task",
+      outcome: "A freelancer chosen, with scope and price agreed",
+      criteria:
+        "Scope and price are written down\nPayment only after I accept the work",
+      budget: "2000",
+      maxOne: "1500",
+      approveAbove: "400",
+      category: "CONTRACTOR",
+      providers: ["TALENT_MARKETPLACE"],
+    },
+  },
+  {
+    key: "bookkeeping",
+    pack: "Everyday",
+    title: "Set up bookkeeping",
+    blurb: "Compare monthly bookkeeping packages.",
+    d: {
+      objective: "Find a bookkeeping service",
+      outcome: "A monthly bookkeeping package chosen",
+      criteria: "Monthly price is stated\nWhat is delivered is stated",
+      budget: "1000",
+      maxOne: "400",
+      approveAbove: "200",
+      category: "BOOKKEEPING",
+      providers: ["PROFESSIONAL_SERVICES"],
+    },
+  },
+];
+function launchPage() {
+  const packs = [...new Set(TEMPLATES.map((t) => t.pack))];
+  shell(
+    "#/launch",
+    h("h1", { text: "Start from a template" }),
+    h("p", {
+      text: "A template only fills in the form for you. Nothing is created, approved or spent until you review it and approve it yourself.",
+    }),
+    packs.map((pack) =>
+      h(
+        "section",
+        {},
+        h("h2", { text: pack }),
+        TEMPLATES.filter((t) => t.pack === pack).map((t) =>
+          h(
+            "article",
+            { class: "card" },
+            h("h3", { text: t.title }),
+            h("p", { text: t.blurb }),
+            h("div", { class: "actions" }, [
+              h("button", {
+                type: "button",
+                class: "primary",
+                text: "Use this template",
+                "aria-label": `Use the template: ${t.title}`,
+                onclick: () => {
+                  state.template = t.key;
+                  location.hash = "#/missions/new";
+                },
+              }),
+            ]),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 async function wizard() {
   const agentsR = await api("/v1/app/agents");
   const agents = agentsR.data?.agents ?? [];
@@ -600,6 +730,9 @@ async function wizard() {
     providers: new Set(["COMMERCE_MARKETPLACE"]),
     currency: "USD",
   };
+  const tpl = TEMPLATES.find((t) => t.key === state.template);
+  state.template = null;
+  if (tpl) Object.assign(d, tpl.d, { providers: new Set(tpl.d.providers) });
   const steps = ["Goal", "Money", "Agents", "Review"];
   const err = h("div");
   const body = h("div");
@@ -2521,6 +2654,7 @@ async function render() {
     if (hash === "#/approvals") return await approvalsPage();
     if (hash === "#/missions") return await missionList();
     if (hash === "#/missions/new") return await wizard();
+    if (hash === "#/launch") return launchPage();
     if (hash === "#/notifications") return await notificationsPage();
     if (hash === "#/settings") return await settingsPage();
     if (hash === "#/help") return helpPage();
