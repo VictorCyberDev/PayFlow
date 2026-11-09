@@ -39,10 +39,102 @@ async function api(path, { method = "GET", body } = {}) {
   return { status: res.status, ok: res.ok, data };
 }
 
+const SVG = "http://www.w3.org/2000/svg";
+function svg(tag, attrs = {}, ...kids) {
+  const el = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  for (const k of kids) el.append(k);
+  return el;
+}
+/** BRAND-001 mark: a square frame open at the right (the Gate) with the Flow line passing through. */
+function brandMark() {
+  return svg(
+    "svg",
+    { viewBox: "0 0 32 32", "aria-hidden": "true", focusable: "false" },
+    svg("path", {
+      d: "M28 11V4H4v24h24v-7",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": 3,
+      "stroke-linejoin": "miter",
+    }),
+    svg("path", {
+      d: "M11 16h21",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": 3,
+    }),
+  );
+}
+/** State is read by SHAPE and WORD, never colour alone (BRAND-001 section 4). */
+const STATES = {
+  ACTIVE: ["In force", "bar-open"],
+  DRAFT: ["Draft", "hollow"],
+  PENDING_OWNER_APPROVAL: ["Waiting for you", "dot"],
+  PAUSED: ["Paused", "dot"],
+  COMPLETED: ["Finished", "filled"],
+  REVOKED: ["Revoked", "strike"],
+  CANCELLED: ["Cancelled", "strike"],
+  EXPIRED: ["Expired", "hollow"],
+  FAILED: ["Didn't go through", "cross"],
+  REGISTERED: ["Added", "hollow"],
+};
+function glyph(kind) {
+  const r = svg("rect", { x: 3, y: 3, width: 18, height: 18 });
+  const g = svg(
+    "svg",
+    {
+      class: "glyph",
+      viewBox: "0 0 24 24",
+      "aria-hidden": "true",
+      focusable: "false",
+    },
+    r,
+  );
+  if (kind === "filled") r.setAttribute("class", "fill");
+  if (kind === "dot") {
+    r.setAttribute("stroke-dasharray", "3 3");
+    g.append(svg("circle", { cx: 12, cy: 12, r: 3, class: "amber" }));
+  }
+  if (kind === "cross")
+    g.append(
+      svg("path", {
+        d: "M3 3l18 18M21 3L3 21",
+        stroke: "#111418",
+        "stroke-width": 2.5,
+      }),
+    );
+  if (kind === "strike")
+    g.append(
+      svg("path", { d: "M2 12h20", stroke: "#111418", "stroke-width": 3 }),
+    );
+  if (kind === "bar-open")
+    g.append(
+      svg("path", { d: "M8 12h16", stroke: "#e8aa00", "stroke-width": 3 }),
+    );
+  return g;
+}
+function badge(status) {
+  const [word, kind] = STATES[status] ?? [
+    String(status).replaceAll("_", " ").toLowerCase(),
+    "hollow",
+  ];
+  return h("span", { class: "badge" }, glyph(kind), word);
+}
+
 const money = (minor, cur = "USD") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: cur }).format(
     minor / 100,
   );
+/** "Friday, Nov 6 at 6:00 PM" — plain language, no seconds (BRAND-001 section 7). */
+const when = (iso) =>
+  new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
 const idem = (p) => `${p}-${crypto.randomUUID()}`;
 const reasonText = (r) =>
   ({
@@ -78,7 +170,12 @@ function shell(active, ...content) {
     h(
       "header",
       { class: "bar" },
-      h("strong", { text: "PayFlow" }),
+      h(
+        "a",
+        { class: "brand", href: "#/", "aria-label": "PayFlow home" },
+        brandMark(),
+        "PayFlow",
+      ),
       h(
         "nav",
         { "aria-label": "Main" },
@@ -93,10 +190,15 @@ function shell(active, ...content) {
       h(
         "div",
         { class: "row" },
-        h("span", {
-          class: "hint",
-          text: `${state.me.user.displayName} · ${state.me.member.role} · Sandbox`,
-        }),
+        h(
+          "span",
+          { class: "who" },
+          h("span", { class: "env", text: "Sandbox" }),
+          h("span", {
+            class: "hint",
+            text: `${state.me.user.displayName} · ${state.me.member.role}`,
+          }),
+        ),
         h("button", { onclick: signOut }, "Sign out"),
       ),
     ),
@@ -188,10 +290,28 @@ function authScreen(mode = "login") {
   );
   root.replaceChildren(
     h(
+      "header",
+      { class: "bar" },
+      h(
+        "a",
+        { class: "brand", href: "#/", "aria-label": "PayFlow" },
+        brandMark(),
+        "PayFlow",
+      ),
+      h("span", { class: "env", text: "Sandbox" }),
+    ),
+    h(
       "main",
       { id: "main", tabindex: "-1" },
-      notice("ok", "Sandbox: nothing here moves real money."),
+      h("p", {
+        class: "lede",
+        text: "Give AI agents permission to spend — not control of your money.",
+      }),
       form,
+      h("p", {
+        class: "hint",
+        text: "Sandbox: nothing here moves real money.",
+      }),
     ),
   );
 }
@@ -334,14 +454,7 @@ async function agentsPage() {
                   "tr",
                   {},
                   h("td", { text: a.displayName }),
-                  h(
-                    "td",
-                    {},
-                    h("span", {
-                      class: `badge ${a.lifecycle}`,
-                      text: a.lifecycle,
-                    }),
-                  ),
+                  h("td", {}, badge(a.lifecycle)),
                   h(
                     "td",
                     {},
@@ -435,10 +548,7 @@ async function missionList() {
                 href: `#/missions/${m.missionId}`,
                 text: c?.objective ?? m.missionId,
               }),
-              h("span", {
-                class: `badge ${m.status}`,
-                text: m.status.replaceAll("_", " "),
-              }),
+              badge(m.status),
             ),
             c &&
               h("p", {
@@ -657,7 +767,7 @@ async function wizard() {
     const box = h("textarea", { id: "ai-text", rows: 3, maxlength: "1500" });
     return h(
       "div",
-      { class: "card" },
+      { class: "aside" },
       h("label", {
         for: "ai-text",
         text: "Or describe it in your own words (optional)",
@@ -872,21 +982,19 @@ async function missionPage(id) {
       act("Resume", "resume", { primary: true }),
       act("Cancel", "cancel", { danger: true }),
     );
+  const agentNames = new Map(
+    ((await api("/v1/app/agents")).data?.agents ?? []).map((a) => [
+      a.agentId,
+      a.displayName,
+    ]),
+  );
   const [auth, ledger] = await Promise.all([
     api(`/v1/admin/org/missions/${id}/authorities`),
     api(`/v1/admin/org/missions/${id}/ledger`),
   ]);
   shell(
     "#/missions",
-    h(
-      "div",
-      { class: "row" },
-      h("h1", { text: c.objective }),
-      h("span", {
-        class: `badge ${m.status}`,
-        text: m.status.replaceAll("_", " "),
-      }),
-    ),
+    h("div", { class: "row" }, h("h1", { text: c.objective }), badge(m.status)),
     out,
     h(
       "section",
@@ -905,7 +1013,7 @@ async function missionPage(id) {
             : "—",
         ),
         row("Buys only from", c.merchantRestrictions?.ids?.join(", ") ?? "—"),
-        row("Ends", new Date(c.expiresAt).toLocaleString()),
+        row("Ends", when(c.expiresAt)),
       ),
       h("div", { class: "actions" }, actions),
     ),
@@ -941,14 +1049,15 @@ async function missionPage(id) {
                 h(
                   "tr",
                   {},
-                  h("td", { text: a.agentId }),
-                  h("td", { text: a.category }),
-                  h("td", { text: money(a.allocationMinor, c.currency) }),
-                  h(
-                    "td",
-                    {},
-                    h("span", { class: `badge ${a.status}`, text: a.status }),
-                  ),
+                  h("td", {
+                    text: agentNames.get(a.agentId) ?? "Removed agent",
+                  }),
+                  h("td", { "data-label": "Category", text: a.category }),
+                  h("td", {
+                    "data-label": "Up to",
+                    text: money(a.allocationMinor, c.currency),
+                  }),
+                  h("td", {}, badge(a.status)),
                 ),
               ),
             ),

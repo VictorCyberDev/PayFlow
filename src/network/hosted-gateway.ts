@@ -4,7 +4,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
-import { APP_ASSETS } from "./app-assets.generated.js";
+import { APP_ASSETS, APP_FONTS } from "./app-assets.generated.js";
 import { draftMission, type DraftModel } from "../missions/draft-assistant.js";
 import { z } from "zod";
 import {
@@ -273,6 +273,10 @@ const APP_TYPES: Record<string, string> = {
 };
 /** The customer web app: three static files embedded in this module (see scripts/embed-app-ui.mjs). Anything else is a 404. */
 function appAsset(path: string): { type: string; body: Buffer } | null {
+  const font = /^\/workspace\/fonts\/([a-z0-9-]+\.woff2)$/u.exec(path)?.[1];
+  const fontData = font ? APP_FONTS[font] : undefined;
+  if (fontData)
+    return { type: "font/woff2", body: Buffer.from(fontData, "base64") };
   const file = APP_FILES[path];
   const text = file ? APP_ASSETS[file] : undefined;
   if (!file || text === undefined) return null;
@@ -2308,7 +2312,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         "referrer-policy": "no-referrer",
         "x-frame-options": "DENY",
         "content-security-policy":
-          "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+          "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
       });
       res.end(req.method === "HEAD" ? undefined : asset.body);
       return true;

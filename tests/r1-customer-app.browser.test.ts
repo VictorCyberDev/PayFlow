@@ -29,7 +29,8 @@ interface Page {
   goto(u: string): Promise<unknown>;
   getByLabel(n: string, o?: { exact?: boolean }): Loc;
   getByRole(r: string, o?: { name?: string | RegExp; level?: number }): Loc;
-  getByText(t: string | RegExp): Loc;
+  getByText(t: string | RegExp, o?: { exact?: boolean }): Loc;
+  screenshot(o: { path: string; fullPage?: boolean }): Promise<unknown>;
   locator(s: string): Loc;
   evaluate<R>(fn: () => R): Promise<R>;
   evaluate<R, A>(fn: (a: A) => R, arg: A): Promise<R>;
@@ -211,7 +212,7 @@ const chromePath = [
       await page
         .getByRole("heading", { name: "Buy two quiet keyboards" })
         .waitFor();
-      await page.getByText("DRAFT").first().waitFor();
+      await page.getByText("Draft", { exact: true }).first().waitFor();
 
       // nothing is in force until the owner approves
       expect(
@@ -222,9 +223,12 @@ const chromePath = [
         ),
       ).toBe(0);
       await page.getByRole("button", { name: "Submit for approval" }).click();
-      await page.getByText("PENDING OWNER APPROVAL").first().waitFor();
+      await page
+        .getByText("Waiting for you", { exact: true })
+        .first()
+        .waitFor();
       await page.getByRole("button", { name: "Approve" }).click();
-      await page.getByText("ACTIVE").first().waitFor();
+      await page.getByText("In force", { exact: true }).first().waitFor();
       await page.getByRole("cell", { name: "EQUIPMENT" }).waitFor();
       expect(
         Number(
@@ -238,7 +242,7 @@ const chromePath = [
 
       // pausing ends the spending authority immediately
       await page.getByRole("button", { name: "Pause" }).click();
-      await page.getByText("PAUSED").first().waitFor();
+      await page.getByText("Paused", { exact: true }).first().waitFor();
       expect(
         Number(
           (
@@ -259,6 +263,82 @@ const chromePath = [
       expect(dead.status).toBe(401);
       await ctx.close();
     }, 120_000);
+
+    (process.env.SHOTS_DIR ? it : it.skip)(
+      "design review screenshots (only when SHOTS_DIR is set)",
+      async () => {
+        const dir = process.env.SHOTS_DIR!;
+        const { ctx, page } = await open(1280);
+        await fetch(`${h.origin}/v1/app/signup`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: h.origin },
+          body: JSON.stringify({
+            email: "shots@example.com",
+            password: "a long enough passphrase",
+            displayName: "Sam Rivera",
+            organizationName: "Rivera Studio",
+          }),
+        });
+        await page.goto(`${h.origin}/workspace`);
+        await page.getByRole("heading", { name: "Sign in" }).waitFor();
+        for (const w of [1280, 375]) {
+          await page.setViewportSize({ width: w, height: 900 });
+          await page.screenshot({
+            path: `${dir}/signin-${w}.png`,
+            fullPage: true,
+          });
+        }
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.getByLabel("Email").fill("shots@example.com");
+        await page.getByLabel("Password").fill("a long enough passphrase");
+        await page.getByRole("button", { name: "Sign in" }).click();
+        await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+        await page.goto(`${h.origin}/workspace#/agents`);
+        await page.getByLabel("Agent name").fill("Buyer");
+        await page.getByRole("button", { name: "Add agent" }).click();
+        await page.getByText("Buyer").first().waitFor();
+        await page.goto(`${h.origin}/workspace#/missions/new`);
+        await page.getByRole("heading", { name: "New mission" }).waitFor();
+        for (const w of [1280, 375]) {
+          await page.setViewportSize({ width: w, height: 900 });
+          await page.screenshot({
+            path: `${dir}/wizard-${w}.png`,
+            fullPage: true,
+          });
+        }
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page
+          .getByLabel("What should be done?")
+          .fill("Buy two quiet keyboards");
+        await page
+          .getByLabel("What does done look like?")
+          .fill("Two keyboards ordered");
+        await page
+          .getByLabel("How will you judge it? (one per line)")
+          .fill("Under budget");
+        await page.getByRole("button", { name: "Next" }).click();
+        await page.getByRole("button", { name: "Next" }).click();
+        await page.getByLabel("Buy (within limits)").check();
+        await page.getByRole("button", { name: "Next" }).click();
+        await page.getByRole("button", { name: "Create mission" }).click();
+        await page.getByRole("button", { name: "Submit for approval" }).click();
+        await page.getByRole("button", { name: "Approve" }).click();
+        await page.getByText("In force", { exact: true }).first().waitFor();
+        await page.getByRole("cell", { name: "EQUIPMENT" }).waitFor();
+        for (const w of [1280, 375]) {
+          await page.setViewportSize({ width: w, height: 900 });
+          await page.screenshot({
+            path: `${dir}/mission-${w}.png`,
+            fullPage: true,
+          });
+        }
+        await page.goto(`${h.origin}/workspace#/`);
+        await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+        await page.screenshot({ path: `${dir}/home-375.png`, fullPage: true });
+        await ctx.close();
+      },
+      120_000,
+    );
 
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
