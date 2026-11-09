@@ -397,11 +397,19 @@ export class ExecutingGateway {
         },
         ...(po?.ok && intentId && binding
           ? {
-              quoteGuard: (q: Parameters<typeof checkQuoteAgainstOrder>[2]) =>
-                po.kind === "PURCHASE_ORDER"
-                  ? checkQuoteAgainstOrder(po.po, po.terms, q)
-                  : checkQuoteAgainstPayment(po.po, q),
-              beforeDispatch: () => binding.beforeDispatch(intentId),
+              quoteGuard: async (
+                q: Parameters<typeof checkQuoteAgainstOrder>[2],
+              ) => {
+                const bad =
+                  po.kind === "PURCHASE_ORDER"
+                    ? checkQuoteAgainstOrder(po.po, po.terms, q)
+                    : checkQuoteAgainstPayment(po.po, q);
+                if (bad) return bad;
+                // Pin the exact trusted quote this decision was made on; dispatch must still be on it.
+                return binding.recordQuote(intentId, q);
+              },
+              beforeDispatch: (ctx: { proposalId: string }) =>
+                binding.beforeDispatch(intentId, ctx.proposalId),
             }
           : {}),
       });

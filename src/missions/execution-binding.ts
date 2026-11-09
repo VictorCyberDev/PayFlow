@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Sql } from "postgres";
 import type { CheckoutQuote } from "../checkout-contracts.js";
+import { checkoutQuoteFingerprint } from "../checkout-contracts.js";
 import { digestOf, type PurchaseOrderDoc } from "./purchase.js";
 
 /**
@@ -267,14 +268,45 @@ export class ExecutionBindingService {
    * The last check before the provider may be called. Atomically moves PENDING -> DISPATCHING (single use) only if the live state
    * still allows the payment. Returns a refusal code, or null.
    */
-  async beforeDispatch(intentId: string): Promise<string | null> {
+  /** Pins the trusted checkout quote an intent was compared with. Set once; a different quote later is a refusal. */
+  async recordQuote(
+    intentId: string,
+    quote: CheckoutQuote,
+  ): Promise<string | null> {
+    const fp = checkoutQuoteFingerprint(quote);
+    const moved = await this.deps.sql`update mission_execution_intents
+      set checkout_quote_id = ${quote.quoteId}, checkout_quote_fingerprint = ${fp}
+      where intent_id = ${intentId} and status = 'PENDING' and checkout_quote_id is null returning intent_id`;
+    return moved.length === 1 ? null : "ORDER_INTENT_NOT_PENDING";
+  }
+
+  async beforeDispatch(
+    intentId: string,
+    proposalId?: string,
+  ): Promise<string | null> {
     const sql = this.deps.sql;
     const [i] =
-      await sql`select order_kind, order_ref from mission_execution_intents where intent_id = ${intentId}`;
+      await sql`select order_kind, order_ref, po_digest, checkout_quote_id from mission_execution_intents where intent_id = ${intentId}`;
     if (!i) return "ORDER_INTENT_MISSING";
     const kind = i.order_kind as "PURCHASE_ORDER" | "CONTRACTOR_PAYMENT";
     const row = await this.load(kind, String(i.order_ref));
     if (!row) return "ORDER_NOT_FOUND";
+    // The order document (cost center, invoice reference, lines) must still be exactly what this decision was made on.
+    const doc = row.document as PurchaseOrderDoc;
+    if (
+      digestOf(doc) !== String(row.document_digest).trim() ||
+      String(row.document_digest).trim() !== String(i.po_digest).trim()
+    )
+      return "ORDER_INTEGRITY_FAILURE";
+    // The reservation must belong to the very quote that was compared with the order (no substitution in between).
+    if (proposalId !== undefined) {
+      if (!i.checkout_quote_id) return "ORDER_QUOTE_NOT_BOUND";
+      const [pq] =
+        await sql`select cm.quote_id from checkout_manifest_proposals l join checkout_manifests cm on cm.id = l.manifest_id
+          where l.proposal_id = ${proposalId}`;
+      if (!pq || String(pq.quote_id) !== String(i.checkout_quote_id))
+        return "ORDER_QUOTE_SUBSTITUTED";
+    }
     const live = await this.liveChecks(kind, row);
     if (live) return live;
     const moved =

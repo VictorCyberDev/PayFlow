@@ -103,12 +103,16 @@ export interface DelegatedAttemptInput {
    * Extra, caller-supplied checks on the TRUSTED quote (e.g. a mission purchase-order binding). Return a refusal code to stop before any
    * manifest, proposal, reservation, grant or provider call. A throw is a refusal too.
    */
-  readonly quoteGuard?: (quote: CheckoutQuote) => string | null;
+  readonly quoteGuard?: (
+    quote: CheckoutQuote,
+  ) => string | null | Promise<string | null>;
   /**
    * Called after a grant exists and immediately before the execution boundary may dispatch. Return a refusal code to stop with zero
    * provider effect. The reservation then expires/releases through the ordinary Authority lifecycle.
    */
-  readonly beforeDispatch?: () => Promise<string | null>;
+  readonly beforeDispatch?: (ctx: {
+    proposalId: string;
+  }) => Promise<string | null>;
 }
 
 const safeCode = (error: unknown, fallback: string): string => {
@@ -149,7 +153,7 @@ export class DelegatedCommerceService {
           quote.logicalMerchantId !== input.expected.merchantId)
       )
         throw new Error("CLAIMED_TERMS_MISMATCH");
-      const guarded = input.quoteGuard?.(quote);
+      const guarded = await input.quoteGuard?.(quote);
       if (guarded) throw new Error(guarded);
       const manifest = await checkout.sealManifest(quote.quoteId);
       const proposal = await checkout.compileManifestProposal(
@@ -214,7 +218,7 @@ export class DelegatedCommerceService {
       );
     }
     try {
-      const stop = await input.beforeDispatch?.();
+      const stop = await input.beforeDispatch?.({ proposalId });
       if (stop) return refused(stop, proposalId, selectionId);
     } catch {
       return refused("BINDING_CHECK_FAILED", proposalId, selectionId);

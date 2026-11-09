@@ -18,6 +18,9 @@ CREATE TABLE mission_execution_intents (
   nonce_digest char(64) NOT NULL CHECK (nonce_digest ~ '^[a-f0-9]{64}$'),
   status text NOT NULL CHECK (status IN ('PENDING','DISPATCHING','COMPLETED','NO_EFFECT','UNKNOWN','ABANDONED')),
   refusal text CHECK (refusal IS NULL OR refusal ~ '^[A-Z0-9_]{3,96}$'),
+  -- the trusted checkout quote this intent was compared against; recorded once, then fixed
+  checkout_quote_id text,
+  checkout_quote_fingerprint char(64) CHECK (checkout_quote_fingerprint IS NULL OR checkout_quote_fingerprint ~ '^[a-f0-9]{64}$'),
   proposal_id text CHECK (proposal_id IS NULL OR length(proposal_id) BETWEEN 1 AND 128),
   created_at timestamptz NOT NULL,
   dispatched_at timestamptz,
@@ -35,6 +38,10 @@ BEGIN
      OR NEW.mission_version <> OLD.mission_version OR NEW.authority_id <> OLD.authority_id OR NEW.agent_id <> OLD.agent_id
      OR NEW.po_digest <> OLD.po_digest OR NEW.nonce_digest <> OLD.nonce_digest OR NEW.created_at <> OLD.created_at THEN
     RAISE EXCEPTION 'mission_execution_intents identity is immutable';
+  END IF;
+  IF OLD.checkout_quote_id IS NOT NULL AND (NEW.checkout_quote_id IS DISTINCT FROM OLD.checkout_quote_id
+     OR NEW.checkout_quote_fingerprint IS DISTINCT FROM OLD.checkout_quote_fingerprint) THEN
+    RAISE EXCEPTION 'mission_execution_intents quote binding is immutable once set';
   END IF;
   IF OLD.status IN ('COMPLETED','NO_EFFECT','ABANDONED') AND NEW.status <> OLD.status THEN
     RAISE EXCEPTION 'mission_execution_intents terminal status is final';

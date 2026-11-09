@@ -779,6 +779,106 @@ describe("R0 order binding (pure)", () => {
       }
     });
 
+    it("a provider timeout leaves the payment UNKNOWN: the order stays held, nothing is retried, the budget is not released", async () => {
+      const s = await scene();
+      const acc = await accepted(s);
+      const order = await issue(s, acc.acceptanceId);
+      h.provider.loseCapture = true;
+      const r = await exec(s.c, order.authorityId, 8_400, {
+        missionOrder: order.poId,
+      });
+      expect(r).toMatchObject({ status: "UNRESOLVED", effectCount: null });
+      const calls = h.provider.captureCalls;
+      expect(calls).toBe(1);
+      expect(await intents(order.poId)).toEqual([
+        { status: "UNKNOWN", refusal: null },
+      ]);
+      // a second attempt, even with a fresh nonce, neither reaches the provider nor frees the order
+      const again = await exec(s.c, order.authorityId, 8_400, {
+        missionOrder: order.poId,
+      });
+      expect(again).toMatchObject({
+        status: "DENIED",
+        effectCount: 0,
+        reason: "ORDER_ALREADY_IN_PROGRESS",
+      });
+      expect(h.provider.captureCalls).toBe(calls);
+      expect(await stage(acc.ledgerItemId)).toBe("APPROVED");
+    });
+
+    it("the order document (cost center, invoice reference) cannot change between claim and dispatch: the digest is re-checked at the boundary", async () => {
+      const s = await scene();
+      const acc = await accepted(s);
+      const order = await issue(s, acc.acceptanceId);
+      // Failpoint: after the reservation, someone with database access rewrites the order's cost center.
+      await sqlr()`create or replace function r0_doc_failpoint() returns trigger language plpgsql as $f$
+        begin
+          perform set_config('session_replication_role', 'replica', true);
+          update mission_purchase_orders set document = jsonb_set(document, '{costCenter}', '"CC-EVIL"') where authority_id = new.mandate_id;
+          perform set_config('session_replication_role', 'origin', true);
+          return new;
+        end $f$`;
+      await sqlr()`create trigger r0_doc_failpoint after insert on authorization_reservations for each row execute function r0_doc_failpoint()`;
+      try {
+        const r = await exec(s.c, order.authorityId, 8_400, {
+          missionOrder: order.poId,
+        });
+        expect(r).toMatchObject({
+          status: "DENIED",
+          effectCount: 0,
+          reason: "ORDER_INTEGRITY_FAILURE",
+        });
+        expect(h.provider.captureCalls).toBe(0);
+        expect(await intents(order.poId)).toEqual([
+          { status: "NO_EFFECT", refusal: "ORDER_INTEGRITY_FAILURE" },
+        ]);
+      } finally {
+        await sqlr()`drop trigger if exists r0_doc_failpoint on authorization_reservations`;
+      }
+    });
+
+    it("the reservation must be on the very quote the order was compared with: a different proposal at dispatch is a substitution", async () => {
+      const s = await scene();
+      const acc = await accepted(s);
+      const order = await issue(s, acc.acceptanceId);
+      // a real proposal from an unrelated, generic payment supplies a different quote
+      const generic = await h.authority();
+      const gAgent = String(
+        (
+          await sqlr()`select authorized_agent_id from mandates where id = ${generic}`
+        )[0]!.authorized_agent_id,
+      );
+      const other = await exec(await h.agentToken(gAgent), generic, 8_400, {
+        agent: gAgent,
+      });
+      const foreignProposal = (other as { proof?: { proposalId?: string } })
+        .proof!.proposalId!;
+      const binding = new ExecutionBindingService({ sql: sqlr(), now: h.iso });
+      const b = await binding.begin({
+        poId: order.poId,
+        authorityId: order.authorityId,
+        agentId: "c",
+        nonce: "subst-nonce-0000000001",
+        amountMinor: 8_400,
+        currency: "USD",
+        merchantId: DEMO_MERCHANT,
+      });
+      if (!b.ok) throw new Error(b.code);
+      // no quote pinned yet -> refused; pinned to some quote, then a proposal on another -> refused
+      expect(await binding.beforeDispatch(b.intentId, foreignProposal)).toBe(
+        "ORDER_QUOTE_NOT_BOUND",
+      );
+      await sqlr()`update mission_execution_intents set checkout_quote_id = 'not-that-quote', checkout_quote_fingerprint = ${"a".repeat(64)} where intent_id = ${b.intentId}`;
+      expect(await binding.beforeDispatch(b.intentId, foreignProposal)).toBe(
+        "ORDER_QUOTE_SUBSTITUTED",
+      );
+      // once set, the pinned quote cannot be rewritten
+      await expect(
+        sqlr()`update mission_execution_intents set checkout_quote_id = 'other' where intent_id = ${b.intentId}`,
+      ).rejects.toThrow(/immutable/);
+      expect(h.provider.captureCalls).toBe(1); // only the unrelated generic payment
+    });
+
     it("the execution intent is append-only in identity and forward-only in status", async () => {
       const s = await scene();
       const acc = await accepted(s);
