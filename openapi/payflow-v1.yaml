@@ -462,6 +462,70 @@ paths:
         "403":
           { description: Not the holder, or the hop would widen the parent }
         "423": { description: Organization paused }
+  /v1/app/signup:
+    post:
+      operationId: appSignup
+      summary: "Create a customer account and its Sandbox organization (browser app). Origin must be an allowed app origin."
+      description: "Passwords are stored only as salted scrypt hashes. Rate limited. A duplicate email is a 409."
+      x-hosted-only: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password, displayName, organizationName]
+              properties:
+                email: { type: string }
+                password: { type: string, minLength: 12, maxLength: 200 }
+                displayName: { type: string, maxLength: 80 }
+                organizationName: { type: string, maxLength: 120 }
+      responses:
+        "201": { description: Created }
+        "400": { description: Malformed or weak password }
+        "403": { description: Origin not allowed }
+        "409": { description: Email unavailable }
+        "429": { description: Rate limited }
+  /v1/app/login:
+    post:
+      operationId: appLogin
+      summary: "Sign in. Sets an HttpOnly, SameSite=Strict session cookie and returns the CSRF token."
+      description: "Every credential failure returns the same 401. Five wrong passwords lock the account for 15 minutes. State-changing requests made with the cookie must carry an allowed `Origin` and the `x-pf-csrf` token."
+      x-hosted-only: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+                organizationId: { type: string }
+      responses:
+        "200": { description: Signed in }
+        "401": { description: Invalid credentials }
+        "403": { description: Origin not allowed }
+        "429": { description: Rate limited }
+  /v1/app/me:
+    get:
+      operationId: appMe
+      summary: "The signed-in user, their organization role and the CSRF token."
+      x-hosted-only: true
+      responses:
+        "200": { description: Signed in }
+        "401": { description: Not signed in }
+  /v1/app/logout:
+    post:
+      operationId: appLogout
+      summary: "Revoke the session and clear the cookie. Needs the CSRF token."
+      x-hosted-only: true
+      responses:
+        "200": { description: Signed out }
+        "403": { description: CSRF check failed }
   /v1/admin/org/missions:
     post:
       operationId: createMission

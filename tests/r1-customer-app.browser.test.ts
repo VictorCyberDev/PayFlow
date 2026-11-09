@@ -1,0 +1,318 @@
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import { hostHarness } from "./helpers/host-harness.js";
+
+/**
+ * R1b — the customer web app in a real browser against the real Gateway on PostgreSQL (same origin, real cookies).
+ * One journey: create an account -> add an agent -> describe a mission in the wizard -> submit -> approve -> see the spending
+ * authority -> pause (authority ends) -> sign out. Plus: the session cookie is invisible to page script, hostile text is rendered
+ * as text, nothing overflows at six widths, and axe finds no WCAG A/AA violations on the screens.
+ */
+const url = process.env.TEST_DATABASE_URL;
+const pw = resolve("apps/console/node_modules/playwright-core/index.mjs");
+const have = existsSync(pw);
+if (process.env.REQUIRE_BROWSER === "1" && !have)
+  throw new Error("Playwright missing");
+interface Loc {
+  waitFor(o?: { timeout?: number }): Promise<void>;
+  click(): Promise<void>;
+  fill(v: string): Promise<void>;
+  check(): Promise<void>;
+  innerText(): Promise<string>;
+  count(): Promise<number>;
+  first(): Loc;
+  filter(o: { hasText: string | RegExp }): Loc;
+}
+interface Page {
+  goto(u: string): Promise<unknown>;
+  getByLabel(n: string, o?: { exact?: boolean }): Loc;
+  getByRole(r: string, o?: { name?: string | RegExp; level?: number }): Loc;
+  getByText(t: string | RegExp): Loc;
+  locator(s: string): Loc;
+  evaluate<R>(fn: () => R): Promise<R>;
+  evaluate<R, A>(fn: (a: A) => R, arg: A): Promise<R>;
+  addScriptTag(o: { content: string }): Promise<unknown>;
+  setViewportSize(s: { width: number; height: number }): Promise<void>;
+  on(e: "dialog", h: (d: { accept(): Promise<void> }) => void): void;
+}
+interface Ctx {
+  newPage(): Promise<Page>;
+  cookies(): Promise<
+    { name: string; httpOnly: boolean; sameSite: string; value: string }[]
+  >;
+  close(): Promise<void>;
+}
+interface Browser {
+  newContext(o: object): Promise<Ctx>;
+  close(): Promise<void>;
+}
+interface Axe {
+  run(
+    d: Document,
+    o: object,
+  ): Promise<{ violations: { id: string; nodes: { target: unknown }[] }[] }>;
+}
+const WIDTHS = [320, 375, 430, 768, 1024, 1440];
+const chromePath = [
+  process.env.PLAYWRIGHT_CHROMIUM,
+  "/opt/pw-browsers/chromium",
+].find((p) => p && existsSync(p));
+
+(url && have ? describe : describe.skip)(
+  "R1b customer app (real browser + real Gateway)",
+  () => {
+    const h = hostHarness({
+      draftModel: () => ({
+        complete: () =>
+          Promise.resolve({
+            status: "OK" as const,
+            text: JSON.stringify({
+              objective: "Buy two quiet keyboards",
+              intendedOutcome: "Two keyboards ordered",
+              successCriteria: ["Under budget", "Quiet switches"],
+              suggestedBudgetMinor: 100_000,
+              suggestedMaxPurchaseMinor: 30_000,
+              suggestedCategory: "EQUIPMENT",
+              questions: ["Which layout?"],
+            }),
+          }),
+      }),
+      extraTruncate:
+        "user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
+    });
+    const require_ = createRequire(import.meta.url);
+    let axeSource = "";
+    let browser: Browser;
+    beforeAll(async () => {
+      axeSource = readFileSync(
+        require_.resolve("../apps/console/node_modules/axe-core/axe.min.js"),
+        "utf8",
+      );
+      const { chromium } = (await import(pw)) as {
+        chromium: { launch(o: object): Promise<Browser> };
+      };
+      browser = await chromium.launch({
+        headless: true,
+        ...(chromePath ? { executablePath: chromePath } : {}),
+      });
+    }, 60_000);
+    afterAll(async () => {
+      await browser?.close();
+    });
+
+    const open = async (width = 1280) => {
+      const ctx = await browser.newContext({
+        viewport: { width, height: 900 },
+        reducedMotion: "reduce",
+        // The app ships a strict CSP (no inline script). Only the test's axe injection needs it lifted, and only in the browser context.
+        bypassCSP: true,
+      });
+      const page = await ctx.newPage();
+      page.on("dialog", (d) => void d.accept());
+      return { ctx, page };
+    };
+    const axe = async (page: Page) => {
+      await page.addScriptTag({ content: axeSource });
+      return page.evaluate(async () => {
+        const a = (window as unknown as { axe: Axe }).axe;
+        const r = await a.run(document, {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+        });
+        return r.violations.map((v) => `${v.id}:${v.nodes.length}`);
+      });
+    };
+    const overflow = (page: Page) =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      );
+
+    it("the whole customer journey works in a browser, and the session is invisible to page script", async () => {
+      const { ctx, page } = await open();
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByRole("heading", { name: "Sign in" }).waitFor();
+      expect(await axe(page)).toEqual([]);
+      // sign-in with nothing created is refused with a human message and no detail
+      await page.getByLabel("Email").fill("nobody@example.com");
+      await page.getByLabel("Password").fill("not the right password");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByText("don't match").waitFor();
+
+      // create an account
+      await page.getByText("Create an account").click();
+      await page.getByLabel("Your name").fill("Sam Rivera");
+      await page.getByLabel("Organization name").fill("Rivera Studio");
+      await page.getByLabel("Email").fill("sam@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Create account" }).click();
+      await page
+        .getByRole("heading", { name: "Welcome, Sam Rivera" })
+        .waitFor();
+
+      // the cookie is HttpOnly + Strict and not readable by script
+      const cookie = (await ctx.cookies()).find(
+        (c) => c.name === "pf_session",
+      )!;
+      expect(cookie.httpOnly).toBe(true);
+      expect(cookie.sameSite).toBe("Strict");
+      expect(await page.evaluate(() => document.cookie)).toBe("");
+
+      // add an agent
+      await page.getByRole("link", { name: "Agents" }).click();
+      await page.getByRole("heading", { name: "Agents", level: 1 }).waitFor();
+      await page.getByLabel("Agent name").fill("Buyer");
+      await page.getByRole("button", { name: "Add agent" }).click();
+      await page.getByText("Buyer").first().waitFor();
+      // a credential is shown once
+      await page
+        .getByRole("button", { name: "Create credential for Buyer" })
+        .click();
+      await page.getByText("Copy this credential now").waitFor();
+      expect(await page.locator(".secret").innerText()).toMatch(
+        /^pf_sbx_pfc_[a-f0-9]{24}\./u,
+      );
+
+      // the wizard, with validation on the way
+      await page.goto(`${h.origin}/workspace#/missions/new`);
+      await page.getByRole("heading", { name: "New mission" }).waitFor();
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByText("Fill in the goal").waitFor();
+      // the optional AI suggestion pre-fills the form for review; it creates nothing
+      await page
+        .getByLabel("Or describe it in your own words (optional)")
+        .fill("two quiet keyboards for the studio");
+      await page.getByRole("button", { name: "Suggest" }).click();
+      await page.getByText("Review every field").waitFor();
+      expect(
+        Number((await h.repo.sql`select count(*)::int n from missions`)[0]!.n),
+      ).toBe(0);
+      await page
+        .getByLabel("What should be done?")
+        .fill("Buy two quiet keyboards");
+      await page
+        .getByLabel("What does done look like?")
+        .fill("Two keyboards ordered");
+      await page
+        .getByLabel("How will you judge it? (one per line)")
+        .fill("Under budget\nQuiet switches");
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByLabel("Largest single purchase (USD)").fill("2000");
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByText("cannot exceed the total budget").waitFor();
+      await page.getByLabel("Largest single purchase (USD)").fill("300");
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByText("Give at least one agent a role").waitFor();
+      await page.getByLabel("Buy (within limits)").check();
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByRole("heading", { name: "Review" }).waitFor();
+      await page.getByRole("button", { name: "Create mission" }).click();
+      await page
+        .getByRole("heading", { name: "Buy two quiet keyboards" })
+        .waitFor();
+      await page.getByText("DRAFT").first().waitFor();
+
+      // nothing is in force until the owner approves
+      expect(
+        Number(
+          (
+            await h.repo.sql`select count(*)::int n from mission_authorities`
+          )[0]!.n,
+        ),
+      ).toBe(0);
+      await page.getByRole("button", { name: "Submit for approval" }).click();
+      await page.getByText("PENDING OWNER APPROVAL").first().waitFor();
+      await page.getByRole("button", { name: "Approve" }).click();
+      await page.getByText("ACTIVE").first().waitFor();
+      await page.getByRole("cell", { name: "EQUIPMENT" }).waitFor();
+      expect(
+        Number(
+          (
+            await h.repo
+              .sql`select count(*)::int n from mission_authorities where status = 'ACTIVE'`
+          )[0]!.n,
+        ),
+      ).toBe(1);
+      expect(await axe(page)).toEqual([]);
+
+      // pausing ends the spending authority immediately
+      await page.getByRole("button", { name: "Pause" }).click();
+      await page.getByText("PAUSED").first().waitFor();
+      expect(
+        Number(
+          (
+            await h.repo
+              .sql`select count(*)::int n from mission_authorities where status = 'ACTIVE'`
+          )[0]!.n,
+        ),
+      ).toBe(0);
+
+      // sign out: the page falls back to sign-in and the old cookie is dead
+      await page.getByRole("button", { name: "Sign out" }).click();
+      await page.getByRole("heading", { name: "Sign in" }).waitFor();
+      await page.goto(`${h.origin}/workspace#/missions`);
+      await page.getByRole("heading", { name: "Sign in" }).waitFor();
+      const dead = await fetch(`${h.origin}/v1/app/me`, {
+        headers: { cookie: `pf_session=${cookie.value}` },
+      });
+      expect(dead.status).toBe(401);
+      await ctx.close();
+    }, 120_000);
+
+    it("hostile text from the server is shown as text and never runs", async () => {
+      const { ctx, page } = await open();
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByText("Create an account").click();
+      await page
+        .getByLabel("Your name")
+        .fill("<img src=x onerror=window.__pwned=1>");
+      await page.getByLabel("Organization name").fill("Evil <b>Org</b>");
+      await page.getByLabel("Email").fill("evil@example.com");
+      await page.getByLabel("Password").fill("another long passphrase");
+      await page.getByRole("button", { name: "Create account" }).click();
+      await page.getByRole("heading", { name: /Welcome, <img/u }).waitFor();
+      expect(
+        await page.evaluate(
+          () => (window as unknown as { __pwned?: number }).__pwned,
+        ),
+      ).toBeUndefined();
+      expect(await page.locator("main img").count()).toBe(0);
+      await ctx.close();
+    }, 60_000);
+
+    it("nothing overflows sideways and axe finds nothing at six widths", async () => {
+      const { ctx, page } = await open(1280);
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "sam@example.com",
+          password: "a long enough passphrase",
+          displayName: "Sam Rivera",
+          organizationName: "Rivera Studio",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByRole("heading", { name: "Sign in" }).waitFor();
+      for (const w of WIDTHS) {
+        await page.setViewportSize({ width: w, height: 900 });
+        expect(await overflow(page), `sign-in @${w}`).toBeLessThanOrEqual(0);
+      }
+      await page.getByLabel("Email").fill("sam@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      for (const hash of ["#/", "#/agents", "#/missions", "#/missions/new"]) {
+        await page.goto(`${h.origin}/workspace${hash}`);
+        await page.locator("main h1").first().waitFor();
+        for (const w of WIDTHS) {
+          await page.setViewportSize({ width: w, height: 900 });
+          expect(await overflow(page), `${hash} @${w}`).toBeLessThanOrEqual(0);
+        }
+        expect(await axe(page), hash).toEqual([]);
+      }
+      await ctx.close();
+    }, 120_000);
+  },
+);

@@ -41,6 +41,7 @@ export default tseslint.config(
   {
     ignores: [
       "scripts/**",
+      "app-ui/**",
       "public/_next/**",
       "dist/**",
       "coverage/**",

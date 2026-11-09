@@ -4,6 +4,18 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { draftMission, type DraftModel } from "../missions/draft-assistant.js";
+import { readFileSync } from "node:fs";
+import { z } from "zod";
+import {
+  UserAuthService,
+  SESSION_ABSOLUTE_MS,
+  clearedSessionCookie,
+  csrfFor,
+  principalIdOf,
+  readSessionCookie,
+  sessionCookie,
+} from "./user-auth.js";
 import { ExecutionBindingService } from "../missions/execution-binding.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Sql } from "postgres";
@@ -154,6 +166,15 @@ export interface HostedGatewayOptions {
    * ignored. Default 1. 0 trusts no header and uses the socket address.
    */
   readonly trustedProxyHops?: number;
+  /**
+   * Browser origins (scheme://host[:port]) allowed to make state-changing requests with a session cookie. Cookie-authenticated
+   * unsafe requests from any other Origin are refused (CSRF). Empty = cookie sessions cannot change anything.
+   */
+  readonly appOrigins?: readonly string[];
+  /** Model that SUGGESTS mission wording in the wizard. Absent = the suggestion route answers MODEL_NOT_CONFIGURED. */
+  readonly draftModel?: DraftModel;
+  /** Set `Secure` on the session cookie (default true). Only local plain-http development turns this off. */
+  readonly secureCookies?: boolean;
   /** Requests per minute allowed from one client address across ALL credentials (default 600). */
   readonly ipRateLimitPerMinute?: number;
   /**
@@ -236,6 +257,38 @@ function send(res: ServerResponse, reply: RestResponse): void {
     "x-content-type-options": "nosniff",
   });
   res.end(JSON.stringify(reply.body));
+}
+
+const APP_FILES: Record<string, string> = {
+  "/workspace": "index.html",
+  "/workspace/": "index.html",
+  "/workspace/index.html": "index.html",
+  "/workspace/app.js": "app.js",
+  "/workspace/app.css": "app.css",
+};
+const APP_TYPES: Record<string, string> = {
+  html: "text/html; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8",
+};
+const appCache = new Map<string, { type: string; body: Buffer }>();
+/** The customer web app: three static files, read once from `app-ui/`. Anything not in the table is a 404 (no path traversal). */
+function appAsset(path: string): { type: string; body: Buffer } | null {
+  const file = APP_FILES[path];
+  if (!file) return null;
+  const cached = appCache.get(file);
+  if (cached) return cached;
+  for (const rel of ["../../app-ui/", "../../../app-ui/", "../app-ui/"]) {
+    try {
+      const body = readFileSync(new URL(rel + file, import.meta.url));
+      const entry = { type: APP_TYPES[file.split(".").pop()!]!, body };
+      appCache.set(file, entry);
+      return entry;
+    } catch {
+      /* try the next layout (source vs. compiled) */
+    }
+  }
+  return null;
 }
 
 /**
@@ -379,6 +432,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       })
     : undefined;
   const members = new MemberStore(sql);
+  const userAuth = new UserAuthService({ sql, now: iso });
+  const secureCookies = options.secureCookies ?? true;
   const alerts = new AlertEngine(sql);
   // The active key is registered once; older keys stay published so historical Proof still
   // verifies. A key that was revoked cannot be re-activated: the process then refuses to sign.
@@ -729,6 +784,10 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       return { kind: "OPERATOR" };
     } catch (error) {
       if (!(error instanceof AdminAuthError)) throw error;
+    }
+    if (request.authorization?.startsWith("Session ")) {
+      const view = await userAuth.authenticate(request.authorization.slice(8));
+      return view ? { kind: "MEMBER", member: view.member } : "UNAUTHENTICATED";
     }
     try {
       return {
@@ -2230,6 +2289,35 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     const path = url.pathname
       .replace(/^\/api(?=\/v1\/)/u, "")
       .replace(/\/+$/u, "");
+    if (path === "/workspace" || path.startsWith("/workspace/")) {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        res.writeHead(405, { allow: "GET, HEAD" });
+        res.end();
+        return true;
+      }
+      const asset = appAsset(path);
+      if (!asset) {
+        res.writeHead(404, {
+          "content-type": "text/plain",
+          "cache-control": "no-store",
+        });
+        res.end("Not found");
+        return true;
+      }
+      res.writeHead(200, {
+        "content-type": asset.type,
+        "cache-control": asset.type.startsWith("text/html")
+          ? "no-store"
+          : "no-cache",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "x-frame-options": "DENY",
+        "content-security-policy":
+          "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      });
+      res.end(req.method === "HEAD" ? undefined : asset.body);
+      return true;
+    }
     if (!path.startsWith("/v1/")) return false;
     const method = req.method === "GET" ? "GET" : "POST";
     if (req.method !== "GET" && req.method !== "POST") {
@@ -2259,7 +2347,49 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       });
       return true;
     }
-    const authorization = req.headers.authorization;
+    let authorization = req.headers.authorization;
+    // A browser session: the HttpOnly cookie becomes a `Session` credential for the routes, but only after the request proves it
+    // came from our own page. Unsafe methods need an allowed Origin AND the CSRF token (derived from the session secret).
+    let cookieSession: string | null = null;
+    if (!authorization) {
+      cookieSession = readSessionCookie(req.headers.cookie);
+      if (cookieSession) {
+        const view = await userAuth.authenticate(cookieSession);
+        if (view) {
+          if (method !== "GET") {
+            const origin = req.headers.origin;
+            const csrf = req.headers["x-pf-csrf"];
+            if (
+              typeof origin !== "string" ||
+              !(options.appOrigins ?? []).includes(origin) ||
+              !userAuth.csrfMatches(
+                view,
+                typeof csrf === "string" ? csrf : undefined,
+              )
+            ) {
+              send(res, {
+                status: 403,
+                headers: {
+                  "content-type": "application/json",
+                  "cache-control": "no-store",
+                },
+                body: {
+                  reason: "CSRF_CHECK_FAILED",
+                  decision: "DENY",
+                  effectCount: 0,
+                  recoverable: false,
+                  humanSummary:
+                    "This request did not come from your signed-in page. Nothing changed.",
+                  nextAction: "RELOAD_THE_PAGE_AND_TRY_AGAIN",
+                },
+              });
+              return true;
+            }
+          }
+          authorization = `Session ${cookieSession}`;
+        }
+      }
+    }
     const request: RestRequest = {
       method,
       path,
@@ -2354,6 +2484,350 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         );
         return true;
       }
+    }
+    if (path.startsWith("/v1/app/")) {
+      const json = (
+        status: number,
+        bodyOut: Record<string, unknown>,
+        extra: Record<string, string> = {},
+      ) =>
+        send(res, {
+          status,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "no-store",
+            ...extra,
+          },
+          body: bodyOut,
+        });
+      const origin = req.headers.origin;
+      const originOk =
+        typeof origin === "string" &&
+        (options.appOrigins ?? []).includes(origin);
+      const sessionTokenIn = readSessionCookie(req.headers.cookie);
+      if (
+        method === "POST" &&
+        (path === "/v1/app/signup" || path === "/v1/app/login")
+      ) {
+        // Login CSRF: an attacker's page must not be able to sign a victim in as the attacker.
+        if (!originOk) {
+          json(403, { reason: "ORIGIN_NOT_ALLOWED", recoverable: false });
+          return true;
+        }
+        let gate;
+        try {
+          gate = await enforceRateLimit(limiter, {
+            bucket: "auth",
+            subject: `auth:${clientAddressOf(req, options.trustedProxyHops ?? 1).slice(0, 64)}`,
+            limit: 20,
+            windowSeconds: 60,
+            now: iso(),
+          });
+        } catch {
+          gate = { allowed: true, remaining: 0, resetAt: iso() };
+        }
+        if (!gate.allowed) {
+          json(
+            429,
+            { reason: "RATE_LIMITED", recoverable: true },
+            { "retry-after": "60" },
+          );
+          return true;
+        }
+        if (path === "/v1/app/signup") {
+          const r = await userAuth.signup(body);
+          if (!r.ok) {
+            json(r.refusal === "EMAIL_UNAVAILABLE" ? 409 : 400, {
+              reason: r.refusal,
+              recoverable: true,
+            });
+            return true;
+          }
+          json(201, { userId: r.userId, organizationId: r.organizationId });
+          return true;
+        }
+        const r = await userAuth.login(body);
+        if (!r.ok) {
+          json(r.refusal === "MALFORMED" ? 400 : 401, {
+            reason: r.refusal,
+            recoverable: true,
+          });
+          return true;
+        }
+        const g = r.grant;
+        json(
+          200,
+          {
+            user: g.user,
+            member: {
+              organizationId: g.member.organizationId,
+              environment: g.member.environment,
+              role: g.member.role,
+            },
+            csrfToken: g.csrfToken,
+            expiresAt: g.expiresAt,
+          },
+          {
+            "set-cookie": sessionCookie(
+              g.sessionToken,
+              Math.floor(SESSION_ABSOLUTE_MS / 1000),
+              secureCookies,
+            ),
+          },
+        );
+        return true;
+      }
+      if (method === "GET" && path === "/v1/app/me") {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view || !sessionTokenIn) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        json(200, {
+          user: view.user,
+          member: {
+            organizationId: view.member.organizationId,
+            environment: view.member.environment,
+            role: view.member.role,
+          },
+          csrfToken: csrfFor(sessionTokenIn),
+          expiresAt: view.expiresAt,
+        });
+        return true;
+      }
+      // ---- AI assist: a model SUGGESTS wording and rough numbers for the wizard. It decides nothing and is optional.
+      if (method === "POST" && path === "/v1/app/missions/draft") {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        if (!can(view.member.role, "mission:create")) {
+          json(403, {
+            reason: "PERMISSION_DENIED",
+            requiredPermission: "mission:create",
+          });
+          return true;
+        }
+        // Cost discipline: a per-minute and a per-day cap for each member, before any model call.
+        for (const [windowSeconds, limit] of [
+          [60, 6],
+          [86_400, 40],
+        ] as const) {
+          let gate;
+          try {
+            gate = await enforceRateLimit(limiter, {
+              bucket: `ai-draft-${windowSeconds}`,
+              subject: view.member.memberId,
+              limit,
+              windowSeconds,
+              now: iso(),
+            });
+          } catch {
+            gate = { allowed: false, remaining: 0, resetAt: iso() };
+          }
+          if (!gate.allowed) {
+            json(
+              429,
+              { reason: "RATE_LIMITED", recoverable: true },
+              { "retry-after": "60" },
+            );
+            return true;
+          }
+        }
+        const text = (body as { text?: unknown } | undefined)?.text;
+        const result = await draftMission(options.draftModel, text);
+        await audit.append({
+          organizationId: view.member.organizationId,
+          environment: view.member.environment,
+          actorKind: "MEMBER",
+          actorId: view.member.memberId,
+          action: "MISSION_DRAFT_SUGGESTED",
+          subjectKind: "MISSION_DRAFT",
+          subjectId: view.member.memberId,
+          // The text itself is never stored in the audit trail.
+          detail: {
+            status: result.status,
+            characters: typeof text === "string" ? text.length : 0,
+          },
+          occurredAt: iso(),
+        });
+        if (result.status === "DRAFTED") {
+          json(200, {
+            source: "MODEL",
+            notice:
+              "Suggested by an AI model. Review every field: nothing is created or approved until you do it yourself.",
+            draft: result.draft,
+          });
+          return true;
+        }
+        json(
+          result.status === "INVALID_INPUT"
+            ? 400
+            : result.status === "MODEL_NOT_CONFIGURED"
+              ? 503
+              : 502,
+          {
+            reason: result.status,
+            recoverable: true,
+          },
+        );
+        return true;
+      }
+      // ---- agents: a person enrolls the agents their missions will use, and issues each one a credential (shown once).
+      const agentRoute =
+        /^\/v1\/app\/agents(?:\/(agt_[a-f0-9]{24})\/credentials)?$/u.exec(path);
+      if (agentRoute) {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        const m = view.member;
+        const tenant = {
+          organizationId: m.organizationId,
+          environment: m.environment,
+        };
+        if (method === "GET" && !agentRoute[1]) {
+          if (!can(m.role, "view:agents")) {
+            json(403, {
+              reason: "PERMISSION_DENIED",
+              requiredPermission: "view:agents",
+            });
+            return true;
+          }
+          const rows =
+            await sql`select oa.agent_id, a.display_name, oa.lifecycle, a.expires_at
+            from organization_agents oa join agent_passports a on a.id = oa.agent_id
+            where oa.organization_id = ${tenant.organizationId} and oa.environment = ${tenant.environment}
+            order by a.display_name, oa.agent_id`;
+          json(200, {
+            agents: rows.map((r) => ({
+              agentId: String(r.agent_id),
+              displayName: String(r.display_name),
+              lifecycle: String(r.lifecycle),
+            })),
+          });
+          return true;
+        }
+        if (!can(m.role, "credential:issue")) {
+          await audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action: "PERMISSION_DENIED",
+            subjectKind: "ROUTE",
+            subjectId: path.slice(0, 120),
+            detail: { permission: "credential:issue", role: m.role },
+            occurredAt: iso(),
+          });
+          json(403, {
+            reason: "PERMISSION_DENIED",
+            requiredPermission: "credential:issue",
+          });
+          return true;
+        }
+        if (method === "POST" && !agentRoute[1]) {
+          const parsed = z
+            .object({ displayName: z.string().trim().min(1).max(80) })
+            .strict()
+            .safeParse(body);
+          if (!parsed.success) {
+            json(400, { reason: "REQUEST_MALFORMED" });
+            return true;
+          }
+          const now = clock();
+          const agentId = `agt_${randomBytes(12).toString("hex")}`;
+          const principalId = principalIdOf(m.organizationId);
+          await repo.saveAgent({
+            id: agentId,
+            principalId,
+            displayName: parsed.data.displayName,
+            issuedAt: new Date(now.getTime() - 60_000).toISOString(),
+            expiresAt: new Date(now.getTime() + 365 * 86_400_000).toISOString(),
+            status: "ACTIVE",
+            capabilities: ["CREATE_ORDER", "CAPTURE_PAYMENT"],
+          });
+          await sql`insert into organization_agents (organization_id, agent_id, environment, sponsor_principal_id, lifecycle)
+            values (${m.organizationId}, ${agentId}, ${m.environment}, ${principalId}, 'ACTIVE')`;
+          await audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action: "AGENT_ENROLLED",
+            subjectKind: "AGENT",
+            subjectId: agentId,
+            detail: {},
+            occurredAt: now.toISOString(),
+          });
+          json(201, { agentId, displayName: parsed.data.displayName });
+          return true;
+        }
+        if (method === "POST" && agentRoute[1]) {
+          // The agent must belong to THIS organization: a credential is never issued across tenants.
+          const [owned] = await sql`select 1 from organization_agents
+            where organization_id = ${m.organizationId} and environment = ${m.environment} and agent_id = ${agentRoute[1]}
+              and lifecycle not in ('SUSPENDED','REVOKED','RETIRED')`;
+          if (!owned) {
+            json(404, { reason: "AGENT_NOT_FOUND" });
+            return true;
+          }
+          const issued = await store.issue(
+            {
+              organizationId: m.organizationId,
+              environment: m.environment,
+              agentId: agentRoute[1],
+              scopes: ["action:request", "proof:read"],
+              ttlSeconds: 30 * 86_400,
+              label: `issued by ${m.displayName}`.slice(0, 128),
+            },
+            iso(),
+          );
+          await audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action: "CREDENTIAL_ISSUED",
+            subjectKind: "CREDENTIAL",
+            subjectId: issued.credential.credentialId,
+            detail: { agentId: agentRoute[1] },
+            occurredAt: iso(),
+          });
+          json(201, {
+            credentialId: issued.credential.credentialId,
+            // Shown exactly once. PayFlow stores only a digest.
+            token: issued.token,
+            expiresAt: issued.credential.expiresAt,
+            notice: "Store this token now. It cannot be retrieved again.",
+          });
+          return true;
+        }
+        json(404, { reason: "ROUTE_NOT_FOUND" });
+        return true;
+      }
+      if (method === "POST" && path === "/v1/app/logout") {
+        // The edge already required Origin + CSRF for a live cookie session. Logging out always clears the cookie.
+        if (sessionTokenIn) await userAuth.logout(sessionTokenIn);
+        json(
+          200,
+          { signedOut: true },
+          {
+            "set-cookie": clearedSessionCookie(secureCookies),
+          },
+        );
+        return true;
+      }
+      json(404, { reason: "ROUTE_NOT_FOUND" });
+      return true;
     }
     if (method === "GET" && path === "/v1/oauth-protected-resource" && mcp) {
       send(res, {
