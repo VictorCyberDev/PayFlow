@@ -209,6 +209,32 @@ export class BookingService {
     return r ?? null;
   }
 
+  /** Releases a booking's budget hold in the caller's transaction (no-op when nothing was ever held). */
+  private release(
+    caller: MissionCaller,
+    bookingId: string,
+  ): (
+    tx: TransactionSql,
+    r: Row,
+    afters: (() => Promise<void>)[],
+  ) => Promise<Record<string, unknown>> {
+    return async (tx, r, afters) => {
+      if (!r.ledger_item_id) return {};
+      const t = await this.deps.ledger.transitionInTx(
+        tx,
+        caller,
+        r.ledger_item_id as string,
+        {
+          to: "CANCELLED",
+          idempotencyKey: `${bookingId}-release`.padEnd(16, "-"),
+        },
+      );
+      if (!t.ok) throw new Rollback("LEDGER_REFUSED", t.refusal);
+      if (t.after) afters.push(t.after);
+      return {};
+    };
+  }
+
   /** Releases the budget of intents that ran past their deadline without confirmation. A booking in UNKNOWN is never expired. */
   async expireDue(caller: MissionCaller, missionId: string): Promise<void> {
     const now = this.deps.now();
@@ -221,7 +247,11 @@ export class BookingService {
         String(d.booking_id),
         ["PROPOSED", "APPROVED", "HANDED_OFF"],
         "EXPIRED",
-        { actor: { kind: "SYSTEM", id: "expiry" }, note: "deadline passed" },
+        {
+          actor: { kind: "SYSTEM", id: "expiry" },
+          note: "deadline passed",
+          inTx: this.release(caller, String(d.booking_id)),
+        },
       ).catch(() => undefined);
   }
 
@@ -521,7 +551,8 @@ export class BookingService {
               evidence: {
                 booking: bookingId,
                 evidence: b.data.evidenceKind,
-                ref: b.data.evidenceRef ?? null,
+                // the ledger takes strings and numbers only: an absent reference is simply absent
+                ...(b.data.evidenceRef ? { ref: b.data.evidenceRef } : {}),
               },
               idempotencyKey: `${bookingId}-commit`.padEnd(16, "-"),
             },
@@ -546,6 +577,8 @@ export class BookingService {
     if (caller.kind !== "MEMBER") return { ok: false, refusal: "MEMBER_ONLY" };
     const cur = await this.row(caller, bookingId);
     if (!cur) return { ok: false, refusal: "NOT_FOUND" };
+    // Declining a booking that is already declined is a replay, not a second release.
+    if (cur.state === "DECLINED") return { ok: true, value: this.toView(cur) };
     const b =
       cur.state === "UNKNOWN"
         ? ConfirmSchema.safeParse(raw)

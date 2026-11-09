@@ -210,7 +210,7 @@ const url = process.env.TEST_DATABASE_URL;
       expect(
         await code(
           await propose(s.owner, s.id, sid, "sbx-harbour-office", {
-            deadline: "2026-11-09T09:00:00.000Z",
+            deadline: "2026-10-22T09:00:00.000Z",
           }),
         ),
       ).toEqual([422, "BAD_DEADLINE"]);
@@ -316,13 +316,17 @@ const url = process.env.TEST_DATABASE_URL;
       expect(await exposure(s)).toBe(0);
       // the owner's own word is labelled as such, never as provider-confirmed
       const second = await made(s, "sbx-harbour-office");
-      await act(s.owner, second.id, "approve");
-      await act(s.owner, second.id, "handoff");
-      const att = await body(
-        await act(s.owner, second.id, "confirm", {
-          evidenceKind: "OWNER_ATTESTATION",
-        }),
+      const a2 = await act(s.owner, second.id, "approve");
+      expect(a2.status, JSON.stringify(await a2.clone().json())).toBe(200);
+      const h2 = await act(s.owner, second.id, "handoff");
+      expect(h2.status, JSON.stringify(await h2.clone().json())).toBe(200);
+      const attRes = await act(s.owner, second.id, "confirm", {
+        evidenceKind: "OWNER_ATTESTATION",
+      });
+      expect(attRes.status, JSON.stringify(await attRes.clone().json())).toBe(
+        200,
       );
+      const att = await body(attRes);
       expect(att.booking).toMatchObject({
         state: "CONFIRMED",
         reserved: "OWNER_SAYS_SO",
@@ -420,7 +424,7 @@ const url = process.env.TEST_DATABASE_URL;
       expect((await act(s.owner, id, "approve")).status).toBe(200); // the retry completes it once
       expect(await exposure(s)).toBe(136_500);
       // past its deadline without confirmation: expires and releases (read triggers the sweep)
-      h.advance(20 * 86_400_000);
+      h.advance(29 * 86_400_000);
       const list = await body(
         await get(s.owner, `/v1/admin/org/missions/${s.id}/bookings`),
       );
