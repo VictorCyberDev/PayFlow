@@ -190,7 +190,9 @@ const url = process.env.TEST_DATABASE_URL;
           .status,
       ).toBe(200);
       const paused = await listing(owner, id);
-      expect(paused.authorities[0]).toMatchObject({
+      expect(
+        paused.authorities.find((a) => a.authorityId === first),
+      ).toMatchObject({
         authorityId: first,
         status: "REVOKED",
       });
