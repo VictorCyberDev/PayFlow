@@ -953,6 +953,11 @@ const chromePath = [
       expect(await page.locator("main").innerText()).not.toContain(
         "PAY SUPPLIER",
       );
+      // let the screen finish redrawing, then leave, so no request is still in flight when the database closes
+      await page
+        .getByRole("heading", { name: "Needs checking", level: 1 })
+        .waitFor();
+      await page.goto("about:blank");
       await ctx.close();
     }, 60_000);
 

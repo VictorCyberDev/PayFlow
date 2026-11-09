@@ -51,6 +51,7 @@ export function hostHarness(
   let host: ReturnType<typeof createHostedConsole> | undefined;
   let provider!: VerticalProvider;
   let nowMs = Date.parse("2026-10-23T10:00:00.000Z");
+  let inFlight = 0;
   const owners = new Map<string, string>();
   const clock = () => new Date(nowMs);
   const agents = options.agents ?? ["a", "b", "c"];
@@ -107,7 +108,14 @@ export function hostHarness(
       await repo.migrate(await readFile("db/migrations/" + f, "utf8"));
     server = createServer((req, res) => {
       if (!host) return void res.writeHead(502).end();
-      void host.handler(req, res);
+      // Count handlers still running, so the database is never closed under one that has not finished its queries.
+      inFlight++;
+      void host
+        .handler(req, res)
+        .catch(() => undefined)
+        .finally(() => {
+          inFlight--;
+        });
     });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -135,11 +143,18 @@ export function hostHarness(
       });
     start();
   });
+  /** Wait (bounded) for request handlers that are still running, e.g. one a page started just before it was closed. */
+  const drain = async () => {
+    for (let i = 0; i < 200 && inFlight > 0; i++)
+      await new Promise((r) => setTimeout(r, 10));
+  };
   afterEach(async () => {
+    await drain();
     await host?.close();
     host = undefined;
   });
   afterAll(async () => {
+    await drain();
     await new Promise<void>((r) => server.close(() => r()));
     await repo.close();
   });
