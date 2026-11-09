@@ -64,6 +64,21 @@ const chromePath = [
   "R1b customer app (real browser + real Gateway)",
   () => {
     const h = hostHarness({
+      draftModel: () => ({
+        complete: () =>
+          Promise.resolve({
+            status: "OK" as const,
+            text: JSON.stringify({
+              objective: "Buy two quiet keyboards",
+              intendedOutcome: "Two keyboards ordered",
+              successCriteria: ["Under budget", "Quiet switches"],
+              suggestedBudgetMinor: 100_000,
+              suggestedMaxPurchaseMinor: 30_000,
+              suggestedCategory: "EQUIPMENT",
+              questions: ["Which layout?"],
+            }),
+          }),
+      }),
       extraTruncate:
         "user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
     });
@@ -163,6 +178,15 @@ const chromePath = [
       await page.getByRole("heading", { name: "New mission" }).waitFor();
       await page.getByRole("button", { name: "Next" }).click();
       await page.getByText("Fill in the goal").waitFor();
+      // the optional AI suggestion pre-fills the form for review; it creates nothing
+      await page
+        .getByLabel("Or describe it in your own words (optional)")
+        .fill("two quiet keyboards for the studio");
+      await page.getByRole("button", { name: "Suggest" }).click();
+      await page.getByText("Review every field").waitFor();
+      expect(
+        Number((await h.repo.sql`select count(*)::int n from missions`)[0]!.n),
+      ).toBe(0);
       await page
         .getByLabel("What should be done?")
         .fill("Buy two quiet keyboards");

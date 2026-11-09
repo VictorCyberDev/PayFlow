@@ -391,7 +391,8 @@ describe("R1a password hashing and cookies (pure)", () => {
       expect(JSON.stringify(audit)).not.toContain("SECRET-GOAL-TEXT");
       expect(audit.length).toBeGreaterThanOrEqual(1);
       // a per-minute cap protects cost: the 7th request inside a minute never reaches the model
-      for (let i = 0; i < 5; i++) expect((await draft(a)).status).toBe(200);
+      // (the malformed request above also counted: 1 + 1 + 4 = 6 allowed per minute)
+      for (let i = 0; i < 4; i++) expect((await draft(a)).status).toBe(200);
       const calls = modelCalls;
       expect((await draft(a)).status).toBe(429);
       expect(modelCalls).toBe(calls);
