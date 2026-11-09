@@ -522,6 +522,52 @@ describe("M50 milestone state and payment description (pure)", () => {
       expect([row!.trace_status, row!.refs]).toEqual(["WITHHELD", {}]);
     });
 
+    it("R0: a crash while terminating leaves no milestone cancelled and no termination; the retry completes it once", async () => {
+      const s = await contractScene(h);
+      const did = await accept(s, 1);
+      await pay(s.owner, did);
+      const exposure = async () =>
+        (await body(await get(s.owner, `${MISSIONS}/${s.id}/ledger`))).summary
+          .exposureMinor as number;
+      const before = await exposure();
+      await h.repo.sql
+        .unsafe(`create or replace function r0_term_failpoint() returns trigger language plpgsql as $f$
+        begin raise exception 'FAILPOINT_TERMINATION'; end $f$`);
+      await h.repo.sql.unsafe(
+        `create trigger r0_term_failpoint before insert on mission_contract_terminations for each row execute function r0_term_failpoint()`,
+      );
+      let crashed: Response;
+      try {
+        crashed = await post(
+          s.owner,
+          `/v1/admin/org/contracts/${s.contractId}/terminate`,
+          { reason: "scope dropped" },
+        );
+      } finally {
+        await h.repo.sql.unsafe(
+          `drop trigger if exists r0_term_failpoint on mission_contract_terminations`,
+        );
+      }
+      expect(crashed.status).toBeGreaterThanOrEqual(500);
+      expect(await exposure()).toBe(before); // milestone 2's budget was not released
+      expect(
+        (
+          await h.repo
+            .sql`select count(*)::int n from mission_contract_terminations`
+        )[0]!.n,
+      ).toBe(0);
+      const t = await post(
+        s.owner,
+        `/v1/admin/org/contracts/${s.contractId}/terminate`,
+        { reason: "scope dropped" },
+      );
+      expect(await body(t)).toMatchObject({
+        cancelledMilestones: [2],
+        replayed: false,
+      });
+      expect(await exposure()).toBe(before - 12_000);
+    });
+
     it("termination cancels the milestones with no payment instruction, releases their budget, keeps the rest, and closes the contract to new work", async () => {
       const s = await contractScene(h);
       const did = await accept(s, 1);

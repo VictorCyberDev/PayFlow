@@ -1,6 +1,19 @@
 # R0 — financial safety and transaction correctness (2026-11-09)
 
-Status vocabulary as in `V3-FINAL-REPORT.md`. Everything here is `COMPLETE_LOCAL` (code + PostgreSQL + real in-process Gateway); nothing is deployed, nothing ran against a public database or a real provider.
+Evidence levels used in this document, and nowhere else mixed: `IMPLEMENTED` (code exists) · `TARGETED_TEST_PASSED` (the named suites passed locally on PostgreSQL) · `FULL_REGRESSION_PASSED` (the whole suite, DB-backed, on the exact committed head) · `CI_VERIFIED` (GitHub `verify`, `console`, `console-e2e` green on the exact head) · `DEPLOYED_ACCEPTED` (running in a public environment and accepted) · `BLOCKED_EXTERNAL` (needs an owner or provider).
+
+| Item                                          | IMPLEMENTED | TARGETED_TEST_PASSED                                                                                           | FULL_REGRESSION_PASSED | CI_VERIFIED | DEPLOYED_ACCEPTED                           |
+| --------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------- | ---------------------- | ----------- | ------------------------------------------- |
+| Gateway order binding (M29/M40/M50 callers)   | yes         | yes                                                                                                            | see §6                 | see §6      | no                                          |
+| Quote pin + order-digest re-check at dispatch | yes         | yes                                                                                                            | see §6                 | see §6      | no                                          |
+| M49 atomic offer acceptance                   | yes         | yes                                                                                                            | see §6                 | see §6      | no                                          |
+| M39 atomic approve+accept                     | yes         | yes                                                                                                            | see §6                 | see §6      | no                                          |
+| M34 link verification                         | yes         | yes                                                                                                            | see §6                 | see §6      | no                                          |
+| M43 atomic refund+resolve                     | yes         | yes (injected-failure test fails on the old code, passes now)                                                  | see §6                 | see §6      | no                                          |
+| M50 atomic termination                        | yes         | yes (injected-failure test fails on the old code, passes now)                                                  | see §6                 | see §6      | no                                          |
+| Migration 053                                 | yes         | fresh install through 053 applied in an isolated database (sequential 001→053 also exercises upgrade from 052) | see §6                 | see §6      | **no — not applied to any public database** |
+
+Contractor-payment instructions now have an extra binding guard, but PayFlow has **no commissioned payout rail**. The sandbox rail buys a catalog item for the named payee; that is a simulator, not contractor payout acceptance (`BLOCKED_EXTERNAL`: a payout-capable rail and its commissioning).
 
 ## 1. P0 — a mission-governed payment is bound to its approved order at the Gateway
 
@@ -65,6 +78,14 @@ Callers updated: M29 (Authority compiler), M40, M41–M45 via `settledPurchase`,
 
 Not yet audited in depth (R0 continues): M45 portfolio roll-ups (read-only), outbox/notification delivery (no outbox exists yet — R4), order status writes (verified events only).
 
-## 5. Gate
+## 5. Added after review: dispatch-time pins
+
+The execution intent also records the exact trusted checkout quote (id + fingerprint, set once, immutable). At dispatch the reservation's proposal must resolve to that quote (`ORDER_QUOTE_SUBSTITUTED` / `ORDER_QUOTE_NOT_BOUND`) and the order document must still hash to the digest recorded at claim time (`ORDER_INTEGRITY_FAILURE`), so cost center, invoice reference and lines cannot change between claim and provider call. A provider timeout leaves the intent `UNKNOWN`: the order stays held and nothing is retried. Tests: `r0-order-binding` (16).
+
+## 6. Regression record
+
+_Filled in below with the actual results of the full run on the final head, including the historical failure of the first full run (M49 only, caused by running while sources were still being edited)._
+
+## 7. Gate
 
 The R0 gate is satisfied **locally** by the tests above. It is not satisfied in any public environment: migrations 030–053 are applied on no public database, and Missions execution paths must not be exposed publicly until the owner-gated items in `docs/OWNER-ACTIONS.md` (privileged Neon role, runtime password) are resolved.
