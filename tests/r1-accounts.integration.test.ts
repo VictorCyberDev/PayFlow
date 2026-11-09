@@ -323,6 +323,54 @@ describe("R1a password hashing and cookies (pure)", () => {
       expect(v.lookOnly).toBe(false);
     });
 
+    it("the agents list carries each agent's readiness, derived from lifecycle and passport expiry", async () => {
+      const s = await signedIn();
+      const add = await send("POST", "/v1/app/agents", {
+        cookie: s.cookie,
+        csrf: s.csrf,
+        body: { displayName: "Scout" },
+      });
+      expect(add.status).toBe(201);
+      const agentId = ((await add.json()) as { agentId: string }).agentId;
+      const get = async () =>
+        (
+          (await (
+            await send("GET", "/v1/app/agents", { cookie: s.cookie })
+          ).json()) as {
+            agents: {
+              agentId: string;
+              lifecycle: string;
+              readiness: { canAct: boolean; why?: string; rotation?: string };
+            }[];
+          }
+        ).agents.find((a) => a.agentId === agentId)!;
+      expect((await get()).readiness).toEqual({ canAct: true, rotation: "OK" });
+      await h.repo
+        .sql`update organization_agents set lifecycle = 'SUSPENDED' where agent_id = ${agentId}`;
+      expect((await get()).readiness).toEqual({
+        canAct: false,
+        why: "SUSPENDED",
+      });
+      await h.repo
+        .sql`update organization_agents set lifecycle = 'ACTIVE' where agent_id = ${agentId}`;
+      const day = 86_400_000;
+      const at = (ms: number) => new Date(h.now() + ms).toISOString();
+      // inside the last week: still works, but says renew
+      await h.repo
+        .sql`update agent_passports set expires_at = ${at(3 * day)} where id = ${agentId}`;
+      expect((await get()).readiness).toEqual({
+        canAct: true,
+        rotation: "ROTATE_SOON",
+      });
+      // past its end: it can no longer act
+      await h.repo
+        .sql`update agent_passports set issued_at = ${at(-10 * day)}, expires_at = ${at(-day)} where id = ${agentId}`;
+      expect((await get()).readiness).toEqual({
+        canAct: false,
+        why: "CREDENTIAL_EXPIRED",
+      });
+    });
+
     it("tenant and role isolation: another account sees nothing of this organization; a VIEWER session cannot create", async () => {
       const a = await signedIn();
       const b = await signedIn();

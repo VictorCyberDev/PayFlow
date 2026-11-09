@@ -61,3 +61,13 @@ Dated addendum; earlier entries are not rewritten. Detail and evidence levels: `
 - Not delivered / external: no deployment; migration 053 on no public database; no payout rail (contractor payments are a catalog-purchase simulator); credentialed provider sandbox tests skipped.
 - GitHub CI result on the merged head and the resulting `main` SHA are appended below when known.
 - **R0 merged:** PR #60 squash-merged into `main` as `138f51c0bd335249998afd139138939794ed48d8`. GitHub CI on the exact PR head `b543830`: `verify` success (12:29–12:49Z), `console` success, `console-e2e` success. `CI_VERIFIED` for R0; still not deployed.
+
+## Program continuation — M51–M71 slices (2026-11-09)
+
+Dated addendum. Evidence levels and honest not-done lists: `docs/M51-M53-STATUS.md`, `docs/M54-M71-STATUS.md`; the partial M1–M90 matrix: `docs/M1-M90-AUDIT-MATRIX.md`.
+
+- **PR #61** (accounts and sessions) merged as `883bf52`. **PR #62** (hosting topology, customer app brand, M51–M53 workspace discovery and booking intents) squash-merged into `main` as `16d26b4`, pinned to head `f47fb17` where `verify` (22:07–22:28Z), `console` and `console-e2e` were all green.
+- **PR #63** (M54, M56/M57 slices, M58 templates, M65 FX, M67 quorum, M68 pure part, M69 packs, M70 export, M71 Needs checking, record actions) squash-merged as `52d87f8`, pinned to head `2201ac5`: `verify` (22:53–23:07Z), `console`, `console-e2e` green. An earlier head of the same PR failed CI on a repository check that was not run locally (`scripts/public-readiness.mjs`, then full `npm run lint`); both were fixed and the local pre-push routine now runs every CI step with its exit code.
+- Migrations added this stretch: 055 workspace discovery, 056 bookings, 057 automation, 058 quorum. None is applied to any public database.
+- Full local regression on PostgreSQL at the last local head: 151 files passed, 2668 tests passed, 3 files and 4 tests skipped (no credentials).
+- Not delivered: no live provider, no public deployment, no notification delivery, no product-research outputs, and the milestones listed as not done in the status docs.

@@ -100,7 +100,7 @@ const chromePath = [
           }),
       }),
       extraTruncate:
-        "mission_booking_events,mission_bookings,mission_workspace_listings,mission_workspace_searches,user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
+        "rate_limit_windows,mission_booking_events,mission_bookings,mission_workspace_listings,mission_workspace_searches,user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
     });
     const require_ = createRequire(import.meta.url);
     let axeSource = "";
@@ -944,6 +944,73 @@ const chromePath = [
       const shown = await page.locator("main").innerText();
       expect(shown).toContain("Max purchase from");
       expect(shown).not.toContain("Approve above from"); // not listed as changed
+      expect(await axe(page)).toEqual([]);
+      await ctx.close();
+    }, 60_000);
+
+    it("the Agents screen says in words whether each agent can act, and warns before a passport ends", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "rdy@example.com",
+          password: "a long enough passphrase",
+          displayName: "Rae Ready",
+          organizationName: "Ready Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("rdy@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      const soon = "2026-11-12T00:00:00.000Z";
+      await page.route(/\/v1\/app\/agents$/u, (r) =>
+        r.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            agents: [
+              {
+                agentId: "agt_" + "1".repeat(24),
+                displayName: "Fine",
+                lifecycle: "ACTIVE",
+                expiresAt: "2027-01-01T00:00:00.000Z",
+                readiness: { canAct: true, rotation: "OK" },
+              },
+              {
+                agentId: "agt_" + "2".repeat(24),
+                displayName: "Nearly",
+                lifecycle: "ACTIVE",
+                expiresAt: soon,
+                readiness: { canAct: true, rotation: "ROTATE_SOON" },
+              },
+              {
+                agentId: "agt_" + "3".repeat(24),
+                displayName: "Paused",
+                lifecycle: "SUSPENDED",
+                expiresAt: soon,
+                readiness: { canAct: false, why: "SUSPENDED" },
+              },
+              {
+                agentId: "agt_" + "4".repeat(24),
+                displayName: "Lapsed",
+                lifecycle: "ACTIVE",
+                expiresAt: soon,
+                readiness: { canAct: false, why: "CREDENTIAL_EXPIRED" },
+              },
+            ],
+          }),
+        }),
+      );
+      await page.goto(`${h.origin}/workspace#/agents`);
+      await page.getByRole("heading", { name: "Agents", level: 1 }).waitFor();
+      const text = await page.locator("main").innerText();
+      expect(text).toContain("Renew it soon");
+      expect(text).toContain("No. It is suspended.");
+      expect(text).toContain("No. Its passport has expired.");
+      expect(text).not.toMatch(/undefined|\[object|NaN/u);
       expect(await axe(page)).toEqual([]);
       await ctx.close();
     }, 60_000);

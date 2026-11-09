@@ -406,6 +406,23 @@ async function home() {
   );
 }
 
+const READINESS_WORDS = {
+  NOT_ACTIVATED: "Not yet active",
+  SUSPENDED: "No. It is suspended.",
+  REVOKED: "No. It was revoked for good.",
+  RETIRED: "No. It is retired.",
+  CREDENTIAL_EXPIRED: "No. Its passport has expired.",
+  CREDENTIAL_NOT_YET_VALID: "Not yet. Its passport starts later.",
+};
+/** What an agent can do right now, from the server's readiness (derived from the same lifecycle and expiry the gateway enforces). */
+function agentReadinessWords(a) {
+  const r = a.readiness;
+  if (!r) return "Unknown";
+  if (!r.canAct) return READINESS_WORDS[r.why] ?? "No";
+  return r.rotation === "ROTATE_SOON"
+    ? `Yes, but its passport ends ${when(a.expiresAt)}. Renew it soon.`
+    : "Yes";
+}
 async function agentsPage() {
   const r = await api("/v1/app/agents");
   const out = h("div");
@@ -467,6 +484,7 @@ async function agentsPage() {
                 {},
                 h("th", { text: "Agent" }),
                 h("th", { text: "Status" }),
+                h("th", { text: "Can it act?" }),
                 h("th", { text: "Credential" }),
               ),
             ),
@@ -479,6 +497,11 @@ async function agentsPage() {
                   {},
                   h("td", { text: a.displayName }),
                   h("td", {}, badge(a.lifecycle)),
+                  h(
+                    "td",
+                    { "data-label": "Can it act?" },
+                    agentReadinessWords(a),
+                  ),
                   h(
                     "td",
                     {},

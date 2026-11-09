@@ -11,6 +11,10 @@ import {
   AutomationService,
   type Handler,
 } from "../automation/automation-service.js";
+import {
+  readiness as agentReadiness,
+  type AgentState,
+} from "../missions/agent-lifecycle.js";
 import { PACKS, applyPack } from "../missions/policy-packs.js";
 import { QuorumService } from "../missions/quorum-service.js";
 import { createQuorumRoutes } from "./quorum-routes.js";
@@ -2903,16 +2907,29 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
             return true;
           }
           const rows =
-            await sql`select oa.agent_id, a.display_name, oa.lifecycle, a.expires_at
+            await sql`select oa.agent_id, a.display_name, oa.lifecycle, a.issued_at, a.expires_at
             from organization_agents oa join agent_passports a on a.id = oa.agent_id
             where oa.organization_id = ${tenant.organizationId} and oa.environment = ${tenant.environment}
             order by a.display_name, oa.agent_id`;
           json(200, {
-            agents: rows.map((r) => ({
-              agentId: String(r.agent_id),
-              displayName: String(r.display_name),
-              lifecycle: String(r.lifecycle),
-            })),
+            agents: rows.map((r) => {
+              const expiresAt = new Date(r.expires_at as string).toISOString();
+              return {
+                agentId: String(r.agent_id),
+                displayName: String(r.display_name),
+                lifecycle: String(r.lifecycle),
+                expiresAt,
+                // Derived from the same lifecycle and expiry the gateway enforces: no second truth (M68).
+                readiness: agentReadiness(
+                  String(r.lifecycle) as AgentState,
+                  {
+                    issuedAt: new Date(r.issued_at as string).toISOString(),
+                    expiresAt,
+                  },
+                  iso(),
+                ),
+              };
+            }),
           });
           return true;
         }
