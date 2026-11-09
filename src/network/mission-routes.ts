@@ -3,6 +3,7 @@ import type { RestRequest, RestResponse } from "./rest.js";
 import type { Member } from "./rbac.js";
 import type { Permission } from "./rbac.js";
 import type { MissionService } from "../missions/service.js";
+import type { QuorumService } from "../missions/quorum-service.js";
 import {
   type MissionCaller,
   type MissionRefusal,
@@ -36,6 +37,8 @@ export interface MissionRouteDeps {
     caller: MissionCaller,
     missionId: string,
   ) => Promise<object | null>;
+  /** Approval quorum (M65). Absent or without a policy, one owner's approval puts a version in force as before. */
+  readonly quorum?: QuorumService;
 }
 
 const STATUS: Record<MissionRefusal, number> = {
@@ -180,6 +183,21 @@ export function createMissionRoutes(deps: MissionRouteDeps) {
       return r.ok
         ? reply(requestId, r.value.replayed ? 200 : 201, { mission: r.value })
         : refuse(requestId, r);
+    }
+    if (op === "approve" && deps.quorum) {
+      const version = (request.body as { version?: unknown } | undefined)
+        ?.version;
+      if (typeof version === "number" && Number.isInteger(version)) {
+        const g = await deps.quorum.gate(caller, id, version);
+        if (!g.proceed)
+          return reply(requestId, 202, {
+            state: "WAITING_FOR_MORE_APPROVALS",
+            required: g.verdict.required,
+            counted: g.verdict.counted,
+            humanSummary: `Your approval is recorded. This needs ${g.verdict.required} approvals from owners other than the person who proposed it; ${g.verdict.counted} so far. Nothing is in force yet.`,
+            nextAction: "ASK_ANOTHER_OWNER_TO_APPROVE",
+          });
+      }
     }
     if (op === "approve")
       return done(

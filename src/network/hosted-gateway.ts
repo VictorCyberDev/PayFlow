@@ -12,6 +12,8 @@ import {
   type Handler,
 } from "../automation/automation-service.js";
 import { PACKS, applyPack } from "../missions/policy-packs.js";
+import { QuorumService } from "../missions/quorum-service.js";
+import { createQuorumRoutes } from "./quorum-routes.js";
 import { createAutomationRoutes } from "./automation-routes.js";
 import { createServiceMarketRoutes } from "./service-market-routes.js";
 import { ServiceMarketService } from "../missions/service-market-service.js";
@@ -1141,8 +1143,10 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     afterChange: (tenant, missionId) =>
       authorityCompiler.reconcile(tenant, missionId),
   });
+  const quorumService = new QuorumService({ sql, now: iso });
   const missionRoutes = createMissionRoutes({
     service: missionService,
+    quorum: quorumService,
     authorities: (caller, missionId) =>
       authorityCompiler.list(caller, missionId),
     reply: (requestId, status, body) => reply(requestId, status, body),
@@ -1688,6 +1692,17 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         caller.organizationId,
         caller.environment,
       )) !== null,
+  });
+  const quorumRoutes = createQuorumRoutes({
+    service: quorumService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
   });
   const automationRoutes = createAutomationRoutes({
     service: automation,
@@ -3373,6 +3388,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => bookingRoutes.member(request))) ??
         (await safely(() => serviceMarketRoutes.member(request))) ??
         (await safely(() => automationRoutes.member(request))) ??
+        (await safely(() => quorumRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
         (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => contractorRoutes.member(request))) ??

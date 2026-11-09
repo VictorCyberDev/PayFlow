@@ -100,8 +100,12 @@ describe("M63 FX", () => {
 
 const policy = QuorumPolicySchema.parse({
   tiers: [
-    { aboveMinor: 100_000, approvals: 1, roles: ["OWNER", "ADMIN", "FINANCE"] },
-    { aboveMinor: 1_000_000, approvals: 2, roles: ["OWNER", "FINANCE"] },
+    {
+      aboveMinor: 100_000,
+      approvals: 1,
+      roles: ["OWNER", "FINANCE_ADMIN", "SECURITY_ADMIN"],
+    },
+    { aboveMinor: 1_000_000, approvals: 2, roles: ["OWNER", "FINANCE_ADMIN"] },
   ],
 });
 const vote = (
@@ -135,7 +139,7 @@ describe("M65 quorum", () => {
         policy,
         big,
         "r",
-        [vote("a"), vote("b", "APPROVE", "ADMIN")],
+        [vote("a"), vote("b", "APPROVE", "SECURITY_ADMIN")],
         exp,
       ),
     ).toMatchObject({ state: "WAITING", counted: 1 });
@@ -153,7 +157,7 @@ describe("M65 quorum", () => {
         policy,
         big,
         "r",
-        [vote("a"), vote("b", "APPROVE", "FINANCE")],
+        [vote("a"), vote("b", "APPROVE", "FINANCE_ADMIN")],
         exp,
       ),
     ).toEqual({ state: "MET", required: 2, counted: 2 });
@@ -164,7 +168,7 @@ describe("M65 quorum", () => {
         policy,
         2_000_000,
         "r",
-        [vote("a"), vote("b", "REJECT", "FINANCE")],
+        [vote("a"), vote("b", "REJECT", "FINANCE_ADMIN")],
         exp,
       ),
     ).toMatchObject({ state: "BLOCKED", by: "b" });
@@ -173,7 +177,7 @@ describe("M65 quorum", () => {
         policy,
         2_000_000,
         "r",
-        [vote("b", "REJECT", "MEMBER")],
+        [vote("b", "REJECT", "DEVELOPER")],
         exp,
       ),
     ).toMatchObject({ state: "WAITING", counted: 0 });

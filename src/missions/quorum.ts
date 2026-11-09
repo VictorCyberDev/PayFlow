@@ -7,7 +7,15 @@ import { z } from "zod";
  * (separation of duties); any rejection from a member of a required role blocks the decision; an approval that arrives after the request
  * expired, or from a member who has since lost the role, does not count. Whether a quorum is met is computed here, never by a model.
  */
-export const ROLES = ["OWNER", "ADMIN", "FINANCE", "MEMBER", "VIEWER"] as const;
+export const ROLES = [
+  "OWNER",
+  "FINANCE_ADMIN",
+  "SECURITY_ADMIN",
+  "DEVELOPER",
+  "APPROVER",
+  "AUDITOR",
+  "VIEWER",
+] as const;
 export type Role = (typeof ROLES)[number];
 export const QuorumPolicySchema = z
   .object({
