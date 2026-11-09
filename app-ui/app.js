@@ -730,6 +730,8 @@ async function wizard() {
     roles: {},
     providers: new Set(["COMMERCE_MARKETPLACE"]),
     currency: "USD",
+    lookOnly: false,
+    packNote: "",
   };
   const tpl = TEMPLATES.find((t) => t.key === state.template);
   state.template = null;
@@ -830,27 +832,29 @@ async function wizard() {
                   "fieldset",
                   { class: "card" },
                   h("legend", { text: a.displayName }),
-                  Object.keys(CAPS).map((k) =>
-                    h(
-                      "label",
-                      { class: "check" },
-                      h("input", {
-                        type: "checkbox",
-                        ...(d.roles[a.agentId]?.has(k)
-                          ? { checked: true }
-                          : {}),
-                        onchange: (e) => {
-                          const s = (d.roles[a.agentId] ??= new Set());
-                          e.target.checked ? s.add(k) : s.delete(k);
-                        },
-                      }),
-                      {
-                        research: "Research and compare",
-                        negotiate: "Negotiate",
-                        buy: "Buy (within limits)",
-                      }[k],
+                  Object.keys(CAPS)
+                    .filter((k) => !(d.lookOnly && k === "buy"))
+                    .map((k) =>
+                      h(
+                        "label",
+                        { class: "check" },
+                        h("input", {
+                          type: "checkbox",
+                          ...(d.roles[a.agentId]?.has(k)
+                            ? { checked: true }
+                            : {}),
+                          onchange: (e) => {
+                            const s = (d.roles[a.agentId] ??= new Set());
+                            e.target.checked ? s.add(k) : s.delete(k);
+                          },
+                        }),
+                        {
+                          research: "Research and compare",
+                          negotiate: "Negotiate",
+                          buy: "Buy (within limits)",
+                        }[k],
+                      ),
                     ),
-                  ),
                 ),
               ),
             );
@@ -876,6 +880,7 @@ async function wizard() {
       panel,
       d.step === 1 ? currencyBox() : null,
       d.step === 1 ? providersBox() : null,
+      d.step === 1 ? packBox() : null,
       h(
         "div",
         { class: "actions" },
@@ -1004,6 +1009,76 @@ async function wizard() {
           label,
         ),
       ),
+    );
+  }
+  /**
+   * Safety packs (M67). Applying one only lowers what you asked for (the server does the arithmetic) and lists every change. It cannot raise a
+   * limit, and "Look only" turns buying off.
+   */
+  function packBox() {
+    const note = h("div", { role: "status" });
+    const sel = h(
+      "select",
+      { id: "w-pack" },
+      h("option", { value: "", text: "No pack" }),
+      h("option", { value: "CAUTIOUS", text: "Cautious" }),
+      h("option", { value: "STANDARD", text: "Standard" }),
+      h("option", { value: "EXPLORATORY_ONLY", text: "Look only" }),
+    );
+    return h(
+      "div",
+      { class: "aside" },
+      h("label", { for: "w-pack", text: "Safety pack (optional)" }),
+      sel,
+      h("p", {
+        class: "hint",
+        text: "A pack lowers any limit above its ceiling. It never raises one.",
+      }),
+      h("button", {
+        type: "button",
+        text: "Apply pack",
+        onclick: async () => {
+          collect();
+          if (!sel.value) return note.replaceChildren();
+          const r = await api("/v1/app/policy-packs/apply", {
+            method: "POST",
+            body: {
+              pack: sel.value,
+              limits: {
+                totalBudgetMinor: toMinor(d.budget),
+                maxPurchaseMinor: toMinor(d.maxOne),
+                approveAboveMinor: toMinor(d.approveAbove),
+                durationDays: Number(d.days),
+              },
+            },
+          });
+          if (!r.ok)
+            return note.replaceChildren(
+              notice("bad", reasonText(r.data?.reason)),
+            );
+          const l = r.data.limits;
+          d.maxOne = String(l.maxPurchaseMinor / 100);
+          d.approveAbove = String(l.approveAboveMinor / 100);
+          d.days = String(l.durationDays);
+          d.lookOnly = r.data.lookOnly;
+          if (r.data.lookOnly)
+            for (const k of Object.keys(d.roles)) d.roles[k].delete("buy");
+          d.packNote = r.data.changes.length
+            ? "Lowered: " +
+              r.data.changes
+                .map(
+                  (c) =>
+                    `${humanKey(c.field)} from ${c.field === "durationDays" ? c.from + " days" : money(c.from, d.currency)} to ${c.field === "durationDays" ? c.to + " days" : money(c.to, d.currency)}`,
+                )
+                .join("; ")
+            : "Your limits were already within this pack.";
+          draw();
+        },
+      }),
+      d.packNote
+        ? h("p", { class: "notice", role: "status", text: d.packNote })
+        : null,
+      note,
     );
   }
   function currencyBox() {

@@ -902,6 +902,52 @@ const chromePath = [
       await ctx.close();
     }, 60_000);
 
+    it("a safety pack lowers limits above its ceiling, lists every change, never raises one, and Look only removes buying", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "pack@example.com",
+          password: "a long enough passphrase",
+          displayName: "Pat Pack",
+          organizationName: "Pack Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("pack@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await page.goto(`${h.origin}/workspace#/missions/new`);
+      await page.getByLabel("What should be done?").fill("Buy desks");
+      await page.getByLabel("What does done look like?").fill("Desks bought");
+      await page
+        .getByLabel("How will you judge it? (one per line)")
+        .fill("Cheap");
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByLabel("Total budget").fill("1000");
+      await page.getByLabel("Largest single purchase").fill("900");
+      await page.getByLabel("Ask me first above").fill("50");
+      await page.getByLabel("Ends after (days)").fill("60");
+      await page.getByLabel("Safety pack (optional)").selectOption("CAUTIOUS");
+      await page.getByRole("button", { name: "Apply pack" }).click();
+      await page.getByText("Lowered:").waitFor();
+      const val = (id: string) =>
+        page.evaluate(
+          (i: string) => (document.getElementById(i) as HTMLInputElement).value,
+          id,
+        );
+      expect(await val("w-maxOne")).toBe("200"); // 900 -> a fifth of 1000
+      expect(await val("w-approveAbove")).toBe("50"); // already below the ceiling: untouched, never raised
+      expect(await val("w-days")).toBe("14");
+      const shown = await page.locator("main").innerText();
+      expect(shown).toContain("Max purchase from");
+      expect(shown).not.toContain("Approve above from"); // not listed as changed
+      expect(await axe(page)).toEqual([]);
+      await ctx.close();
+    }, 60_000);
+
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
       await page.goto(`${h.origin}/workspace`);

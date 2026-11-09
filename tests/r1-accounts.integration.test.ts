@@ -76,7 +76,7 @@ describe("R1a password hashing and cookies (pure)", () => {
         },
       }),
       extraTruncate:
-        "user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
+        "rate_limit_windows,user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
     });
     const send = (
       method: "GET" | "POST",
@@ -271,6 +271,56 @@ describe("R1a password hashing and cookies (pure)", () => {
       expect((await send("GET", MISSIONS, { cookie: b.cookie })).status).toBe(
         200,
       ); // the other person, same address, is not
+    });
+
+    it("safety packs: need a session and the CSRF token to apply, refuse malformed input, and never raise a limit", async () => {
+      expect((await send("GET", "/v1/app/policy-packs")).status).toBe(401);
+      const s = await signedIn();
+      const list = await send("GET", "/v1/app/policy-packs", {
+        cookie: s.cookie,
+      });
+      expect(list.status).toBe(200);
+      expect(
+        ((await list.json()) as { packs: { id: string }[] }).packs.map(
+          (p) => p.id,
+        ),
+      ).toEqual(["CAUTIOUS", "STANDARD", "EXPLORATORY_ONLY"]);
+      const limits = {
+        totalBudgetMinor: 100_000,
+        maxPurchaseMinor: 90_000,
+        approveAboveMinor: 500,
+        durationDays: 3,
+      };
+      const apply = (body: unknown, csrf: string | undefined = s.csrf) =>
+        send("POST", "/v1/app/policy-packs/apply", {
+          cookie: s.cookie,
+          body,
+          ...(csrf ? { csrf } : {}),
+        });
+      expect((await apply({ pack: "CAUTIOUS", limits }, "")).status).toBe(403);
+      expect((await apply({ pack: "NOPE", limits })).status).toBe(400);
+      expect(
+        (await apply({ pack: "CAUTIOUS", limits: { ...limits, extra: 1 } }))
+          .status,
+      ).toBe(400);
+      expect(
+        (
+          await apply({
+            pack: "CAUTIOUS",
+            limits: { ...limits, maxPurchaseMinor: 1.5 },
+          })
+        ).status,
+      ).toBe(400);
+      const ok = await apply({ pack: "CAUTIOUS", limits });
+      expect(ok.status).toBe(200);
+      const v = (await ok.json()) as {
+        limits: typeof limits;
+        changes: { field: string }[];
+        lookOnly: boolean;
+      };
+      expect(v.limits).toEqual({ ...limits, maxPurchaseMinor: 20_000 });
+      expect(v.changes.map((c) => c.field)).toEqual(["maxPurchaseMinor"]);
+      expect(v.lookOnly).toBe(false);
     });
 
     it("tenant and role isolation: another account sees nothing of this organization; a VIEWER session cannot create", async () => {

@@ -11,6 +11,7 @@ import {
   AutomationService,
   type Handler,
 } from "../automation/automation-service.js";
+import { PACKS, applyPack } from "../missions/policy-packs.js";
 import { createAutomationRoutes } from "./automation-routes.js";
 import { createServiceMarketRoutes } from "./service-market-routes.js";
 import { ServiceMarketService } from "../missions/service-market-service.js";
@@ -2736,6 +2737,50 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           expiresAt: view.expiresAt,
         });
         return true;
+      }
+      // ---- Safety packs (M67): named ceilings. Applying one only ever lowers what the person asked for, and says what it changed.
+      if (
+        path === "/v1/app/policy-packs" ||
+        path === "/v1/app/policy-packs/apply"
+      ) {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        if (method === "GET" && path === "/v1/app/policy-packs") {
+          json(200, { packs: PACKS });
+          return true;
+        }
+        if (method === "POST" && path === "/v1/app/policy-packs/apply") {
+          const Ask = z
+            .object({
+              pack: z.enum(["CAUTIOUS", "STANDARD", "EXPLORATORY_ONLY"]),
+              limits: z
+                .object({
+                  totalBudgetMinor: z.number().int().safe().min(0),
+                  maxPurchaseMinor: z.number().int().safe().min(0),
+                  approveAboveMinor: z.number().int().safe().min(0),
+                  durationDays: z.number().int().min(0).max(3650),
+                })
+                .strict(),
+            })
+            .strict();
+          const a = Ask.safeParse(body);
+          if (!a.success) {
+            json(400, { reason: "MALFORMED", recoverable: true });
+            return true;
+          }
+          json(200, {
+            ...applyPack(
+              PACKS.find((x) => x.id === a.data.pack)!,
+              a.data.limits,
+            ),
+          });
+          return true;
+        }
       }
       // ---- AI assist: a model SUGGESTS wording and rough numbers for the wizard. It decides nothing and is optional.
       if (method === "POST" && path === "/v1/app/missions/draft") {
