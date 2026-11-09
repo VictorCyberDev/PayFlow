@@ -42,6 +42,7 @@ export default tseslint.config(
     ignores: [
       "scripts/**",
       "app-ui/**",
+      "src/network/app-assets.generated.ts",
       "public/_next/**",
       "dist/**",
       "coverage/**",

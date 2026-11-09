@@ -4,8 +4,8 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { APP_ASSETS } from "./app-assets.generated.js";
 import { draftMission, type DraftModel } from "../missions/draft-assistant.js";
-import { readFileSync } from "node:fs";
 import { z } from "zod";
 import {
   UserAuthService,
@@ -271,24 +271,15 @@ const APP_TYPES: Record<string, string> = {
   js: "text/javascript; charset=utf-8",
   css: "text/css; charset=utf-8",
 };
-const appCache = new Map<string, { type: string; body: Buffer }>();
-/** The customer web app: three static files, read once from `app-ui/`. Anything not in the table is a 404 (no path traversal). */
+/** The customer web app: three static files embedded in this module (see scripts/embed-app-ui.mjs). Anything else is a 404. */
 function appAsset(path: string): { type: string; body: Buffer } | null {
   const file = APP_FILES[path];
-  if (!file) return null;
-  const cached = appCache.get(file);
-  if (cached) return cached;
-  for (const rel of ["../../app-ui/", "../../../app-ui/", "../app-ui/"]) {
-    try {
-      const body = readFileSync(new URL(rel + file, import.meta.url));
-      const entry = { type: APP_TYPES[file.split(".").pop()!]!, body };
-      appCache.set(file, entry);
-      return entry;
-    } catch {
-      /* try the next layout (source vs. compiled) */
-    }
-  }
-  return null;
+  const text = file ? APP_ASSETS[file] : undefined;
+  if (!file || text === undefined) return null;
+  return {
+    type: APP_TYPES[file.split(".").pop()!]!,
+    body: Buffer.from(text, "utf8"),
+  };
 }
 
 /**
@@ -568,13 +559,17 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         now: iso,
       })
     : undefined;
+  // With no operator token configured, OPERATOR access is impossible (every attempt is an AdminAuthError) but the member-authenticated
+  // routes under /v1/admin/ stay available: the customer app must not depend on a shared operator secret existing.
   const authenticateAdmin = options.adminToken
     ? staticAdminAuthenticator({
         token: options.adminToken,
         organizationId: options.organizationId,
         environment: "SANDBOX",
       })
-    : undefined;
+    : (): never => {
+        throw new AdminAuthError();
+      };
   const reconciler = new UnknownReconciler(sql, (organizationId) => {
     const lookup = organizationId.startsWith("sbx_")
       ? options.simulated?.lookupProvider()
@@ -780,7 +775,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     request: RestRequest,
   ): Promise<Actor | "UNAUTHENTICATED"> {
     try {
-      authenticateAdmin!(request.authorization);
+      authenticateAdmin(request.authorization);
       return { kind: "OPERATOR" };
     } catch (error) {
       if (!(error instanceof AdminAuthError)) throw error;
@@ -3157,14 +3152,6 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       return true;
     }
     if (path.startsWith("/v1/admin/")) {
-      if (!authenticateAdmin) {
-        send(res, {
-          status: 404,
-          headers: { "content-type": "application/json" },
-          body: { reason: "ROUTE_NOT_FOUND" },
-        });
-        return true;
-      }
       const planeReply =
         (await orgRoute(request)) ??
         (await safely(() => credentialRoute(request))) ??

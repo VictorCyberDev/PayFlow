@@ -15,3 +15,4 @@ public/**/*.xml
 public/brand
 public/icon.svg
 public/robots.txt
+src/network/app-assets.generated.ts
