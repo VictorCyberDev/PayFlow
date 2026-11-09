@@ -4,6 +4,14 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import {
+  UserAuthService,
+  SESSION_ABSOLUTE_MS,
+  clearedSessionCookie,
+  csrfFor,
+  readSessionCookie,
+  sessionCookie,
+} from "./user-auth.js";
 import { ExecutionBindingService } from "../missions/execution-binding.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Sql } from "postgres";
@@ -154,6 +162,13 @@ export interface HostedGatewayOptions {
    * ignored. Default 1. 0 trusts no header and uses the socket address.
    */
   readonly trustedProxyHops?: number;
+  /**
+   * Browser origins (scheme://host[:port]) allowed to make state-changing requests with a session cookie. Cookie-authenticated
+   * unsafe requests from any other Origin are refused (CSRF). Empty = cookie sessions cannot change anything.
+   */
+  readonly appOrigins?: readonly string[];
+  /** Set `Secure` on the session cookie (default true). Only local plain-http development turns this off. */
+  readonly secureCookies?: boolean;
   /** Requests per minute allowed from one client address across ALL credentials (default 600). */
   readonly ipRateLimitPerMinute?: number;
   /**
@@ -379,6 +394,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       })
     : undefined;
   const members = new MemberStore(sql);
+  const userAuth = new UserAuthService({ sql, now: iso });
+  const secureCookies = options.secureCookies ?? true;
   const alerts = new AlertEngine(sql);
   // The active key is registered once; older keys stay published so historical Proof still
   // verifies. A key that was revoked cannot be re-activated: the process then refuses to sign.
@@ -729,6 +746,10 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       return { kind: "OPERATOR" };
     } catch (error) {
       if (!(error instanceof AdminAuthError)) throw error;
+    }
+    if (request.authorization?.startsWith("Session ")) {
+      const view = await userAuth.authenticate(request.authorization.slice(8));
+      return view ? { kind: "MEMBER", member: view.member } : "UNAUTHENTICATED";
     }
     try {
       return {
@@ -2259,7 +2280,49 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       });
       return true;
     }
-    const authorization = req.headers.authorization;
+    let authorization = req.headers.authorization;
+    // A browser session: the HttpOnly cookie becomes a `Session` credential for the routes, but only after the request proves it
+    // came from our own page. Unsafe methods need an allowed Origin AND the CSRF token (derived from the session secret).
+    let cookieSession: string | null = null;
+    if (!authorization) {
+      cookieSession = readSessionCookie(req.headers.cookie);
+      if (cookieSession) {
+        const view = await userAuth.authenticate(cookieSession);
+        if (view) {
+          if (method !== "GET") {
+            const origin = req.headers.origin;
+            const csrf = req.headers["x-pf-csrf"];
+            if (
+              typeof origin !== "string" ||
+              !(options.appOrigins ?? []).includes(origin) ||
+              !userAuth.csrfMatches(
+                view,
+                typeof csrf === "string" ? csrf : undefined,
+              )
+            ) {
+              send(res, {
+                status: 403,
+                headers: {
+                  "content-type": "application/json",
+                  "cache-control": "no-store",
+                },
+                body: {
+                  reason: "CSRF_CHECK_FAILED",
+                  decision: "DENY",
+                  effectCount: 0,
+                  recoverable: false,
+                  humanSummary:
+                    "This request did not come from your signed-in page. Nothing changed.",
+                  nextAction: "RELOAD_THE_PAGE_AND_TRY_AGAIN",
+                },
+              });
+              return true;
+            }
+          }
+          authorization = `Session ${cookieSession}`;
+        }
+      }
+    }
     const request: RestRequest = {
       method,
       path,
@@ -2354,6 +2417,133 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         );
         return true;
       }
+    }
+    if (path.startsWith("/v1/app/")) {
+      const json = (
+        status: number,
+        bodyOut: Record<string, unknown>,
+        extra: Record<string, string> = {},
+      ) =>
+        send(res, {
+          status,
+          headers: {
+            "content-type": "application/json",
+            "cache-control": "no-store",
+            ...extra,
+          },
+          body: bodyOut,
+        });
+      const origin = req.headers.origin;
+      const originOk =
+        typeof origin === "string" &&
+        (options.appOrigins ?? []).includes(origin);
+      const sessionTokenIn = readSessionCookie(req.headers.cookie);
+      if (
+        method === "POST" &&
+        (path === "/v1/app/signup" || path === "/v1/app/login")
+      ) {
+        // Login CSRF: an attacker's page must not be able to sign a victim in as the attacker.
+        if (!originOk) {
+          json(403, { reason: "ORIGIN_NOT_ALLOWED", recoverable: false });
+          return true;
+        }
+        let gate;
+        try {
+          gate = await enforceRateLimit(limiter, {
+            bucket: "auth",
+            subject: `auth:${clientAddressOf(req, options.trustedProxyHops ?? 1).slice(0, 64)}`,
+            limit: 20,
+            windowSeconds: 60,
+            now: iso(),
+          });
+        } catch {
+          gate = { allowed: true, remaining: 0, resetAt: iso() };
+        }
+        if (!gate.allowed) {
+          json(
+            429,
+            { reason: "RATE_LIMITED", recoverable: true },
+            { "retry-after": "60" },
+          );
+          return true;
+        }
+        if (path === "/v1/app/signup") {
+          const r = await userAuth.signup(body);
+          if (!r.ok) {
+            json(r.refusal === "EMAIL_UNAVAILABLE" ? 409 : 400, {
+              reason: r.refusal,
+              recoverable: true,
+            });
+            return true;
+          }
+          json(201, { userId: r.userId, organizationId: r.organizationId });
+          return true;
+        }
+        const r = await userAuth.login(body);
+        if (!r.ok) {
+          json(r.refusal === "MALFORMED" ? 400 : 401, {
+            reason: r.refusal,
+            recoverable: true,
+          });
+          return true;
+        }
+        const g = r.grant;
+        json(
+          200,
+          {
+            user: g.user,
+            member: {
+              organizationId: g.member.organizationId,
+              environment: g.member.environment,
+              role: g.member.role,
+            },
+            csrfToken: g.csrfToken,
+            expiresAt: g.expiresAt,
+          },
+          {
+            "set-cookie": sessionCookie(
+              g.sessionToken,
+              Math.floor(SESSION_ABSOLUTE_MS / 1000),
+              secureCookies,
+            ),
+          },
+        );
+        return true;
+      }
+      if (method === "GET" && path === "/v1/app/me") {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view || !sessionTokenIn) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        json(200, {
+          user: view.user,
+          member: {
+            organizationId: view.member.organizationId,
+            environment: view.member.environment,
+            role: view.member.role,
+          },
+          csrfToken: csrfFor(sessionTokenIn),
+          expiresAt: view.expiresAt,
+        });
+        return true;
+      }
+      if (method === "POST" && path === "/v1/app/logout") {
+        // The edge already required Origin + CSRF for a live cookie session. Logging out always clears the cookie.
+        if (sessionTokenIn) await userAuth.logout(sessionTokenIn);
+        json(
+          200,
+          { signedOut: true },
+          {
+            "set-cookie": clearedSessionCookie(secureCookies),
+          },
+        );
+        return true;
+      }
+      json(404, { reason: "ROUTE_NOT_FOUND" });
+      return true;
     }
     if (method === "GET" && path === "/v1/oauth-protected-resource" && mcp) {
       send(res, {

@@ -97,6 +97,8 @@ export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
   /** Verify-only profile only: serve the one public verification tool without a credential. */
   mcpAnonymousVerify?: boolean;
   trustedProxyHops?: number;
+  /** Browser origins allowed to make state-changing requests with a session cookie (default: the configured origin). */
+  appOrigins?: string[];
   ipRateLimitPerMinute?: number;
   /** External OAuth authorization server (PayFlow is only the resource server). Both are https. */
   oauthIssuer?: string;
@@ -158,6 +160,16 @@ export function parseHostedConfig(
     return n;
   };
   const trustedProxyHops = intEnv("PAYFLOW_TRUSTED_PROXY_HOPS", 0, 5);
+  const appOrigins = (env["PAYFLOW_APP_ORIGINS"] ?? "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean)
+    .map((o) => {
+      const u = new URL(o);
+      if (u.origin !== o || !/^https?:$/u.test(u.protocol))
+        throw new Error("PAYFLOW_APP_ORIGINS_INVALID");
+      return o;
+    });
   const ipRateLimitPerMinute = intEnv(
     "PAYFLOW_IP_RATE_LIMIT_PER_MINUTE",
     10,
@@ -180,6 +192,7 @@ export function parseHostedConfig(
     ...(profile ? { mcpProfile: profile } : {}),
     ...(anonymous === "true" ? { mcpAnonymousVerify: true } : {}),
     ...(trustedProxyHops !== undefined ? { trustedProxyHops } : {}),
+    ...(appOrigins.length > 0 ? { appOrigins } : {}),
     ...(ipRateLimitPerMinute !== undefined ? { ipRateLimitPerMinute } : {}),
     ...(issuer && jwks ? { oauthIssuer: issuer, oauthJwksUrl: jwks } : {}),
     ...(adminToken ? { gatewayAdminToken: adminToken } : {}),
@@ -368,6 +381,8 @@ export function createHostedConsole(
         ...(config.trustedProxyHops !== undefined
           ? { trustedProxyHops: config.trustedProxyHops }
           : {}),
+        appOrigins: config.appOrigins ?? [config.PAYFLOW_M5_ORIGIN],
+        secureCookies: new URL(config.PAYFLOW_M5_ORIGIN).protocol === "https:",
         ...(config.ipRateLimitPerMinute !== undefined
           ? { ipRateLimitPerMinute: config.ipRateLimitPerMinute }
           : {}),

@@ -69,6 +69,7 @@ export function hostHarness(
           PAYFLOW_M6_DEMO_AGENT: "true",
           PAYFLOW_M6_SIGNING_KEY: pem,
           PAYFLOW_GATEWAY_ADMIN_TOKEN: ADMIN_TOKEN,
+          PAYFLOW_APP_ORIGINS: origin,
           ...options.env,
           ...over,
         }),
