@@ -60,3 +60,4 @@ Dated addendum; earlier entries are not rewritten. Detail and evidence levels: `
 - Delivered (IMPLEMENTED + TARGETED_TEST_PASSED + local FULL_REGRESSION_PASSED on `848a907`): Gateway order binding with durable single-use execution intents and dispatch-time quote/digest pins (migration 053); atomic M49 acceptance, M39 approve+accept, M43 refund+resolve, M50 termination; M34 link verification.
 - Not delivered / external: no deployment; migration 053 on no public database; no payout rail (contractor payments are a catalog-purchase simulator); credentialed provider sandbox tests skipped.
 - GitHub CI result on the merged head and the resulting `main` SHA are appended below when known.
+- **R0 merged:** PR #60 squash-merged into `main` as `138f51c0bd335249998afd139138939794ed48d8`. GitHub CI on the exact PR head `b543830`: `verify` success (12:29–12:49Z), `console` success, `console-e2e` success. `CI_VERIFIED` for R0; still not deployed.
