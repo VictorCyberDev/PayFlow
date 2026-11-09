@@ -256,11 +256,14 @@ const url = process.env.TEST_DATABASE_URL;
         "decline",
         "cancel",
         "deposit",
-      ])
-        expect(
-          (await post(s.c, `/v1/agent/bookings/${id}/${op}`, {})).status,
+      ]) {
+        const r = await post(s.c, `/v1/agent/bookings/${id}/${op}`, {});
+        expect([op, r.status, (await body(r)).reason]).toEqual([
           op,
-        ).toBe(403);
+          403,
+          "MEMBER_ONLY",
+        ]);
+      }
       expect(
         (await propose(s.a, s.id, sid, "sbx-harbour-office", {}, "/v1/agent"))
           .status,
