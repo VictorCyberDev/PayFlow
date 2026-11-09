@@ -236,12 +236,28 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       expect(provider.createCalls).toBe(0);
     });
 
-    it("without PAYFLOW_GATEWAY_ADMIN_TOKEN no administrative route exists", async () => {
+    it("without PAYFLOW_GATEWAY_ADMIN_TOKEN no OPERATOR access exists: every operator route refuses, whatever token is presented", async () => {
+      // Contract (R5): with no operator token configured, operator access is impossible. The member-authenticated routes under
+      // /v1/admin/ stay reachable so the customer app does not depend on a shared operator secret, but they authenticate members only.
       await host?.close();
       start({ PAYFLOW_GATEWAY_ADMIN_TOKEN: undefined });
-      expect(
-        (await admin("/v1/admin/credentials", undefined, "any-token")).status,
-      ).toBe(404);
+      for (const token of ["any-token", "", "Bearer"])
+        expect(
+          (await admin("/v1/admin/credentials", undefined, token)).status,
+          token,
+        ).toBe(401);
+      const before = await repo.sql`select count(*)::int n from mandates`;
+      const provision = await fetch(`${origin}/v1/admin/sandbox/authority`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer any-token",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      });
+      expect(provision.status).toBe(401);
+      const after = await repo.sql`select count(*)::int n from mandates`;
+      expect(after[0]!.n).toBe(before[0]!.n);
     });
 
     it("with no payment rail connected the Gateway refuses before any record is written", async () => {

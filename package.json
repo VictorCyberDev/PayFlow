@@ -8,7 +8,9 @@
   },
   "scripts": {
     "dev": "node --import tsx src/demo.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "embed:app": "node scripts/embed-app-ui.mjs",
+    "embed:app:check": "node scripts/embed-app-ui.mjs --check",
+    "build": "node scripts/embed-app-ui.mjs && tsc -p tsconfig.build.json",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

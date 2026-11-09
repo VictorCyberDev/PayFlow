@@ -4,8 +4,19 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { createBookingRoutes } from "./booking-routes.js";
+import { BookingService } from "../missions/booking-service.js";
+import { createWorkspaceRoutes } from "./workspace-routes.js";
+import { createServiceMarketRoutes } from "./service-market-routes.js";
+import { ServiceMarketService } from "../missions/service-market-service.js";
+import { sandboxServiceSource } from "../missions/service-market-sources.js";
+import { WorkspaceService } from "../missions/workspace-service.js";
+import {
+  builtinWorkspaceSources,
+  type WorkspaceSourceRegistry,
+} from "../missions/workspace-sources.js";
+import { APP_ASSETS, APP_FONTS } from "./app-assets.generated.js";
 import { draftMission, type DraftModel } from "../missions/draft-assistant.js";
-import { readFileSync } from "node:fs";
 import { z } from "zod";
 import {
   UserAuthService,
@@ -222,6 +233,8 @@ export interface HostedGatewayOptions {
   readonly channels?: ChannelRegistry;
   /** Test seam: the talent sources candidates can be imported from instead of the built-in fictional sandbox source. */
   readonly talentSources?: TalentSourceRegistry;
+  /** Workspace listing sources. Default: the fictional SANDBOX fixture only. */
+  readonly workspaceSources?: WorkspaceSourceRegistry;
   /** Test seam: how long a send may take before its outcome is recorded as unknown. */
   readonly sendTimeoutMs?: number;
 }
@@ -271,24 +284,19 @@ const APP_TYPES: Record<string, string> = {
   js: "text/javascript; charset=utf-8",
   css: "text/css; charset=utf-8",
 };
-const appCache = new Map<string, { type: string; body: Buffer }>();
-/** The customer web app: three static files, read once from `app-ui/`. Anything not in the table is a 404 (no path traversal). */
+/** The customer web app: three static files embedded in this module (see scripts/embed-app-ui.mjs). Anything else is a 404. */
 function appAsset(path: string): { type: string; body: Buffer } | null {
+  const font = /^\/workspace\/fonts\/([a-z0-9-]+\.woff2)$/u.exec(path)?.[1];
+  const fontData = font ? APP_FONTS[font] : undefined;
+  if (fontData)
+    return { type: "font/woff2", body: Buffer.from(fontData, "base64") };
   const file = APP_FILES[path];
-  if (!file) return null;
-  const cached = appCache.get(file);
-  if (cached) return cached;
-  for (const rel of ["../../app-ui/", "../../../app-ui/", "../app-ui/"]) {
-    try {
-      const body = readFileSync(new URL(rel + file, import.meta.url));
-      const entry = { type: APP_TYPES[file.split(".").pop()!]!, body };
-      appCache.set(file, entry);
-      return entry;
-    } catch {
-      /* try the next layout (source vs. compiled) */
-    }
-  }
-  return null;
+  const text = file ? APP_ASSETS[file] : undefined;
+  if (!file || text === undefined) return null;
+  return {
+    type: APP_TYPES[file.split(".").pop()!]!,
+    body: Buffer.from(text, "utf8"),
+  };
 }
 
 /**
@@ -568,13 +576,17 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         now: iso,
       })
     : undefined;
+  // With no operator token configured, OPERATOR access is impossible (every attempt is an AdminAuthError) but the member-authenticated
+  // routes under /v1/admin/ stay available: the customer app must not depend on a shared operator secret existing.
   const authenticateAdmin = options.adminToken
     ? staticAdminAuthenticator({
         token: options.adminToken,
         organizationId: options.organizationId,
         environment: "SANDBOX",
       })
-    : undefined;
+    : (): never => {
+        throw new AdminAuthError();
+      };
   const reconciler = new UnknownReconciler(sql, (organizationId) => {
     const lookup = organizationId.startsWith("sbx_")
       ? options.simulated?.lookupProvider()
@@ -780,7 +792,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     request: RestRequest,
   ): Promise<Actor | "UNAUTHENTICATED"> {
     try {
-      authenticateAdmin!(request.authorization);
+      authenticateAdmin(request.authorization);
       return { kind: "OPERATOR" };
     } catch (error) {
       if (!(error instanceof AdminAuthError)) throw error;
@@ -1583,6 +1595,74 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       new TalentSourceRegistry().register(sandboxTalentSource),
     now: iso,
   });
+  const workspaceService = new WorkspaceService({
+    sql,
+    audit,
+    missions: missionService,
+    sources: options.workspaceSources ?? builtinWorkspaceSources(),
+    now: iso,
+  });
+  const bookingService = new BookingService({
+    sql,
+    audit,
+    missions: missionService,
+    ledger: ledgerService,
+    now: iso,
+  });
+  const bookingRoutes = createBookingRoutes({
+    service: bookingService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
+  const workspaceRoutes = createWorkspaceRoutes({
+    service: workspaceService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
+  const serviceMarketRoutes = createServiceMarketRoutes({
+    service: new ServiceMarketService({
+      missions: missionService,
+      sources: new Map([[sandboxServiceSource.id, sandboxServiceSource]]),
+    }),
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+    agent: (request) => resolveAgentCaller(request),
+    paused: async (caller) =>
+      (await controls.pausedReason(
+        caller.organizationId,
+        caller.environment,
+      )) !== null,
+  });
   const talentCandidateRoutes = createTalentCandidateRoutes({
     service: talentCandidateService,
     reply: (requestId, status, body) => reply(requestId, status, body),
@@ -2313,7 +2393,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         "referrer-policy": "no-referrer",
         "x-frame-options": "DENY",
         "content-security-policy":
-          "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+          "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
       });
       res.end(req.method === "HEAD" ? undefined : asset.body);
       return true;
@@ -2447,7 +2527,16 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       // One bucket per credential or member; callers with no recognizable identity are keyed by
       // address. A shared bucket would let one noisy or hostile caller lock every organization out
       // of its own administrative API.
-      const subject = bearer ?? `anon:${forwarded ?? "unknown"}`;
+      // A signed-in person is keyed by their session cookie (hashed), so people behind one office address do not share a bucket. The cookie
+      // is unauthenticated at this point, so a made-up value only buys a fresh bucket inside the per-address cap above.
+      const cookie = readSessionCookie(
+        typeof req.headers.cookie === "string" ? req.headers.cookie : undefined,
+      );
+      const subject =
+        bearer ??
+        (cookie
+          ? `sess:${createHash("sha256").update(cookie).digest("hex").slice(0, 32)}`
+          : `anon:${forwarded ?? "unknown"}`);
       let decision;
       try {
         decision = await enforceRateLimit(limiter, {
@@ -3106,6 +3195,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       path.startsWith("/v1/agent/delegations/") ||
       path === "/v1/agent/missions" ||
       path.startsWith("/v1/agent/missions/") ||
+      path.startsWith("/v1/agent/bookings/") ||
       path === "/v1/agent/tasks" ||
       path.startsWith("/v1/agent/tasks/") ||
       path.startsWith("/v1/agent/ledger/") ||
@@ -3146,6 +3236,9 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           (await safely(() => portfolioRoutes.agent(request))) ??
           (await safely(() => talentScopeRoutes.agent(request))) ??
           (await safely(() => talentCandidateRoutes.agent(request))) ??
+          (await safely(() => workspaceRoutes.agent(request))) ??
+          (await safely(() => bookingRoutes.agent(request))) ??
+          (await safely(() => serviceMarketRoutes.agent(request))) ??
           (await safely(() => shortlistRoutes.agent(request))) ??
           (await safely(() => talentOfferRoutes.agent(request))) ??
           (await safely(() => contractorRoutes.agent(request))) ?? {
@@ -3157,14 +3250,6 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       return true;
     }
     if (path.startsWith("/v1/admin/")) {
-      if (!authenticateAdmin) {
-        send(res, {
-          status: 404,
-          headers: { "content-type": "application/json" },
-          body: { reason: "ROUTE_NOT_FOUND" },
-        });
-        return true;
-      }
       const planeReply =
         (await orgRoute(request)) ??
         (await safely(() => credentialRoute(request))) ??
@@ -3188,6 +3273,9 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => portfolioRoutes.member(request))) ??
         (await safely(() => talentScopeRoutes.member(request))) ??
         (await safely(() => talentCandidateRoutes.member(request))) ??
+        (await safely(() => workspaceRoutes.member(request))) ??
+        (await safely(() => bookingRoutes.member(request))) ??
+        (await safely(() => serviceMarketRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
         (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => contractorRoutes.member(request))) ??

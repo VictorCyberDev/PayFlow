@@ -40,6 +40,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run secret:scan
+      - run: npm run embed:app:check
       - run: npm run evidence:check
       - name: Python SDK tests
         run: python3 -m unittest discover -s packages/sdk-python/tests -v
@@ -142,6 +143,14 @@ jobs:
       - name: Gate A accessibility acceptance
         run: node scripts/a11y-acceptance.mjs
         working-directory: .
+
+      # R5: the hosted topology contract (hosting/m6/vercel.json routing + the real function handler + the real static export).
+      - name: Hosting topology acceptance
+        run: npx vitest run tests/r5-hosting-topology.integration.test.ts
+        working-directory: .
+        env:
+          TEST_DATABASE_URL: ${{ env.E2E_DATABASE_URL }}
+          REQUIRE_BROWSER: "1"
 
       # R1: the customer app (accounts, wizard, approval, pause, sign-out) in Chromium against the real Gateway on PostgreSQL.
       - name: Customer app acceptance

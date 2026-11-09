@@ -1,4 +1,5 @@
 import type { ConnectorRegistry } from "./missions/connectors.js";
+import type { WorkspaceSourceRegistry } from "./missions/workspace-sources.js";
 import { GroqDraftModel, type DraftModel } from "./missions/draft-assistant.js";
 import type { ChannelRegistry } from "./missions/channels.js";
 import type { TalentSourceRegistry } from "./missions/talent-candidates.js";
@@ -257,6 +258,7 @@ export function createHostedConsole(
     channels?: ChannelRegistry;
     /** Test seam: the talent sources candidates are imported from instead of the built-in fictional sandbox source. */
     talentSources?: TalentSourceRegistry;
+    workspaceSources?: WorkspaceSourceRegistry;
     /** Test/operator override for the wizard's AI suggestion model. */
     draftModel?: DraftModel;
     sendTimeoutMs?: number;
@@ -373,6 +375,9 @@ export function createHostedConsole(
         ...(deps.connectors ? { connectors: deps.connectors } : {}),
         ...(deps.channels ? { channels: deps.channels } : {}),
         ...(deps.talentSources ? { talentSources: deps.talentSources } : {}),
+        ...(deps.workspaceSources
+          ? { workspaceSources: deps.workspaceSources }
+          : {}),
         // The AI suggestion is OFF unless the operator turns it on AND supplies a key (cost and data-sharing decision).
         ...(deps.draftModel
           ? { draftModel: deps.draftModel }

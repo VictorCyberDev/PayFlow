@@ -260,6 +260,19 @@ describe("R1a password hashing and cookies (pure)", () => {
       expect([401, 403]).not.toContain(ok.status);
     });
 
+    it("two people signed in from the same address have their own request budgets: one busy session cannot lock the other out", async () => {
+      const a = await signedIn();
+      const b = await signedIn();
+      let limited = 0;
+      for (let i = 0; i < 70; i++)
+        if ((await send("GET", MISSIONS, { cookie: a.cookie })).status === 429)
+          limited++;
+      expect(limited).toBeGreaterThan(0); // the busy session is capped
+      expect((await send("GET", MISSIONS, { cookie: b.cookie })).status).toBe(
+        200,
+      ); // the other person, same address, is not
+    });
+
     it("tenant and role isolation: another account sees nothing of this organization; a VIEWER session cannot create", async () => {
       const a = await signedIn();
       const b = await signedIn();
