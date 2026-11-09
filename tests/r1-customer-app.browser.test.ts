@@ -1199,6 +1199,105 @@ const chromePath = [
       await ctx.close();
     }, 60_000);
 
+    it("the Launch board derives each area from real records, says who acts next, and treats empty records as not started", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "lch@example.com",
+          password: "a long enough passphrase",
+          displayName: "Lee Launch",
+          organizationName: "Launch Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("lch@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      const mid = "msn_" + "4".repeat(24);
+      let busy = true;
+      const ok = (body: unknown) => ({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+      await page.route(/\/v1\/admin\/org\//u, async (r) => {
+        const path = new URL(r.request().url()).pathname;
+        if (path === `/v1/admin/org/missions/${mid}`)
+          return r.fulfill(
+            ok({ mission: { activeContract: { currency: "GBP" } } }),
+          );
+        if (path.endsWith("/bookings"))
+          return r.fulfill(
+            ok({
+              bookings: busy
+                ? [
+                    {
+                      state: "UNKNOWN",
+                      headline: "Checking what happened. Don't book again yet.",
+                    },
+                  ]
+                : [],
+            }),
+          );
+        if (path.endsWith("/orders"))
+          return r.fulfill(ok({ orders: busy ? [{ status: "SHIPPED" }] : [] }));
+        if (path.endsWith("/contracts"))
+          return r.fulfill(
+            ok({
+              contracts: busy
+                ? [
+                    {
+                      terminated: false,
+                      milestones: [{ index: 1, state: "SUBMITTED" }],
+                    },
+                  ]
+                : [],
+            }),
+          );
+        if (path.endsWith("/ledger"))
+          return r.fulfill(
+            ok({
+              summary: {
+                exposureMinor: 148500,
+                ceilingMinor: 500000,
+                overCommittedMinor: 0,
+              },
+              items: [],
+            }),
+          );
+        return r.continue();
+      });
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/launch`);
+      await page
+        .getByRole("heading", { name: "Launch board", level: 1 })
+        .waitFor();
+      let text = await page.locator("main").innerText();
+      expect(text).toContain("Needs checking");
+      expect(text).toContain("Checking what happened. Don't book again yet.");
+      expect(text).toContain("Outside PayFlow");
+      expect(text).toContain("Needs your decision");
+      expect(text).toContain("Search only");
+      expect(text).toContain("Within budget");
+      expect(text).toContain("£1,485.00");
+      expect(text).not.toMatch(/undefined|\[object|NaN/u);
+      expect(await axe(page)).toEqual([]);
+      busy = false;
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/finance`);
+      await page.getByRole("heading", { name: "Finance", level: 1 }).waitFor();
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/launch`);
+      await page
+        .getByRole("heading", { name: "Launch board", level: 1 })
+        .waitFor();
+      text = await page.locator("main").innerText();
+      expect(text.match(/Not started/gu)?.length).toBe(3);
+      expect(text).not.toContain("Confirmed");
+      await page.goto("about:blank");
+      await ctx.close();
+    }, 60_000);
+
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
       await page.goto(`${h.origin}/workspace`);

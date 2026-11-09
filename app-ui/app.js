@@ -2896,8 +2896,214 @@ function recordsNav(id) {
         {},
         h("a", {
           class: "link",
+          href: `#/missions/${id}/launch`,
+          text: "Launch board: where each part stands",
+        }),
+      ),
+      h(
+        "li",
+        {},
+        h("a", {
+          class: "link",
           href: `#/missions/${id}/proof`,
           text: "Proof: the history of every change",
+        }),
+      ),
+    ),
+  );
+}
+/**
+ * Launch board (M55): where each part of a launch stands, in one place. Every line is derived from a real record and says who has to act.
+ * "PayFlow waits" means nothing is owed from you; "You" means the next step is yours; "Outside PayFlow" marks work PayFlow cannot do.
+ * Nothing here is invented: an empty record reads as not started, and services are search-only because nothing can be bought through them.
+ */
+function launchLines(d) {
+  const lines = [];
+  const b = d.bookings ?? [];
+  const live = b.find(
+    (x) => !["DECLINED", "CANCELLED", "EXPIRED"].includes(x.state),
+  );
+  lines.push(
+    !live
+      ? {
+          area: "A place to work",
+          who: "You",
+          state: "Not started",
+          detail: "Search for a workspace and propose a booking.",
+          href: "workspaces",
+        }
+      : live.state === "UNKNOWN"
+        ? {
+            area: "A place to work",
+            who: "You",
+            state: "Needs checking",
+            detail: live.headline,
+            href: "workspaces",
+          }
+        : live.state === "CONFIRMED"
+          ? {
+              area: "A place to work",
+              who: "PayFlow waits",
+              state: "Confirmed",
+              detail: live.headline,
+              href: "workspaces",
+            }
+          : {
+              area: "A place to work",
+              who: live.state === "PROPOSED" ? "You" : "Outside PayFlow",
+              state: "In progress",
+              detail: live.headline,
+              href: "workspaces",
+            },
+  );
+  const o = d.orders ?? [];
+  lines.push(
+    o.length === 0
+      ? {
+          area: "Equipment",
+          who: "You",
+          state: "Not started",
+          detail: "No purchase has been placed.",
+          href: "orders",
+        }
+      : o.every((x) => x.status === "DELIVERED")
+        ? {
+            area: "Equipment",
+            who: "PayFlow waits",
+            state: "Delivered",
+            detail: `${o.length} order${o.length === 1 ? "" : "s"} delivered.`,
+            href: "orders",
+          }
+        : o.some((x) => x.status === "IN_DISPUTE")
+          ? {
+              area: "Equipment",
+              who: "You",
+              state: "In dispute",
+              detail: "An order is in dispute.",
+              href: "disputes",
+            }
+          : {
+              area: "Equipment",
+              who: "Outside PayFlow",
+              state: "In progress",
+              detail: `${o.length} order${o.length === 1 ? "" : "s"} placed; waiting for the supplier.`,
+              href: "orders",
+            },
+  );
+  const ms = (d.contracts ?? []).flatMap((c) =>
+    c.terminated ? [] : (c.milestones ?? []),
+  );
+  lines.push(
+    (d.contracts ?? []).length === 0
+      ? {
+          area: "Specialist help",
+          who: "You",
+          state: "Not started",
+          detail: "No contractor work has been agreed.",
+          href: "contractors",
+        }
+      : ms.some((m) => m.state === "SUBMITTED")
+        ? {
+            area: "Specialist help",
+            who: "You",
+            state: "Needs your decision",
+            detail: "Work has been submitted and is waiting for you.",
+            href: "contractors",
+          }
+        : ms.length > 0 &&
+            ms.every((m) => ["PAID", "CANCELLED"].includes(m.state))
+          ? {
+              area: "Specialist help",
+              who: "PayFlow waits",
+              state: "Done",
+              detail: "Every milestone is paid or cancelled.",
+              href: "contractors",
+            }
+          : {
+              area: "Specialist help",
+              who: "Outside PayFlow",
+              state: "In progress",
+              detail: "Work is under way.",
+              href: "contractors",
+            },
+  );
+  lines.push({
+    area: "Professional services",
+    who: "You",
+    state: "Search only",
+    detail:
+      "PayFlow can compare packages. Engaging a provider, and any professional advice, happens outside PayFlow.",
+    href: "services",
+  });
+  if (d.summary)
+    lines.push({
+      area: "Money",
+      who: "PayFlow waits",
+      state: d.summary.overCommittedMinor > 0 ? "Over budget" : "Within budget",
+      detail: `${money(d.summary.exposureMinor, d.currency)} set aside or committed of ${money(d.summary.ceilingMinor, d.currency)}.`,
+      href: "finance",
+    });
+  return lines;
+}
+async function launchBoardPage(id) {
+  const m = await api(`/v1/admin/org/missions/${id}`);
+  if (!m.ok)
+    return shell(
+      "#/missions",
+      h("h1", { text: "Mission not found" }),
+      notice("bad", "That mission doesn't exist, or you can't see it."),
+    );
+  const c = m.data.mission.activeContract ?? m.data.mission.latestContract;
+  const get = async (p) =>
+    (await api(`/v1/admin/org/missions/${id}/${p}`)).data ?? {};
+  const [b, o, k, l] = await Promise.all([
+    get("bookings"),
+    get("orders"),
+    get("contracts"),
+    get("ledger"),
+  ]);
+  const lines = launchLines({
+    bookings: b.bookings,
+    orders: o.orders,
+    contracts: k.contracts,
+    summary: l.summary,
+    currency: c?.currency ?? "USD",
+  });
+  shell(
+    "#/missions",
+    h(
+      "div",
+      { class: "row" },
+      h("h1", { text: "Launch board" }),
+      h("a", {
+        class: "link",
+        href: `#/missions/${id}`,
+        text: "Back to mission",
+      }),
+    ),
+    h("p", {
+      text: "Where each part stands, from the records themselves. It shows what you need to do and what happens outside PayFlow.",
+    }),
+    lines.map((x) =>
+      h(
+        "article",
+        { class: "card" },
+        h(
+          "div",
+          { class: "row" },
+          h("h2", { text: x.area }),
+          h("span", { class: "badge" }, glyph("dot"), x.state),
+        ),
+        h(
+          "dl",
+          {},
+          row("Next step is with", x.who),
+          row("What we know", x.detail),
+        ),
+        h("a", {
+          class: "link",
+          href: `#/missions/${id}/${x.href}`,
+          text: "Open",
         }),
       ),
     ),
@@ -3207,6 +3413,7 @@ async function render() {
     if (hash === "#/help") return helpPage();
     const sec = /^#\/missions\/(msn_[a-f0-9]{24})\/([a-z]+)$/.exec(hash);
     if (sec && sec[2] === "proof") return await proofPage(sec[1]);
+    if (sec && sec[2] === "launch") return await launchBoardPage(sec[1]);
     if (sec && sec[2] === "services") return await servicesPage(sec[1]);
     if (sec && SECTIONS[sec[2]]) return await recordsPage(sec[1], sec[2]);
     const w = /^#\/missions\/(msn_[a-f0-9]{24})\/workspaces$/.exec(hash);
