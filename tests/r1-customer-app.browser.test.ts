@@ -857,6 +857,31 @@ const chromePath = [
               ],
             }),
           );
+        if (path === `/v1/admin/org/missions/${mid}/orders`)
+          return r.fulfill(
+            ok({
+              orders: [
+                {
+                  orderId: "ord_" + "a".repeat(24),
+                  status: "SHIPPED",
+                  claimedStatus: "DELIVERED",
+                  overdue: false,
+                },
+                {
+                  orderId: "ord_" + "b".repeat(24),
+                  status: "PLACED",
+                  claimedStatus: null,
+                  overdue: true,
+                },
+                {
+                  orderId: "ord_" + "c".repeat(24),
+                  status: "PLACED",
+                  claimedStatus: null,
+                  overdue: false,
+                },
+              ],
+            }),
+          );
         if (path === "/v1/admin/org/automation/jobs")
           return r.fulfill(
             ok({
@@ -880,6 +905,11 @@ const chromePath = [
       expect(text).toContain("Harbour Studio (fictional)");
       expect(text).toContain("£1,485.00");
       expect(text).toContain("PayFlow cannot tell whether it acted");
+      expect(text).toContain(
+        "Someone reported it as Delivered. PayFlow records it as Shipped",
+      );
+      expect(text).toContain("past its expected delivery");
+      expect(text.match(/An order to check/gu)?.length).toBe(2); // the third order is fine and is not listed
       expect(await axe(page)).toEqual([]);
       await page.getByLabel("What actually happened").selectOption("FAILED");
       await page

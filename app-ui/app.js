@@ -3163,10 +3163,15 @@ async function proofPage(id) {
 async function checkingPage() {
   const ms = (await api("/v1/admin/org/missions")).data?.missions ?? [];
   const unclearBookings = [];
+  const orderChecks = [];
   for (const m of ms.slice(0, 25)) {
     const r = await api(`/v1/admin/org/missions/${m.missionId}/bookings`);
     for (const b of r.data?.bookings ?? [])
       if (b.state === "UNKNOWN") unclearBookings.push({ m, b });
+    const o = await api(`/v1/admin/org/missions/${m.missionId}/orders`);
+    for (const x of o.data?.orders ?? [])
+      if (x.overdue || (x.claimedStatus && x.claimedStatus !== x.status))
+        orderChecks.push({ m, x });
   }
   const jobsR = await api("/v1/admin/org/automation/jobs");
   const unclearJobs = (jobsR.data?.jobs ?? []).filter(
@@ -3222,9 +3227,28 @@ async function checkingPage() {
       text: "These are things where PayFlow cannot tell what happened. It will not try again or guess. The money involved stays set aside until you settle them.",
     }),
     out,
-    unclearBookings.length === 0 && unclearJobs.length === 0
+    unclearBookings.length === 0 &&
+      unclearJobs.length === 0 &&
+      orderChecks.length === 0
       ? h("p", { text: "Nothing needs checking." })
       : null,
+    orderChecks.map(({ m, x }) =>
+      h(
+        "article",
+        { class: "card" },
+        h("h3", { text: "An order to check" }),
+        h("p", {
+          text: x.overdue
+            ? "This order is past its expected delivery and nothing has been recorded."
+            : `Someone reported it as ${wordsOf(x.claimedStatus)}. PayFlow records it as ${wordsOf(x.status)} until you record evidence.`,
+        }),
+        h("a", {
+          class: "link",
+          href: `#/missions/${m.missionId}/orders`,
+          text: "Open the order",
+        }),
+      ),
+    ),
     unclearBookings.map(({ m, b }) =>
       h(
         "article",
