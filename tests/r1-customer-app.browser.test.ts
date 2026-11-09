@@ -1114,6 +1114,91 @@ const chromePath = [
       await ctx.close();
     }, 60_000);
 
+    it("an open dispute can be settled with proof or withdrawn; a refund is sent only with its evidence", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "dsp@example.com",
+          password: "a long enough passphrase",
+          displayName: "Dee Dispute",
+          organizationName: "Dispute Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("dsp@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      const mid = "msn_" + "6".repeat(24);
+      const dsp = "dsp_" + "5".repeat(24);
+      const posts: { path: string; body: unknown }[] = [];
+      const ok = (body: unknown) => ({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+      await page.route(/\/v1\/admin\/org\//u, async (r) => {
+        const req = r.request();
+        const path = new URL(req.url()).pathname;
+        if (req.method() === "POST") {
+          posts.push({
+            path,
+            body: JSON.parse(req.postData() ?? "{}") as unknown,
+          });
+          return r.fulfill(ok({}));
+        }
+        if (path === `/v1/admin/org/missions/${mid}`)
+          return r.fulfill(
+            ok({ mission: { activeContract: { currency: "GBP" } } }),
+          );
+        if (path.endsWith("/disputes"))
+          return r.fulfill(
+            ok({
+              disputes: [
+                {
+                  disputeId: dsp,
+                  status: "OPEN",
+                  ground: "DAMAGED",
+                  claimedMinor: 1250,
+                  reason: "Box crushed",
+                },
+              ],
+            }),
+          );
+        return r.continue();
+      });
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/disputes`);
+      await page.getByRole("heading", { name: "Disputes", level: 1 }).waitFor();
+      expect(await axe(page)).toEqual([]);
+      await page.getByText("Settle this dispute").click();
+      await page.getByLabel("Refund amount (GBP), if any").fill("12.50");
+      await page.getByLabel("Reference for that proof").fill("PP-REFUND-1");
+      await page.getByLabel("A short note").fill("Refunded in full");
+      await page.getByRole("button", { name: "Record the outcome" }).click();
+      expect(posts).toEqual([
+        {
+          path: `/v1/admin/org/disputes/${dsp}/resolve`,
+          body: {
+            decision: "REFUND",
+            refundMinor: 1250,
+            evidenceKind: "PROVIDER_CONFIRMATION",
+            evidenceRef: "PP-REFUND-1",
+            note: "Refunded in full",
+          },
+        },
+      ]);
+      posts.length = 0;
+      await page.getByRole("button", { name: "Withdraw this dispute" }).click();
+      expect(posts.map((p) => p.path)).toEqual([
+        `/v1/admin/org/disputes/${dsp}/withdraw`,
+      ]);
+      await page.getByRole("heading", { name: "Disputes", level: 1 }).waitFor();
+      await page.goto("about:blank");
+      await ctx.close();
+    }, 60_000);
+
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
       await page.goto(`${h.origin}/workspace`);

@@ -2531,6 +2531,93 @@ function recordActions(key, rec, redraw, out, cur) {
       ? h("div", {}, f, h("div", { class: "actions" }, btns))
       : null;
   }
+  if (key === "disputes" && rec.status === "OPEN") {
+    const base = `/v1/admin/org/disputes/${rec.disputeId}`;
+    const f = h(
+      "form",
+      {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          const x = new FormData(f);
+          const refund = String(x.get("decision")) === "REFUND";
+          const ref = String(x.get("ref")).trim();
+          await ask(`${base}/resolve`, {
+            decision: String(x.get("decision")),
+            ...(refund
+              ? {
+                  refundMinor: Math.round(Number(x.get("amount")) * 100),
+                  evidenceKind: String(x.get("kind")),
+                  evidenceRef: ref,
+                }
+              : {}),
+            note: String(x.get("note")),
+          });
+        },
+      },
+      h("label", { for: `rd-${rec.disputeId}`, text: "How it was settled" }),
+      h(
+        "select",
+        { id: `rd-${rec.disputeId}`, name: "decision" },
+        h("option", { value: "REFUND", text: "A refund was made" }),
+        h("option", { value: "NO_REFUND", text: "No refund" }),
+      ),
+      h("label", {
+        for: `ra-${rec.disputeId}`,
+        text: `Refund amount (${cur}), if any`,
+      }),
+      h("input", {
+        id: `ra-${rec.disputeId}`,
+        name: "amount",
+        type: "number",
+        min: "0.01",
+        step: "0.01",
+      }),
+      h("label", {
+        for: `rk-${rec.disputeId}`,
+        text: "What proves the refund",
+      }),
+      h(
+        "select",
+        { id: `rk-${rec.disputeId}`, name: "kind" },
+        h("option", {
+          value: "PROVIDER_CONFIRMATION",
+          text: "The provider confirmed it",
+        }),
+        h("option", { value: "PAYFLOW_PROOF", text: "A PayFlow Proof" }),
+      ),
+      h("label", {
+        for: `rr-${rec.disputeId}`,
+        text: "Reference for that proof",
+      }),
+      h("input", { id: `rr-${rec.disputeId}`, name: "ref", maxlength: "200" }),
+      h("label", { for: `rn-${rec.disputeId}`, text: "A short note" }),
+      h("input", { id: `rn-${rec.disputeId}`, name: "note", maxlength: "500" }),
+      h("button", {
+        class: "primary",
+        type: "submit",
+        text: "Record the outcome",
+      }),
+      h("p", {
+        class: "hint",
+        text: "A refund is recorded only with proof, and never for more than you claimed.",
+      }),
+    );
+    return h(
+      "div",
+      {},
+      h("details", {}, h("summary", { text: "Settle this dispute" }), f),
+      h(
+        "div",
+        { class: "actions" },
+        h("button", {
+          type: "button",
+          text: "Withdraw this dispute",
+          onclick: () =>
+            ask(`${base}/withdraw`, { reason: "Withdrawn by the owner" }),
+        }),
+      ),
+    );
+  }
   if (key === "contractors") {
     const blocks = [];
     for (const ms of rec.milestones ?? []) {
