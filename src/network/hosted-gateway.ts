@@ -7,6 +7,10 @@ import {
 import { createBookingRoutes } from "./booking-routes.js";
 import { BookingService } from "../missions/booking-service.js";
 import { createWorkspaceRoutes } from "./workspace-routes.js";
+import {
+  AutomationService,
+  type Handler,
+} from "../automation/automation-service.js";
 import { createServiceMarketRoutes } from "./service-market-routes.js";
 import { ServiceMarketService } from "../missions/service-market-service.js";
 import { sandboxServiceSource } from "../missions/service-market-sources.js";
@@ -168,7 +172,7 @@ export interface HostedGatewayOptions {
   readonly adminToken?: string;
   /**
    * A scheduler credential (for example Vercel Cron's `CRON_SECRET`). It can call ONE route, the
-   * observation-only `GET /v1/admin/ops/reconcile/tick`, and nothing else. It is not an operator token.
+   * observation-only `GET /v1/admin/ops/reconcile/tick` and `GET /v1/admin/ops/automation/run` (which can only run the registered handlers), and nothing else. It is not an operator token.
    */
   readonly cronSecret?: string;
   /**
@@ -1602,13 +1606,33 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     sources: options.workspaceSources ?? builtinWorkspaceSources(),
     now: iso,
   });
+  const automation = new AutomationService({ sql, now: iso });
   const bookingService = new BookingService({
     sql,
     audit,
     missions: missionService,
     ledger: ledgerService,
     now: iso,
+    automation,
   });
+  // The only handlers that exist. A job kind with no handler FAILS; nothing here moves money or contacts anyone.
+  const automationHandlers: Record<string, Handler> = {
+    BOOKING_EXPIRE: async (job) => {
+      const missionId = job.payload.missionId;
+      if (typeof missionId !== "string")
+        return { outcome: "FAILED", note: "no mission" };
+      await bookingService.expireDue(
+        {
+          organizationId: job.organizationId,
+          environment: job.environment,
+          id: "automation",
+          kind: "MEMBER",
+        },
+        missionId,
+      );
+      return { outcome: "SUCCEEDED" };
+    },
+  };
   const bookingRoutes = createBookingRoutes({
     service: bookingService,
     reply: (requestId, status, body) => reply(requestId, status, body),
@@ -2096,7 +2120,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     if (opsPath) {
       // The scheduler credential may call the observation-only tick and nothing else.
       const cronCall =
-        opsPath[1] === "reconcile/tick" &&
+        (opsPath[1] === "reconcile/tick" || opsPath[1] === "automation/run") &&
         request.method === "GET" &&
         cronAuthorized(request.authorization);
       if (!cronCall) {
@@ -2115,6 +2139,21 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           metrics: await reconciliationMetrics(sql, now),
           note: "Observation only. Reconciliation never creates or repeats a provider effect.",
         });
+      // Run due automation: turn due schedule slots into jobs, then run due jobs once. Repeating it is safe: a job is claimed under a
+      // lease, a repeated slot makes no second job, and only handlers listed above exist.
+      if (op === "automation/run") {
+        const ticked = await automation.tick();
+        const ran = await automation.runOnce(
+          `host-${randomUUID().slice(0, 8)}`,
+          automationHandlers,
+          20,
+        );
+        return reply(requestId, 200, {
+          ...ticked,
+          ...ran,
+          via: cronCall ? "SCHEDULER" : "OPERATOR",
+        });
+      }
       if (request.method === "GET" && op === "alerts")
         return reply(requestId, 200, { alerts: await alerts.list() });
       // GET is accepted so a plain scheduler (cron, a hosted cron service) can call it. A tick is

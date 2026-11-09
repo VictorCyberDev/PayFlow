@@ -41,7 +41,7 @@ needs no wallet. Real organisations can never reach the simulated provider.
   Verified on the real database as `payflow_runtime`: reads and writes work; `CREATE TABLE`, `ALTER TABLE`, `TRUNCATE` of the append-only audit log and `GRANT payflow_migrator` are all refused.
   The database now admits only its owner and `payflow_runtime` (`CONNECT` revoked from `PUBLIC` and `neon_superuser`).
 - **Sandbox principal provisioned:** one principal, one agent passport (valid to 2027-02-01), one activation policy. No accepted history was copied.
-- **Scheduler, alert channel, canonical URL, acceptance scripts:** merged in this pass. `CRON_SECRET` can call only `GET /v1/admin/ops/reconcile/tick`; `PAYFLOW_ALERT_WEBHOOK_URL` delivers P0/P1/P2 alerts;
+- **Scheduler, alert channel, canonical URL, acceptance scripts:** merged in this pass. `CRON_SECRET` can call only `GET /v1/admin/ops/reconcile/tick` and `GET /v1/admin/ops/automation/run` (registered handlers only); `PAYFLOW_ALERT_WEBHOOK_URL` delivers P0/P1/P2 alerts;
   `POST /v1/admin/ops/alerts/test` proves the channel with a labelled synthetic alert. `/developers` redirects to `/docs/`.
 - **A mistake, and why my first mitigation was not enough:** to make a login I called Neon's role API, which returned a generated password into a session and gave that role
   `neon_superuser`, CREATEDB, CREATEROLE and BYPASSRLS. I revoked its `CONNECT` on the application database; an independent inspection on 2026-11-06 showed it can still connect to the

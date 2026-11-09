@@ -12,6 +12,7 @@ import {
   type BookingState,
   type EvidenceKind,
 } from "./booking.js";
+import type { AutomationService } from "../automation/automation-service.js";
 import type { LedgerService } from "./ledger-service.js";
 import type { MissionCaller, MissionService } from "./service.js";
 import {
@@ -133,6 +134,8 @@ export class BookingService {
       missions: MissionService;
       ledger: LedgerService;
       now: () => string;
+      /** When present, approval schedules a durable job that expires the booking at its deadline even if nobody looks at it. */
+      automation?: AutomationService;
     },
   ) {}
 
@@ -436,34 +439,59 @@ export class BookingService {
     if (!cur) return { ok: false, refusal: "NOT_FOUND" };
     await this.expireDue(caller, String(cur.mission_id));
     const now = this.deps.now();
-    return this.move(caller, bookingId, ["PROPOSED"], "APPROVED", {
-      actor: { kind: "MEMBER", id: caller.id },
-      inTx: async (tx, r, afters) => {
-        if (new Date(r.deadline as string).getTime() <= Date.parse(now))
-          throw new Rollback("EXPIRED");
-        const f = r.frozen as Frozen;
-        const l = r.listing as WorkspaceListing;
-        const created = await this.deps.ledger.createItemInTx(
-          tx,
-          caller,
-          String(r.mission_id),
-          {
-            kind: "SERVICE",
-            label: `Workspace: ${l.name}`.slice(0, 200),
-            amountMinor: f.maxExposureMinor,
-            currency: f.currency,
-            stage: "APPROVED",
-            verification: "OWNER_REPORTED",
-            evidenceKind: "OWNER_REPORTED",
-            evidence: { booking: bookingId },
-            idempotencyKey: `${bookingId}-hold`.padEnd(16, "-"),
-          },
-        );
-        if (!created.ok) throw new Rollback("LEDGER_REFUSED", created.refusal);
-        if (created.after) afters.push(created.after);
-        return { ledger_item_id: created.value.itemId };
+    const approved = await this.move(
+      caller,
+      bookingId,
+      ["PROPOSED"],
+      "APPROVED",
+      {
+        actor: { kind: "MEMBER", id: caller.id },
+        inTx: async (tx, r, afters) => {
+          if (new Date(r.deadline as string).getTime() <= Date.parse(now))
+            throw new Rollback("EXPIRED");
+          const f = r.frozen as Frozen;
+          const l = r.listing as WorkspaceListing;
+          const created = await this.deps.ledger.createItemInTx(
+            tx,
+            caller,
+            String(r.mission_id),
+            {
+              kind: "SERVICE",
+              label: `Workspace: ${l.name}`.slice(0, 200),
+              amountMinor: f.maxExposureMinor,
+              currency: f.currency,
+              stage: "APPROVED",
+              verification: "OWNER_REPORTED",
+              evidenceKind: "OWNER_REPORTED",
+              evidence: { booking: bookingId },
+              idempotencyKey: `${bookingId}-hold`.padEnd(16, "-"),
+            },
+          );
+          if (!created.ok)
+            throw new Rollback("LEDGER_REFUSED", created.refusal);
+          if (created.after) afters.push(created.after);
+          return { ledger_item_id: created.value.itemId };
+        },
       },
-    });
+    );
+    if (approved.ok && this.deps.automation)
+      // Best effort: the sweep is a second line of defence. Expiry also runs whenever anyone reads or acts on the mission's bookings.
+      await this.deps.automation
+        .enqueue(
+          {
+            organizationId: caller.organizationId,
+            environment: caller.environment,
+          },
+          {
+            kind: "BOOKING_EXPIRE",
+            effect: "NONE",
+            payload: { missionId: approved.value.missionId },
+            dedupeKey: bookingId,
+            runAfter: approved.value.deadline,
+          },
+        )
+        .catch(() => undefined);
+    return approved;
   }
 
   /** The person books with the provider. PayFlow gives them the exact frozen terms and records that the attempt began. */
