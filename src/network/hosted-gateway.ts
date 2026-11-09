@@ -2504,7 +2504,16 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       // One bucket per credential or member; callers with no recognizable identity are keyed by
       // address. A shared bucket would let one noisy or hostile caller lock every organization out
       // of its own administrative API.
-      const subject = bearer ?? `anon:${forwarded ?? "unknown"}`;
+      // A signed-in person is keyed by their session cookie (hashed), so people behind one office address do not share a bucket. The cookie
+      // is unauthenticated at this point, so a made-up value only buys a fresh bucket inside the per-address cap above.
+      const cookie = readSessionCookie(
+        typeof req.headers.cookie === "string" ? req.headers.cookie : undefined,
+      );
+      const subject =
+        bearer ??
+        (cookie
+          ? `sess:${createHash("sha256").update(cookie).digest("hex").slice(0, 32)}`
+          : `anon:${forwarded ?? "unknown"}`);
       let decision;
       try {
         decision = await enforceRateLimit(limiter, {

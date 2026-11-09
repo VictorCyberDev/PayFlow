@@ -24,7 +24,10 @@ interface Loc {
   innerText(): Promise<string>;
   count(): Promise<number>;
   first(): Loc;
-  filter(o: { hasText: string | RegExp }): Loc;
+  filter(o: { hasText?: string | RegExp; has?: Loc }): Loc;
+  locator(s: string): Loc;
+  getByLabel(n: string, o?: { exact?: boolean }): Loc;
+  getByRole(r: string, o?: { name?: string | RegExp; level?: number }): Loc;
 }
 interface Page {
   goto(u: string): Promise<unknown>;
@@ -66,6 +69,8 @@ const chromePath = [
   "R1b customer app (real browser + real Gateway)",
   () => {
     const h = hostHarness({
+      // every test in this file comes from one address; the default per-address cap is for the public internet, not a test run
+      env: { PAYFLOW_IP_RATE_LIMIT_PER_MINUTE: "100000" },
       draftModel: () => ({
         complete: () =>
           Promise.resolve({
@@ -82,7 +87,7 @@ const chromePath = [
           }),
       }),
       extraTruncate:
-        "mission_workspace_listings,mission_workspace_searches,user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
+        "mission_booking_events,mission_bookings,mission_workspace_listings,mission_workspace_searches,user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
     });
     const require_ = createRequire(import.meta.url);
     let axeSource = "";
@@ -506,6 +511,52 @@ const chromePath = [
           )[0]!.n,
         ),
       ).toBe(0);
+      // propose -> approve -> asked -> confirm with the weakest evidence: the screen never claims more than the evidence
+      const card = page.locator("article").filter({
+        has: page.getByRole("heading", {
+          name: "Harbour Studio (fictional)",
+        }),
+      });
+      await card.getByRole("button", { name: "Propose a booking" }).click();
+      const bk = page
+        .locator("article")
+        .filter({ hasText: "Proposed. Nothing is approved or reserved." });
+      await bk.waitFor();
+      expect(await bk.innerText()).toContain("Budget held now");
+      await bk
+        .getByRole("button", { name: "Approve and hold the budget" })
+        .click();
+      const ap = page
+        .locator("article")
+        .filter({ hasText: "Approved to attempt. Nothing is reserved yet." });
+      await ap.waitFor();
+      await ap
+        .getByRole("button", { name: "I have asked the provider" })
+        .click();
+      const ho = page.locator("article").filter({
+        hasText: "Waiting for the provider. Nothing is reserved yet.",
+      });
+      await ho.waitFor();
+      await ho.locator("summary").click();
+      await ho.getByLabel("What shows it").selectOption("OWNER_ATTESTATION");
+      await ho.getByRole("button", { name: "Record the confirmation" }).click();
+      const done = page
+        .locator("article")
+        .filter({ hasText: "PayFlow has no proof" });
+      await done.waitFor();
+      expect(await done.innerText()).not.toContain("Confirmed by the provider");
+      expect(await done.innerText()).toContain("Confirmed by you");
+      if (process.env.SHOTS_DIR)
+        await page.screenshot({
+          path: `${process.env.SHOTS_DIR}/bookings-1280.png`,
+          fullPage: true,
+        });
+      expect(await axe(page)).toEqual([]);
+      expect(
+        (await h.repo.sql`select state from mission_bookings`).map(
+          (r) => r.state,
+        ),
+      ).toEqual(["CONFIRMED"]);
       await ctx.close();
     }, 90_000);
 

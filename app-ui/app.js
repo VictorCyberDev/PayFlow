@@ -151,6 +151,19 @@ const reasonText = (r) =>
       "Your role does not allow this. Ask an organization owner.",
     CSRF_CHECK_FAILED: "This page is out of date. Reload and try again.",
     INVALID_CONTRACT: "The mission details were not accepted.",
+    NOT_QUALIFIED:
+      "That listing doesn't fit your needs, so it can't be booked.",
+    ALREADY_LIVE: "There is already a live booking for that listing.",
+    BAD_DEADLINE: "The decision date is not allowed.",
+    ILLEGAL_MOVE: "That can't happen from the booking's current state.",
+    EXPIRED: "This booking has expired. Nothing was reserved.",
+    LEDGER_REFUSED:
+      "Holding that budget would go over your limit, so nothing was held.",
+    PENALTY_ABOVE_TERMS:
+      "That charge is more than the cancellation terms allow.",
+    DEPOSIT_NOT_REQUIRED: "This listing has no deposit.",
+    NOT_FOUND: "That doesn't exist, or you can't see it.",
+    MISSION_NOT_ACTIVE: "The mission isn't active.",
   })[r] ?? "Something went wrong. Nothing was changed.";
 
 function notice(kind, text) {
@@ -1544,10 +1557,61 @@ async function workspacesPage(id) {
                     ),
                   )
                 : null,
+              a.qualified
+                ? h(
+                    "div",
+                    { class: "actions" },
+                    h("button", {
+                      type: "button",
+                      text: "Propose a booking",
+                      onclick: async () => {
+                        const days = 7;
+                        const res = await api(
+                          `/v1/admin/org/missions/${id}/bookings`,
+                          {
+                            method: "POST",
+                            body: {
+                              searchId: v.searchId,
+                              listingId: l.listingId,
+                              deadline: new Date(
+                                Date.now() + days * 86_400_000,
+                              ).toISOString(),
+                              idempotencyKey: idem("bk"),
+                            },
+                          },
+                        );
+                        if (!res.ok)
+                          return out.replaceChildren(
+                            notice("bad", reasonText(res.data?.reason)),
+                          );
+                        out.replaceChildren(
+                          notice(
+                            "ok",
+                            "Proposed. Nothing is approved, reserved or paid yet. Review it under Bookings below.",
+                          ),
+                        );
+                        await drawBookings();
+                      },
+                    }),
+                  )
+                : null,
             ),
           ),
     );
   };
+  const bookings = h("div");
+  const drawBookings = async () => {
+    const r = await api(`/v1/admin/org/missions/${id}/bookings`);
+    if (!r.ok) return put(bookings, notice("bad", reasonText(r.data?.reason)));
+    put(
+      bookings,
+      h("h2", { text: "Bookings" }),
+      r.data.bookings.length === 0
+        ? h("p", { class: "hint", text: "No bookings proposed yet." })
+        : r.data.bookings.map((b) => bookingCard(b, drawBookings, out)),
+    );
+  };
+  await drawBookings();
   const latest = prior.data?.searches?.[0];
   if (latest) draw(latest);
   const form = h(
@@ -1650,8 +1714,186 @@ async function workspacesPage(id) {
       }),
     ),
     out,
+    bookings,
     form,
     results,
+  );
+}
+
+const BOOKING_STATE_WORDS = {
+  PROPOSED: "Proposed",
+  APPROVED: "Approved",
+  HANDED_OFF: "Waiting for provider",
+  UNKNOWN: "Outcome unclear",
+  CONFIRMED: "Confirmed",
+  DECLINED: "Not booked",
+  CANCELLED: "Cancelled",
+  EXPIRED: "Expired",
+};
+const EVIDENCE_WORDS = {
+  PROVIDER_CONFIRMATION_REF: "Provider's own reference",
+  DOCUMENT_REF: "A document I have",
+  OWNER_ATTESTATION: "My word only",
+};
+/** One booking: what it says is bounded by evidence (the server's headline), and only the moves its state allows are offered. */
+function bookingCard(b, redraw, out) {
+  const act = async (op, body = {}) => {
+    const res = await api(`/v1/admin/org/bookings/${b.bookingId}/${op}`, {
+      method: "POST",
+      body,
+    });
+    if (!res.ok)
+      return out.replaceChildren(notice("bad", reasonText(res.data?.reason)));
+    out.replaceChildren();
+    await redraw();
+  };
+  const evidenceForm = (op, label) => {
+    const f = h(
+      "form",
+      {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          const d = new FormData(f);
+          const kind = String(d.get("kind"));
+          const ref = String(d.get("ref")).trim();
+          await act(op, {
+            evidenceKind: kind,
+            ...(ref ? { evidenceRef: ref } : {}),
+          });
+        },
+      },
+      h("label", { for: `k-${b.bookingId}-${op}`, text: "What shows it" }),
+      h(
+        "select",
+        { id: `k-${b.bookingId}-${op}`, name: "kind" },
+        Object.entries(EVIDENCE_WORDS).map(([v, t]) =>
+          h("option", { value: v, text: t }),
+        ),
+      ),
+      h("label", {
+        for: `r-${b.bookingId}-${op}`,
+        text: "Reference or document name",
+      }),
+      h("input", {
+        id: `r-${b.bookingId}-${op}`,
+        name: "ref",
+        maxlength: "300",
+      }),
+      h("button", { class: "primary", type: "submit", text: label }),
+    );
+    return f;
+  };
+  const btn = (text, fn, cls = "") =>
+    h("button", { type: "button", class: cls, text, onclick: fn });
+  const live = ["APPROVED", "HANDED_OFF", "UNKNOWN"].includes(b.state);
+  const actions = [];
+  if (b.state === "PROPOSED")
+    actions.push(
+      btn("Approve and hold the budget", () => act("approve"), "primary"),
+    );
+  if (b.state === "APPROVED")
+    actions.push(btn("I have asked the provider", () => act("handoff")));
+  if (b.state === "HANDED_OFF")
+    actions.push(btn("I'm not sure what happened", () => act("unknown")));
+  if (["PROPOSED", ...["APPROVED", "HANDED_OFF", "UNKNOWN"]].includes(b.state))
+    actions.push(btn("Not booking this", () => act("decline")));
+  return h(
+    "article",
+    { class: "card" },
+    h(
+      "div",
+      { class: "row" },
+      h("h3", { text: b.listing.name }),
+      h(
+        "span",
+        { class: "badge" },
+        glyph(b.state === "CONFIRMED" ? "bar-open" : "dot"),
+        b.state === "CONFIRMED" && b.evidence?.kind === "OWNER_ATTESTATION"
+          ? "Confirmed by you"
+          : (BOOKING_STATE_WORDS[b.state] ?? b.state),
+      ),
+    ),
+    h("p", { text: b.headline }),
+    h(
+      "dl",
+      {},
+      row("Budget held now", money(b.heldMinor, b.frozen.currency)),
+      row(
+        "Deposit",
+        {
+          NOT_REQUIRED: "None required",
+          NOT_PAID: "Not paid",
+          PAID_CONFIRMED: "Paid, provider confirmed",
+          PAID_UNCONFIRMED: "You say it was paid. No provider proof.",
+          REFUNDED: "Refunded",
+        }[b.deposit] ?? b.deposit,
+      ),
+      row("Needs a decision by", when(b.deadline)),
+      b.evidence
+        ? row(
+            "Shown by",
+            `${EVIDENCE_WORDS[b.evidence.kind]}${b.evidence.ref ? " · " + b.evidence.ref : ""}`,
+          )
+        : null,
+    ),
+    h("p", { class: "hint", text: b.notice }),
+    actions.length ? h("div", { class: "actions" }, actions) : null,
+    ["HANDED_OFF", "UNKNOWN"].includes(b.state)
+      ? h(
+          "details",
+          {},
+          h("summary", { text: "The provider confirmed it" }),
+          evidenceForm("confirm", "Record the confirmation"),
+        )
+      : null,
+    b.state === "CONFIRMED" && b.deposit !== "NOT_REQUIRED"
+      ? h(
+          "details",
+          {},
+          h("summary", { text: "Record the deposit" }),
+          evidenceForm("deposit", "Record the deposit"),
+        )
+      : null,
+    b.state === "CONFIRMED"
+      ? h(
+          "div",
+          { class: "actions" },
+          btn("Cancel this booking", () => {
+            const f = h(
+              "form",
+              {
+                onsubmit: async (e) => {
+                  e.preventDefault();
+                  const pen = Math.round(
+                    Number(new FormData(f).get("penalty") || 0) * 100,
+                  );
+                  await act("cancel", { penaltyMinor: pen });
+                },
+              },
+              h("label", {
+                for: `c-${b.bookingId}`,
+                text: `What the provider charges you for cancelling (${b.frozen.currency})`,
+              }),
+              h("input", {
+                id: `c-${b.bookingId}`,
+                name: "penalty",
+                type: "number",
+                min: "0",
+                step: "0.01",
+                value: "0",
+              }),
+              h("button", { class: "primary", type: "submit", text: "Cancel" }),
+            );
+            out.replaceChildren(f);
+          }),
+        )
+      : null,
+    live
+      ? h("p", {
+          class: "hint",
+          text: "The budget stays held until this ends.",
+        })
+      : null,
   );
 }
 
