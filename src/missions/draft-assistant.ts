@@ -25,6 +25,7 @@ const Text = (n: number) =>
     .min(1)
     .max(n)
     // no control characters, no markup-looking sequences reach a form field
+    // eslint-disable-next-line no-control-regex -- rejecting control characters is the point
     .refine((s) => !/[\u0000-\u001f\u007f<>]/u.test(s), "NO_CONTROL_OR_MARKUP");
 export const MissionDraftSchema = z
   .object({

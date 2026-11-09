@@ -174,14 +174,14 @@ describe("R3 Groq draft model (request/response shape against a stub transport; 
     expect(r.status).toBe("DRAFTED");
     expect(call!.url).toBe("https://api.groq.com/openai/v1/chat/completions");
     expect(call!.init.redirect).toBe("error");
-    const body = JSON.parse(String(call!.init.body)) as {
+    const body = JSON.parse(call!.init.body as string) as {
       response_format: { json_schema: { strict: boolean } };
       messages: { role: string }[];
       temperature: number;
     };
     expect(body.response_format.json_schema.strict).toBe(true);
     expect(body.temperature).toBe(0);
-    expect(String(call!.init.body)).not.toContain("gsk_test");
+    expect(call!.init.body as string).not.toContain("gsk_test");
   });
   it("maps faults: no key, 401, 429, 5xx, refusal, tool calls, truncation", async () => {
     expect(
@@ -194,7 +194,7 @@ describe("R3 Groq draft model (request/response shape against a stub transport; 
     ).toBe("MODEL_NOT_CONFIGURED");
     const st = (r: Response) =>
       draftMission(
-        new GroqDraftModel("gsk_test", (() => Promise.resolve(r)) as never),
+        new GroqDraftModel("gsk_test", () => Promise.resolve(r)),
         "I need keyboards please",
       ).then((x) => x.status);
     expect(await st(new Response("{}", { status: 401 }))).toBe(
