@@ -456,52 +456,18 @@ export class TalentOfferService {
       };
     const now = this.deps.now();
     if (b.data.outcome === "ACCEPTED") {
-      if (new Date(r.expires_at as string).getTime() <= Date.parse(now))
-        return { ok: false, refusal: "OFFER_EXPIRED" };
-      const terms = r.terms as OfferTerms;
-      // Commit every milestone first (idempotent keys, so a retry never doubles), then move the offer and record the contract.
-      const itemIds: string[] = [];
-      for (const [i, ms] of terms.milestones.entries()) {
-        const created = await this.deps.ledger.createItem(
-          caller,
-          String(r.mission_id),
-          {
-            kind: "CONTRACTOR_MILESTONE",
-            label: `Milestone ${i + 1}: ${ms.title}`.slice(0, 200),
-            amountMinor: ms.amountMinor,
-            currency: terms.currency,
-            stage: "COMMITTED",
-            verification: "OWNER_REPORTED",
-            evidenceKind: "OWNER_REPORTED",
-            evidence: { offer: offerId },
-            idempotencyKey: `${offerId}-m${i + 1}`.padEnd(16, "-"),
-          },
-        );
-        if (!created.ok)
-          return {
-            ok: false,
-            refusal: "LEDGER_REFUSED",
-            detail: `${created.refusal}@milestone${i + 1}`,
-          };
-        itemIds.push((created.value as unknown as { itemId: string }).itemId);
+      const result = await this.accept(caller, offerId, b.data, now);
+      if (!result.ok) return result;
+      if (!result.value.replayed) {
+        await this.log(caller, "TALENT_OFFER_ACCEPTED", offerId, now);
+        for (const after of result.value.afters) await after();
       }
-      const contractId = `tct_${randomBytes(12).toString("hex")}`;
-      const milestones = terms.milestones.map((ms, i) => ({
-        index: i + 1,
-        ...ms,
-        ledgerItemId: itemIds[i]!,
-      }));
-      await sql.begin(async (tx) => {
-        await tx`insert into mission_talent_contracts (contract_id, mission_id, offer_id, candidate_id, role_id, currency, total_minor, milestones, created_by, created_at)
-          values (${contractId}, ${String(r.mission_id)}, ${offerId}, ${String(r.candidate_id)}, ${String(r.role_id)}, ${terms.currency}, ${Number(r.total_minor)}, ${tx.json(milestones)}, ${caller.id}, ${now})
-          on conflict (offer_id) do nothing`;
-        await tx`update mission_talent_offers set status = 'ACCEPTED', resolved_by = ${caller.id}, resolved_at = ${now}, resolution_evidence_kind = ${b.data.evidenceKind},
-          resolution_evidence_ref = ${b.data.evidenceRef ?? null}, resolution_note = ${b.data.note || null} where offer_id = ${offerId} and status = 'SENT'`;
-      });
-      await this.log(caller, "TALENT_OFFER_ACCEPTED", offerId, now);
       const [fresh] =
         await sql`select * from mission_talent_offers where offer_id = ${offerId}`;
-      return finish({ offer: await this.view(fresh!), replayed: false });
+      return finish({
+        offer: await this.view(fresh!),
+        replayed: result.value.replayed,
+      });
     }
     const upd =
       await sql`update mission_talent_offers set status = 'DECLINED', resolved_by = ${caller.id}, resolved_at = ${now}, resolution_evidence_kind = ${b.data.evidenceKind},
@@ -509,6 +475,108 @@ export class TalentOfferService {
     if (upd.length === 0) return { ok: false, refusal: "ILLEGAL_MOVE" };
     await this.log(caller, "TALENT_OFFER_DECLINED", offerId, now);
     return finish({ offer: await this.view(upd[0]!), replayed: false });
+  }
+
+  /**
+   * Acceptance is ONE database transaction (R0): the offer row is locked; its status, expiry, scope, checks and the mission are verified
+   * under that lock; every milestone is committed in the ledger on the same connection; the contract is recorded; and the offer moves
+   * SENT -> ACCEPTED exactly once. Anything that fails rolls the whole thing back, so there is never a committed milestone without an
+   * accepted offer and contract, nor a contract for an offer that was declined or withdrawn meanwhile. Nothing inside calls the pool.
+   */
+  private async accept(
+    caller: MissionCaller,
+    offerId: string,
+    answer: z.infer<typeof AnswerSchema>,
+    now: string,
+  ): Promise<OResult<{ afters: (() => Promise<void>)[]; replayed: boolean }>> {
+    class Rollback extends Error {
+      constructor(readonly refusal: Extract<OResult<never>, { ok: false }>) {
+        super("ROLLBACK");
+      }
+    }
+    const refuse = (refusal: string, detail?: string): never => {
+      throw new Rollback({
+        ok: false,
+        refusal: refusal as never,
+        ...(detail ? { detail } : {}),
+      });
+    };
+    try {
+      return await this.deps.sql.begin(async (tx) => {
+        const [o] =
+          await tx`select o.* from mission_talent_offers o join missions m on m.mission_id = o.mission_id
+          where o.offer_id = ${offerId} and m.organization_id = ${caller.organizationId} and m.environment = ${caller.environment} for update of o`;
+        if (!o) return refuse("NOT_FOUND");
+        // A concurrent ACCEPT that won the lock first already did everything: this one is a replay, not an error.
+        if (o!.status === "ACCEPTED")
+          return { ok: true as const, value: { afters: [], replayed: true } };
+        if (o!.status !== "SENT")
+          return refuse("ILLEGAL_MOVE", `${String(o!.status)}->ACCEPTED`);
+        if (new Date(o!.expires_at as string).getTime() <= Date.parse(now))
+          return refuse("OFFER_EXPIRED");
+        const missionId = String(o!.mission_id);
+        const [scope] =
+          await tx`select scope_id, document from mission_talent_scopes where mission_id = ${missionId} and status = 'APPROVED'`;
+        if (!scope || String(scope.scope_id) !== String(o!.scope_id))
+          return refuse("SCOPE_CHANGED");
+        const facts =
+          await tx`select seq, kind, result from mission_talent_checks where candidate_id = ${String(o!.candidate_id)} order by seq`;
+        const problems = checkProblems(
+          (scope.document as { requiredChecks: CheckKind[] }).requiredChecks,
+          facts.map((f) => ({
+            seq: Number(f.seq),
+            kind: f.kind as CheckKind,
+            result: f.result as "PASSED" | "FAILED",
+          })),
+        );
+        if (problems.length > 0)
+          return refuse("CHECKS_NOT_PASSED", problems.join(","));
+        const terms = o!.terms as OfferTerms;
+        const afters: (() => Promise<void>)[] = [];
+        const itemIds: string[] = [];
+        for (const [i, ms] of terms.milestones.entries()) {
+          const created = await this.deps.ledger.createItemInTx(
+            tx,
+            caller,
+            missionId,
+            {
+              kind: "CONTRACTOR_MILESTONE",
+              label: `Milestone ${i + 1}: ${ms.title}`.slice(0, 200),
+              amountMinor: ms.amountMinor,
+              currency: terms.currency,
+              stage: "COMMITTED",
+              verification: "OWNER_REPORTED",
+              evidenceKind: "OWNER_REPORTED",
+              evidence: { offer: offerId },
+              idempotencyKey: `${offerId}-m${i + 1}`.padEnd(16, "-"),
+            },
+          );
+          if (!created.ok)
+            return refuse(
+              "LEDGER_REFUSED",
+              `${created.refusal}@milestone${i + 1}`,
+            );
+          itemIds.push(created.value.itemId);
+          if (created.after) afters.push(created.after);
+        }
+        const contractId = `tct_${randomBytes(12).toString("hex")}`;
+        const milestones = terms.milestones.map((ms, i) => ({
+          index: i + 1,
+          ...ms,
+          ledgerItemId: itemIds[i]!,
+        }));
+        await tx`insert into mission_talent_contracts (contract_id, mission_id, offer_id, candidate_id, role_id, currency, total_minor, milestones, created_by, created_at)
+          values (${contractId}, ${missionId}, ${offerId}, ${String(o!.candidate_id)}, ${String(o!.role_id)}, ${terms.currency}, ${Number(o!.total_minor)}, ${tx.json(milestones)}, ${caller.id}, ${now})`;
+        const moved =
+          await tx`update mission_talent_offers set status = 'ACCEPTED', resolved_by = ${caller.id}, resolved_at = ${now}, resolution_evidence_kind = ${answer.evidenceKind},
+          resolution_evidence_ref = ${answer.evidenceRef ?? null}, resolution_note = ${answer.note || null} where offer_id = ${offerId} and status = 'SENT' returning offer_id`;
+        if (moved.length !== 1) return refuse("ILLEGAL_MOVE");
+        return { ok: true as const, value: { afters, replayed: false } };
+      });
+    } catch (e) {
+      if (e instanceof Rollback) return e.refusal;
+      throw e;
+    }
   }
 
   async list(

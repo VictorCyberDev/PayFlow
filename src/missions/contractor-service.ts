@@ -579,22 +579,44 @@ export class ContractorService {
         paymentIssued: pays.some((p) => Number(p.milestone_index) === m.index),
       })),
     );
-    for (const idx of plan.cancel) {
-      const ms = (c.milestones as Milestone[]).find((m) => m.index === idx)!;
-      const moved = await this.deps.ledger.transition(caller, ms.ledgerItemId, {
-        to: "CANCELLED",
-        idempotencyKey: `terminate-${contractId}-${idx}`.padEnd(16, "-"),
-      });
-      if (!moved.ok)
-        return {
-          ok: false,
-          refusal: "LEDGER_REFUSED",
-          detail: `${moved.refusal}@milestone${idx}`,
-        };
-    }
     const now = this.deps.now();
-    await sql`insert into mission_contract_terminations (contract_id, reason, cancelled_milestones, kept_milestones, terminated_by, terminated_at)
-      values (${contractId}, ${b.data.reason}, ${sql.json(plan.cancel)}, ${sql.json(plan.keep)}, ${caller.id}, ${now}) on conflict (contract_id) do nothing`;
+    // R0: cancelling the milestones' budget and recording the termination are ONE transaction. A crash can no longer leave some
+    // milestones cancelled while the contract still looks live (or the reverse).
+    const afters: (() => Promise<void>)[] = [];
+    let refused: Extract<CResult<never>, { ok: false }> | null = null;
+    await sql
+      .begin(async (tx) => {
+        for (const idx of plan.cancel) {
+          const ms = (c.milestones as Milestone[]).find(
+            (m) => m.index === idx,
+          )!;
+          const moved = await this.deps.ledger.transitionInTx(
+            tx,
+            caller,
+            ms.ledgerItemId,
+            {
+              to: "CANCELLED",
+              idempotencyKey: `terminate-${contractId}-${idx}`.padEnd(16, "-"),
+            },
+          );
+          if (!moved.ok) {
+            refused = {
+              ok: false,
+              refusal: "LEDGER_REFUSED",
+              detail: `${moved.refusal}@milestone${idx}`,
+            };
+            throw new Error("ROLLBACK");
+          }
+          if (moved.after) afters.push(moved.after);
+        }
+        await tx`insert into mission_contract_terminations (contract_id, reason, cancelled_milestones, kept_milestones, terminated_by, terminated_at)
+          values (${contractId}, ${b.data.reason}, ${tx.json(plan.cancel)}, ${tx.json(plan.keep)}, ${caller.id}, ${now}) on conflict (contract_id) do nothing`;
+      })
+      .catch((e: unknown) => {
+        if (!refused) throw e;
+      });
+    if (refused) return refused;
+    for (const after of afters) await after();
     await this.log(caller, "CONTRACT_TERMINATED", contractId, now);
     return {
       ok: true,

@@ -3530,6 +3530,11 @@ components:
           properties:
             id: { type: string, minLength: 1, maxLength: 128 }
         nonce: { type: string, minLength: 16, maxLength: 128 }
+        missionOrder:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: "Required when the Authority was compiled from a mission, refused otherwise. The approved purchase order this payment is for; loaded server-side and compared with the trusted quote before any provider call."
     ProofReference:
       type: object
       additionalProperties: false

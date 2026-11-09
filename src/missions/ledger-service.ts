@@ -261,6 +261,138 @@ export class LedgerService {
       values (${itemId}, ${Number(n!.n) + 1}, ${from}, ${to}, ${amount}, ${refunded}, ${verification}, ${ek}, ${tx.json(evidence as never)}, ${actor.kind}, ${actor.id}, ${key}, ${now})`;
   }
 
+  /**
+   * The insert itself, on the caller's transaction. Nothing here touches the pool, so a caller that already holds a transaction can
+   * create ledger items atomically with its own writes (the mission row lock is taken on that same connection).
+   */
+  private async insertItem(
+    tx: TransactionSql,
+    caller: LedgerCaller,
+    missionId: string,
+    b: z.infer<typeof CreateItemSchema>,
+    digest: string,
+    now: string,
+  ): Promise<LResult<{ item: Row; replayed: boolean }>> {
+    const m = await this.lock(tx, caller, missionId);
+    if (!m) return { ok: false, refusal: "NOT_FOUND" };
+    const [prior] =
+      await tx`select * from mission_ledger_items where mission_id = ${missionId} and idempotency_key = ${b.idempotencyKey}`;
+    if (prior)
+      return prior.request_digest === digest
+        ? { ok: true, value: { item: prior, replayed: true } }
+        : { ok: false, refusal: "IDEMPOTENCY_KEY_REUSED" };
+    const contract = await this.contractOf(tx, m);
+    if (b.currency !== contract.currency)
+      return {
+        ok: false,
+        refusal: "CURRENCY_MISMATCH",
+        detail: `${b.currency}!=${contract.currency}`,
+      };
+    if (
+      b.stage === "CANCELLED" ||
+      b.stage === "RELEASED" ||
+      b.stage === "FAILED" ||
+      b.stage === "REFUNDED" ||
+      b.stage === "SETTLED" ||
+      b.stage === "IN_FLIGHT" ||
+      b.stage === "UNKNOWN" ||
+      b.stage === "RESERVED"
+    )
+      // An item is born as an estimate, a quote, an approval, or an obligation recorded from outside (committed). Money-moving
+      // stages are reached by transition, with evidence, never by declaration.
+      return {
+        ok: false,
+        refusal: "ILLEGAL_MOVE",
+        detail: "ITEMS_START_AS_ESTIMATE_QUOTE_APPROVAL_OR_COMMITMENT",
+      };
+    if (!evidenceOk(b.stage, b.evidenceKind, b.verification))
+      return { ok: false, refusal: "EVIDENCE_INSUFFICIENT" };
+    if (consumes(b.stage)) {
+      if (caller.kind === "AGENT")
+        return { ok: false, refusal: "AGENT_NOT_PERMITTED" };
+      if (m.status !== "ACTIVE")
+        return {
+          ok: false,
+          refusal: "MISSION_NOT_ACTIVE",
+          detail: String(m.status),
+        };
+      if (b.amountMinor > contract.maxCommitmentMinor)
+        return { ok: false, refusal: "ABOVE_MAX_COMMITMENT" };
+      if (
+        (await this.others(tx, missionId, null)) + b.amountMinor >
+        contract.totalBudgetMinor
+      )
+        return { ok: false, refusal: "CAPACITY_EXCEEDED" };
+    }
+    const itemId = `itm_${randomBytes(12).toString("hex")}`;
+    const [item] =
+      await tx`insert into mission_ledger_items (item_id, mission_id, created_by_kind, created_by, agent_id, kind, label, currency, amount_minor,
+      stage, verification, idempotency_key, request_digest, created_at, updated_at)
+    values (${itemId}, ${missionId}, ${caller.kind}, ${caller.id}, ${caller.kind === "AGENT" ? caller.id : (b.agentId ?? null)}, ${b.kind}, ${b.label}, ${b.currency},
+      ${b.amountMinor}, ${b.stage}, ${b.verification}, ${b.idempotencyKey}, ${digest}, ${now}, ${now}) returning *`;
+    await this.append(
+      tx,
+      itemId,
+      null,
+      b.stage,
+      b.amountMinor,
+      0,
+      b.verification,
+      b.evidenceKind,
+      b.evidence,
+      caller,
+      b.idempotencyKey,
+      now,
+    );
+    return { ok: true, value: { item: item!, replayed: false } };
+  }
+
+  /**
+   * Create a ledger item inside the caller's transaction. Returns the item and a function that records the audit entry: call it only
+   * AFTER the transaction commits (the audit log uses its own connection and must never describe something that rolled back).
+   */
+  async createItemInTx(
+    tx: TransactionSql,
+    caller: LedgerCaller,
+    missionId: string,
+    rawBody: unknown,
+  ): Promise<
+    LResult<ItemView & { replayed: boolean }> & {
+      after?: () => Promise<void>;
+    }
+  > {
+    if (caller.kind === "AGENT")
+      return { ok: false, refusal: "AGENT_NOT_PERMITTED" };
+    const body = CreateItemSchema.safeParse(rawBody);
+    if (!body.success) return { ok: false, refusal: "MALFORMED" };
+    const b = body.data;
+    const now = this.deps.now();
+    const out = await this.insertItem(
+      tx,
+      caller,
+      missionId,
+      b,
+      sha({ missionId, ...b }),
+      now,
+    );
+    if (!out.ok) return out;
+    const itemId = String(out.value.item.item_id);
+    return {
+      ok: true,
+      value: { ...toItem(out.value.item), replayed: out.value.replayed },
+      after: async () => {
+        if (!out.value.replayed)
+          await this.audit(
+            caller,
+            "MISSION_LEDGER_ITEM_CREATED",
+            itemId,
+            { stage: b.stage, amountMinor: b.amountMinor },
+            now,
+          );
+      },
+    };
+  }
+
   // -------------------------------------------------------------------------------------------- create
   async createItem(
     caller: LedgerCaller,
@@ -308,81 +440,8 @@ export class LedgerService {
           detail: "AGENT_CANNOT_CLAIM_AUTHORITATIVE_EVIDENCE",
         };
     }
-    const out = await this.deps.sql.begin(
-      async (tx): Promise<LResult<{ item: Row; replayed: boolean }>> => {
-        const m = await this.lock(tx, caller, missionId);
-        if (!m) return { ok: false, refusal: "NOT_FOUND" };
-        const [prior] =
-          await tx`select * from mission_ledger_items where mission_id = ${missionId} and idempotency_key = ${b.idempotencyKey}`;
-        if (prior)
-          return prior.request_digest === digest
-            ? { ok: true, value: { item: prior, replayed: true } }
-            : { ok: false, refusal: "IDEMPOTENCY_KEY_REUSED" };
-        const contract = await this.contractOf(tx, m);
-        if (b.currency !== contract.currency)
-          return {
-            ok: false,
-            refusal: "CURRENCY_MISMATCH",
-            detail: `${b.currency}!=${contract.currency}`,
-          };
-        if (
-          b.stage === "CANCELLED" ||
-          b.stage === "RELEASED" ||
-          b.stage === "FAILED" ||
-          b.stage === "REFUNDED" ||
-          b.stage === "SETTLED" ||
-          b.stage === "IN_FLIGHT" ||
-          b.stage === "UNKNOWN" ||
-          b.stage === "RESERVED"
-        )
-          // An item is born as an estimate, a quote, an approval, or an obligation recorded from outside (committed). Money-moving
-          // stages are reached by transition, with evidence, never by declaration.
-          return {
-            ok: false,
-            refusal: "ILLEGAL_MOVE",
-            detail: "ITEMS_START_AS_ESTIMATE_QUOTE_APPROVAL_OR_COMMITMENT",
-          };
-        if (!evidenceOk(b.stage, b.evidenceKind, b.verification))
-          return { ok: false, refusal: "EVIDENCE_INSUFFICIENT" };
-        if (consumes(b.stage)) {
-          if (caller.kind === "AGENT")
-            return { ok: false, refusal: "AGENT_NOT_PERMITTED" };
-          if (m.status !== "ACTIVE")
-            return {
-              ok: false,
-              refusal: "MISSION_NOT_ACTIVE",
-              detail: String(m.status),
-            };
-          if (b.amountMinor > contract.maxCommitmentMinor)
-            return { ok: false, refusal: "ABOVE_MAX_COMMITMENT" };
-          if (
-            (await this.others(tx, missionId, null)) + b.amountMinor >
-            contract.totalBudgetMinor
-          )
-            return { ok: false, refusal: "CAPACITY_EXCEEDED" };
-        }
-        const itemId = `itm_${randomBytes(12).toString("hex")}`;
-        const [item] =
-          await tx`insert into mission_ledger_items (item_id, mission_id, created_by_kind, created_by, agent_id, kind, label, currency, amount_minor,
-          stage, verification, idempotency_key, request_digest, created_at, updated_at)
-        values (${itemId}, ${missionId}, ${caller.kind}, ${caller.id}, ${caller.kind === "AGENT" ? caller.id : (b.agentId ?? null)}, ${b.kind}, ${b.label}, ${b.currency},
-          ${b.amountMinor}, ${b.stage}, ${b.verification}, ${b.idempotencyKey}, ${digest}, ${now}, ${now}) returning *`;
-        await this.append(
-          tx,
-          itemId,
-          null,
-          b.stage,
-          b.amountMinor,
-          0,
-          b.verification,
-          b.evidenceKind,
-          b.evidence,
-          caller,
-          b.idempotencyKey,
-          now,
-        );
-        return { ok: true, value: { item: item!, replayed: false } };
-      },
+    const out = await this.deps.sql.begin((tx) =>
+      this.insertItem(tx, caller, missionId, b, digest, now),
     );
     if (!out.ok) return out;
     if (!out.value.replayed)
@@ -396,6 +455,226 @@ export class LedgerService {
     return {
       ok: true,
       value: { ...toItem(out.value.item), replayed: out.value.replayed },
+    };
+  }
+
+  /** The transition itself, on the caller's transaction: nothing here touches the pool. */
+  private async applyTransition(
+    tx: TransactionSql,
+    caller: LedgerCaller,
+    itemId: string,
+    missionId: string,
+    b: z.infer<typeof TransitionSchema>,
+    now: string,
+  ): Promise<LResult<{ item: Row; replayed: boolean }>> {
+    const m = await this.lock(tx, caller, missionId);
+    if (!m) return { ok: false, refusal: "NOT_FOUND" };
+    const [dup] =
+      await tx`select idempotency_key from mission_ledger_entries where item_id = ${itemId} and idempotency_key = ${b.idempotencyKey}`;
+    const [cur0] =
+      await tx`select * from mission_ledger_items where item_id = ${itemId} for update`;
+    if (!cur0) return { ok: false, refusal: "NOT_FOUND" };
+    if (dup) {
+      // A repeat of an applied transition: only an identical request is a replay.
+      const [e] =
+        await tx`select to_stage, amount_minor, refunded_minor from mission_ledger_entries where item_id = ${itemId} and idempotency_key = ${b.idempotencyKey}`;
+      const same =
+        e!.to_stage === b.to &&
+        (b.amountMinor === undefined ||
+          Number(e!.amount_minor) === b.amountMinor);
+      return same
+        ? { ok: true, value: { item: cur0, replayed: true } }
+        : { ok: false, refusal: "IDEMPOTENCY_KEY_REUSED" };
+    }
+    const cur = toItem(cur0);
+    if (
+      b.expectedRowVersion !== undefined &&
+      b.expectedRowVersion !== cur.rowVersion
+    )
+      return { ok: false, refusal: "STALE_ROW_VERSION" };
+    const contract = await this.contractOf(tx, m);
+    const refundOnly = b.refundMinor !== undefined;
+    let to = b.to;
+    let amount = cur.amountMinor;
+    let refunded = cur.refundedMinor;
+
+    // --- who may do this
+    if (caller.kind === "AGENT") {
+      if (cur0.agent_id !== caller.id)
+        return {
+          ok: false,
+          refusal: "AGENT_NOT_PERMITTED",
+          detail: "NOT_YOUR_ITEM",
+        };
+      if (!(
+        AGENT_STAGES.includes(to) ||
+        (to === "CANCELLED" && !consumes(cur.stage))
+      ))
+        return {
+          ok: false,
+          refusal: "AGENT_NOT_PERMITTED",
+          detail: "AGENTS_ONLY_ESTIMATE_AND_QUOTE",
+        };
+      if (b.evidenceKind !== "NONE" && b.evidenceKind !== "AGENT_REPORTED")
+        return {
+          ok: false,
+          refusal: "EVIDENCE_INSUFFICIENT",
+          detail: "AGENT_CANNOT_CLAIM_AUTHORITATIVE_EVIDENCE",
+        };
+    }
+    if (b.evidenceKind === "AGENT_REPORTED" && caller.kind !== "AGENT")
+      return { ok: false, refusal: "EVIDENCE_INSUFFICIENT" };
+
+    // --- what move
+    if (refundOnly) {
+      if (cur.stage !== "SETTLED" || !(to === "SETTLED" || to === "REFUNDED"))
+        return {
+          ok: false,
+          refusal: "ILLEGAL_MOVE",
+          detail: "REFUNDS_APPLY_TO_SETTLED_ITEMS",
+        };
+      if (b.refundMinor! > cur.amountMinor - cur.refundedMinor)
+        return { ok: false, refusal: "REFUND_EXCEEDS_SETTLED" };
+      refunded = cur.refundedMinor + b.refundMinor!;
+      to = refunded === cur.amountMinor ? "REFUNDED" : "SETTLED";
+      if (!evidenceOk("REFUNDED", b.evidenceKind, cur.verification as never))
+        return { ok: false, refusal: "EVIDENCE_INSUFFICIENT" };
+    } else {
+      // An obligation recorded from OUTSIDE PayFlow (owner-reported or unverified) may be settled straight from COMMITTED: it never
+      // passed through a PayFlow reservation. Nothing PayFlow enforces may skip those stages.
+      const external =
+        cur.verification === "OWNER_REPORTED" ||
+        cur.verification === "UNVERIFIED";
+      const externalSettle =
+        external && cur.stage === "COMMITTED" && to === "SETTLED";
+      if (!canMove(cur.stage, to) && !externalSettle)
+        return {
+          ok: false,
+          refusal: "ILLEGAL_MOVE",
+          detail: `${cur.stage}->${to}`,
+        };
+      if (b.amountMinor !== undefined && b.amountMinor !== cur.amountMinor) {
+        // The amount changes only when an offer is re-quoted; once approved it is frozen.
+        if (!(
+          to === "QUOTED" &&
+          (cur.stage === "QUOTED" ||
+            cur.stage === "APPROVED" ||
+            cur.stage === "ESTIMATED")
+        ))
+          return { ok: false, refusal: "AMOUNT_FROZEN" };
+        amount = b.amountMinor;
+      }
+      if (!evidenceOk(to, b.evidenceKind, cur.verification as never))
+        return {
+          ok: false,
+          refusal: "EVIDENCE_INSUFFICIENT",
+          detail: `${to}_NEEDS_BETTER_EVIDENCE`,
+        };
+    }
+
+    // --- mission state and capacity
+    const entersNew =
+      ["APPROVED", "COMMITTED", "RESERVED", "IN_FLIGHT"].includes(to) &&
+      cur.stage !== to;
+    if (entersNew && m.status !== "ACTIVE")
+      return {
+        ok: false,
+        refusal: "MISSION_NOT_ACTIVE",
+        detail: String(m.status),
+      };
+    const after = exposureOf({
+      stage: to,
+      amountMinor: amount,
+      refundedMinor: refunded,
+    });
+    const before = exposureOf({
+      stage: cur.stage,
+      amountMinor: cur.amountMinor,
+      refundedMinor: cur.refundedMinor,
+    });
+    if (after > before) {
+      if (
+        ["APPROVED", "COMMITTED", "RESERVED", "IN_FLIGHT"].includes(to) &&
+        amount > contract.maxCommitmentMinor
+      )
+        return { ok: false, refusal: "ABOVE_MAX_COMMITMENT" };
+      if (
+        (await this.others(tx, missionId, itemId)) + after >
+        contract.totalBudgetMinor
+      )
+        return { ok: false, refusal: "CAPACITY_EXCEEDED" };
+    }
+
+    const verification = this.verificationAfter(
+      cur.verification,
+      b.evidenceKind,
+    );
+    await tx`update mission_ledger_items set stage = ${to}, amount_minor = ${amount}, refunded_minor = ${refunded}, verification = ${verification},
+    row_version = row_version + 1, updated_at = ${now} where item_id = ${itemId}`;
+    await this.append(
+      tx,
+      itemId,
+      cur.stage,
+      to,
+      amount,
+      refunded,
+      verification,
+      b.evidenceKind,
+      b.evidence,
+      caller,
+      b.idempotencyKey,
+      now,
+    );
+    const [after0] =
+      await tx`select * from mission_ledger_items where item_id = ${itemId}`;
+    return { ok: true, value: { item: after0!, replayed: false } };
+  }
+
+  /**
+   * Move a ledger item inside the caller's transaction (the item's mission is read on that connection). Returns a function that records
+   * the audit entry; call it only AFTER the transaction commits.
+   */
+  async transitionInTx(
+    tx: TransactionSql,
+    caller: LedgerCaller,
+    itemId: string,
+    rawBody: unknown,
+  ): Promise<
+    LResult<ItemView & { replayed: boolean }> & { after?: () => Promise<void> }
+  > {
+    const body = TransitionSchema.safeParse(rawBody);
+    if (!body.success) return { ok: false, refusal: "MALFORMED" };
+    const b = body.data;
+    const now = this.deps.now();
+    const [found] =
+      await tx`select i.mission_id from mission_ledger_items i join missions m on m.mission_id = i.mission_id
+      where i.item_id = ${itemId} and m.organization_id = ${caller.organizationId} and m.environment = ${caller.environment}`;
+    if (!found) return { ok: false, refusal: "NOT_FOUND" };
+    const out = await this.applyTransition(
+      tx,
+      caller,
+      itemId,
+      String(found.mission_id),
+      b,
+      now,
+    );
+    if (!out.ok) return out;
+    return {
+      ok: true,
+      value: { ...toItem(out.value.item), replayed: out.value.replayed },
+      after: async () => {
+        if (!out.value.replayed)
+          await this.audit(
+            caller,
+            "MISSION_LEDGER_TRANSITION",
+            itemId,
+            {
+              to: String(out.value.item.stage),
+              amountMinor: Number(out.value.item.amount_minor),
+            },
+            now,
+          );
+      },
     };
   }
 
@@ -422,178 +701,8 @@ export class LedgerService {
       where i.item_id = ${itemId} and m.organization_id = ${caller.organizationId} and m.environment = ${caller.environment}`;
     if (!found) return { ok: false, refusal: "NOT_FOUND" };
     const missionId = String(found.mission_id);
-    const out = await this.deps.sql.begin(
-      async (tx): Promise<LResult<{ item: Row; replayed: boolean }>> => {
-        const m = await this.lock(tx, caller, missionId);
-        if (!m) return { ok: false, refusal: "NOT_FOUND" };
-        const [dup] =
-          await tx`select idempotency_key from mission_ledger_entries where item_id = ${itemId} and idempotency_key = ${b.idempotencyKey}`;
-        const [cur0] =
-          await tx`select * from mission_ledger_items where item_id = ${itemId} for update`;
-        if (!cur0) return { ok: false, refusal: "NOT_FOUND" };
-        if (dup) {
-          // A repeat of an applied transition: only an identical request is a replay.
-          const [e] =
-            await tx`select to_stage, amount_minor, refunded_minor from mission_ledger_entries where item_id = ${itemId} and idempotency_key = ${b.idempotencyKey}`;
-          const same =
-            e!.to_stage === b.to &&
-            (b.amountMinor === undefined ||
-              Number(e!.amount_minor) === b.amountMinor);
-          return same
-            ? { ok: true, value: { item: cur0, replayed: true } }
-            : { ok: false, refusal: "IDEMPOTENCY_KEY_REUSED" };
-        }
-        const cur = toItem(cur0);
-        if (
-          b.expectedRowVersion !== undefined &&
-          b.expectedRowVersion !== cur.rowVersion
-        )
-          return { ok: false, refusal: "STALE_ROW_VERSION" };
-        const contract = await this.contractOf(tx, m);
-        const refundOnly = b.refundMinor !== undefined;
-        let to = b.to;
-        let amount = cur.amountMinor;
-        let refunded = cur.refundedMinor;
-
-        // --- who may do this
-        if (caller.kind === "AGENT") {
-          if (cur0.agent_id !== caller.id)
-            return {
-              ok: false,
-              refusal: "AGENT_NOT_PERMITTED",
-              detail: "NOT_YOUR_ITEM",
-            };
-          if (!(
-            AGENT_STAGES.includes(to) ||
-            (to === "CANCELLED" && !consumes(cur.stage))
-          ))
-            return {
-              ok: false,
-              refusal: "AGENT_NOT_PERMITTED",
-              detail: "AGENTS_ONLY_ESTIMATE_AND_QUOTE",
-            };
-          if (b.evidenceKind !== "NONE" && b.evidenceKind !== "AGENT_REPORTED")
-            return {
-              ok: false,
-              refusal: "EVIDENCE_INSUFFICIENT",
-              detail: "AGENT_CANNOT_CLAIM_AUTHORITATIVE_EVIDENCE",
-            };
-        }
-        if (b.evidenceKind === "AGENT_REPORTED" && caller.kind !== "AGENT")
-          return { ok: false, refusal: "EVIDENCE_INSUFFICIENT" };
-
-        // --- what move
-        if (refundOnly) {
-          if (
-            cur.stage !== "SETTLED" ||
-            !(to === "SETTLED" || to === "REFUNDED")
-          )
-            return {
-              ok: false,
-              refusal: "ILLEGAL_MOVE",
-              detail: "REFUNDS_APPLY_TO_SETTLED_ITEMS",
-            };
-          if (b.refundMinor! > cur.amountMinor - cur.refundedMinor)
-            return { ok: false, refusal: "REFUND_EXCEEDS_SETTLED" };
-          refunded = cur.refundedMinor + b.refundMinor!;
-          to = refunded === cur.amountMinor ? "REFUNDED" : "SETTLED";
-          if (
-            !evidenceOk("REFUNDED", b.evidenceKind, cur.verification as never)
-          )
-            return { ok: false, refusal: "EVIDENCE_INSUFFICIENT" };
-        } else {
-          // An obligation recorded from OUTSIDE PayFlow (owner-reported or unverified) may be settled straight from COMMITTED: it never
-          // passed through a PayFlow reservation. Nothing PayFlow enforces may skip those stages.
-          const external =
-            cur.verification === "OWNER_REPORTED" ||
-            cur.verification === "UNVERIFIED";
-          const externalSettle =
-            external && cur.stage === "COMMITTED" && to === "SETTLED";
-          if (!canMove(cur.stage, to) && !externalSettle)
-            return {
-              ok: false,
-              refusal: "ILLEGAL_MOVE",
-              detail: `${cur.stage}->${to}`,
-            };
-          if (
-            b.amountMinor !== undefined &&
-            b.amountMinor !== cur.amountMinor
-          ) {
-            // The amount changes only when an offer is re-quoted; once approved it is frozen.
-            if (!(
-              to === "QUOTED" &&
-              (cur.stage === "QUOTED" ||
-                cur.stage === "APPROVED" ||
-                cur.stage === "ESTIMATED")
-            ))
-              return { ok: false, refusal: "AMOUNT_FROZEN" };
-            amount = b.amountMinor;
-          }
-          if (!evidenceOk(to, b.evidenceKind, cur.verification as never))
-            return {
-              ok: false,
-              refusal: "EVIDENCE_INSUFFICIENT",
-              detail: `${to}_NEEDS_BETTER_EVIDENCE`,
-            };
-        }
-
-        // --- mission state and capacity
-        const entersNew =
-          ["APPROVED", "COMMITTED", "RESERVED", "IN_FLIGHT"].includes(to) &&
-          cur.stage !== to;
-        if (entersNew && m.status !== "ACTIVE")
-          return {
-            ok: false,
-            refusal: "MISSION_NOT_ACTIVE",
-            detail: String(m.status),
-          };
-        const after = exposureOf({
-          stage: to,
-          amountMinor: amount,
-          refundedMinor: refunded,
-        });
-        const before = exposureOf({
-          stage: cur.stage,
-          amountMinor: cur.amountMinor,
-          refundedMinor: cur.refundedMinor,
-        });
-        if (after > before) {
-          if (
-            ["APPROVED", "COMMITTED", "RESERVED", "IN_FLIGHT"].includes(to) &&
-            amount > contract.maxCommitmentMinor
-          )
-            return { ok: false, refusal: "ABOVE_MAX_COMMITMENT" };
-          if (
-            (await this.others(tx, missionId, itemId)) + after >
-            contract.totalBudgetMinor
-          )
-            return { ok: false, refusal: "CAPACITY_EXCEEDED" };
-        }
-
-        const verification = this.verificationAfter(
-          cur.verification,
-          b.evidenceKind,
-        );
-        await tx`update mission_ledger_items set stage = ${to}, amount_minor = ${amount}, refunded_minor = ${refunded}, verification = ${verification},
-        row_version = row_version + 1, updated_at = ${now} where item_id = ${itemId}`;
-        await this.append(
-          tx,
-          itemId,
-          cur.stage,
-          to,
-          amount,
-          refunded,
-          verification,
-          b.evidenceKind,
-          b.evidence,
-          caller,
-          b.idempotencyKey,
-          now,
-        );
-        const [after0] =
-          await tx`select * from mission_ledger_items where item_id = ${itemId}`;
-        return { ok: true, value: { item: after0!, replayed: false } };
-      },
+    const out = await this.deps.sql.begin((tx) =>
+      this.applyTransition(tx, caller, itemId, missionId, b, now),
     );
     if (!out.ok) return out;
     if (!out.value.replayed)

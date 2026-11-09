@@ -115,6 +115,8 @@ export interface ExecuteInput {
    */
   readonly nonce?: string;
   readonly requestId?: string;
+  /** Required when the Authority belongs to a mission: the approved purchase order (`po_...`) this payment is for. */
+  readonly missionOrder?: string;
 }
 
 const newNonce = (): string => `nonce_${crypto.randomUUID()}`;
@@ -155,6 +157,7 @@ export class PayFlowClient {
         amount: { minor: input.amount, currency: input.currency },
         merchant: { id: input.merchant },
         nonce: input.nonce ?? newNonce(),
+        ...(input.missionOrder ? { missionOrder: input.missionOrder } : {}),
       };
       let response: Response;
       try {

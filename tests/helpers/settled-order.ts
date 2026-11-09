@@ -13,6 +13,8 @@ export async function settledPurchase(
     total?: number;
     terms?: Record<string, number>;
     extraMerchants?: string[];
+    /** Overrides for the mission contract (e.g. a smaller budget). */
+    contract?: Record<string, unknown>;
   } = {},
 ) {
   const total = opts.total ?? 8_400;
@@ -37,6 +39,7 @@ export async function settledPurchase(
         },
         { agentId: "c", capabilities: ["PURCHASE", "REQUEST_APPROVAL"] },
       ],
+      ...(opts.contract ?? {}),
     }),
   );
   const sid = (
@@ -66,6 +69,7 @@ export async function settledPurchase(
     document: {
       lines: [
         {
+          sku: "PF-KB-QUIET-BROWN-BLACK",
           description: "Keyboard",
           quantity: 1,
           unitPrice: { basis: "STATED", minor: total },
@@ -117,6 +121,7 @@ export async function settledPurchase(
       nonce: `m41-${Math.random().toString(36).slice(2)}-0123456789`,
       authority: po.authorityId,
       agent: "c",
+      missionOrder: po.poId,
     });
     proposalId = paid.proof!.proposalId!;
     await post(m.owner, `/v1/admin/org/purchase-orders/${po.poId}/reconcile`, {

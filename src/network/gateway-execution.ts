@@ -7,6 +7,11 @@ import {
   type DelegatedOutcome,
 } from "../delegated-commerce.js";
 import type { PostgresTrustRepository } from "../persistence.js";
+import {
+  checkQuoteAgainstOrder,
+  checkQuoteAgainstPayment,
+  type ExecutionBindingService,
+} from "../missions/execution-binding.js";
 import { requireAgentAccess } from "./access.js";
 import { GATEWAY_AUDIENCE, GatewayRequestError } from "./gateway.js";
 
@@ -41,6 +46,11 @@ export const GatewayPurchaseRequestSchema = z
     amount: MoneySchema,
     merchant: z.object({ id: z.string().min(1).max(128) }).strict(),
     nonce: z.string().min(16).max(128),
+    /**
+     * The approved purchase order this payment is for. Required when the Authority was compiled from a mission; refused otherwise.
+     * It is only a lookup key: the order is loaded server-side and compared with the trusted quote.
+     */
+    missionOrder: z.string().min(1).max(64).optional(),
   })
   .strict();
 export type GatewayPurchaseRequest = z.infer<
@@ -105,6 +115,8 @@ export interface ExecutingGatewayDependencies {
   readonly onEvent?: (event: GatewayEvent) => void | Promise<void>;
   /** Returns the pause scope that blocks new economic requests for this client, or null. */
   readonly pauseCheck?: (clientId: string) => Promise<string | null>;
+  /** Payment-time purchase-order binding for mission-governed Authorities. Absent = no mission Authority can be paid. */
+  readonly binding?: ExecutionBindingService;
   /** Labels the response with the rail behind this Authority. */
   readonly railFor?: (
     mandateId: string,
@@ -135,6 +147,47 @@ function mapRefusal(code: string, limit: string): Mapped {
         recoverable: true,
         humanSummary: `The price is above this Authority's ${limit} limit.`,
         nextAction: "REDUCE_AMOUNT_OR_REQUEST_APPROVAL",
+      };
+    case "ORDER_NOT_FOUND":
+    case "CONTRACT_TERMINATED":
+    case "DELIVERABLE_NOT_ACCEPTED":
+    case "ORDER_AGENT_MISMATCH":
+    case "ORDER_INTEGRITY_FAILURE":
+    case "ORDER_CLAIMED_TERMS_MISMATCH":
+    case "ORDER_EXPIRED":
+    case "ORDER_BUDGET_NOT_AVAILABLE":
+    case "ORDER_ALREADY_IN_PROGRESS":
+    case "ORDER_INTENT_NOT_PENDING":
+    case "ACCEPTANCE_WITHDRAWN":
+    case "QUOTE_EXPIRED":
+    case "QUOTE_SUPERSEDED":
+    case "MISSION_AUTHORITY_REVOKED":
+    case "MISSION_VERSION_STALE":
+    case "MISSION_EXPIRED":
+    case "AGENT_NOT_ASSIGNED":
+    case "BINDING_CHECK_FAILED":
+      return {
+        reason: code,
+        recoverable: false,
+        humanSummary:
+          "This payment does not match the approved purchase order. $0 moved.",
+        nextAction: "STOP_AND_REPORT_TO_OWNER",
+      };
+    case "MISSION_BINDING_REQUIRED":
+      return {
+        reason: "MISSION_BINDING_REQUIRED",
+        recoverable: true,
+        humanSummary:
+          "This Authority belongs to a mission and can only pay an approved purchase order. $0 moved.",
+        nextAction: "SEND_THE_MISSION_ORDER_ID",
+      };
+    case "NOT_A_MISSION_AUTHORITY":
+      return {
+        reason: "NOT_A_MISSION_AUTHORITY",
+        recoverable: true,
+        humanSummary:
+          "A mission order was named, but this Authority does not belong to a mission. $0 moved.",
+        nextAction: "REMOVE_THE_MISSION_ORDER",
       };
     case "CLAIMED_TERMS_MISMATCH":
       return {
@@ -308,16 +361,66 @@ export class ExecutingGateway {
       });
     }
 
-    const outcome: DelegatedOutcome = await delegated.attempt({
-      mandateId: mandate.id,
-      query: request.query,
-      ranker,
-      expected: {
-        totalMinor: request.amount.minor,
+    // Mission-governed Authorities pay only an approved purchase order (R0). Fail closed in both directions.
+    const governed = (await this.deps.binding?.governs(mandate.id)) ?? false;
+    if (!governed && request.missionOrder !== undefined)
+      return deny(requestId, mapRefusal("NOT_A_MISSION_AUTHORITY", limit));
+    let intentId: string | null = null;
+    let po: Awaited<ReturnType<ExecutionBindingService["begin"]>> | null = null;
+    if (governed) {
+      if (!this.deps.binding) throw new Error("BINDING_UNAVAILABLE");
+      if (request.missionOrder === undefined)
+        return deny(requestId, mapRefusal("MISSION_BINDING_REQUIRED", limit));
+      po = await this.deps.binding.begin({
+        poId: request.missionOrder,
+        authorityId: mandate.id,
+        agentId: request.agentId,
+        nonce: request.nonce,
+        amountMinor: request.amount.minor,
         currency: request.amount.currency,
         merchantId: request.merchant.id,
-      },
-    });
+      });
+      if (!po.ok) return deny(requestId, mapRefusal(po.code, limit));
+      intentId = po.intentId;
+    }
+    const binding = this.deps.binding;
+    let outcome: DelegatedOutcome;
+    try {
+      outcome = await delegated.attempt({
+        mandateId: mandate.id,
+        query: request.query,
+        ranker,
+        expected: {
+          totalMinor: request.amount.minor,
+          currency: request.amount.currency,
+          merchantId: request.merchant.id,
+        },
+        ...(po?.ok && intentId && binding
+          ? {
+              quoteGuard: (q: Parameters<typeof checkQuoteAgainstOrder>[2]) =>
+                po.kind === "PURCHASE_ORDER"
+                  ? checkQuoteAgainstOrder(po.po, po.terms, q)
+                  : checkQuoteAgainstPayment(po.po, q),
+              beforeDispatch: () => binding.beforeDispatch(intentId),
+            }
+          : {}),
+      });
+    } catch (e) {
+      // Unknown failure after an intent may have dispatched: hold the order (UNKNOWN) rather than free it.
+      if (intentId && binding)
+        await binding
+          .resolve(intentId, { effect: "UNKNOWN", proposalId: null })
+          .catch(() => undefined);
+      throw e;
+    }
+    if (intentId && binding)
+      await binding
+        .resolve(intentId, {
+          effect: outcome.providerEffect,
+          proposalId: outcome.proposalId,
+          refusal: outcome.status === "REFUSED" ? outcome.code : null,
+        })
+        .catch(() => undefined);
     const presented = this.present(requestId, outcome, limit);
     const rail = await this.deps.railFor?.(mandate.id);
     const labelled: GatewayExecutionResponse = rail

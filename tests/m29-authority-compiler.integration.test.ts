@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PayFlowClient } from "../packages/sdk-typescript/src/index.js";
 import { hostHarness, DEMO_MERCHANT } from "./helpers/host-harness.js";
+import { settledPurchase, TRUNCATE } from "./helpers/settled-order.js";
 import {
   activeMission,
   contract,
@@ -19,8 +20,7 @@ const url = process.env.TEST_DATABASE_URL;
   "M29 Mission Authority Compiler (PostgreSQL + real Gateway)",
   () => {
     const h = hostHarness({
-      extraTruncate:
-        "missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
+      extraTruncate: TRUNCATE,
     });
     type Auth = {
       authorityId: string;
@@ -56,6 +56,7 @@ const url = process.env.TEST_DATABASE_URL;
       authority: string,
       agent = "c",
       nonce = `m29-${Math.random().toString(36).slice(2)}-0123456789`,
+      missionOrder?: string,
     ) =>
       new PayFlowClient({
         baseUrl: h.origin,
@@ -68,7 +69,15 @@ const url = process.env.TEST_DATABASE_URL;
         nonce,
         authority,
         agent,
+        ...(missionOrder ? { missionOrder } : {}),
       });
+    const authorityOf = async (poId: string) =>
+      String(
+        (
+          await h.repo
+            .sql`select authority_id from mission_purchase_orders where po_id = ${poId}`
+        )[0]!.authority_id,
+      );
     const mandateRow = async (id: string) => {
       const [r] = await h.repo.sql<
         { document: Record<string, unknown>; revoked_at: string | null }[]
@@ -112,17 +121,25 @@ const url = process.env.TEST_DATABASE_URL;
       expect((await listing(owner, id)).authorities).toHaveLength(1);
     });
 
-    it("the purchasing agent pays through the real Gateway inside its Authority; research and negotiation agents cannot, even with its Authority id", async () => {
-      const { owner, id, a, b, c } = await activeMission(h, buyContract());
-      const auth = (await listing(owner, id)).authorities[0]!.authorityId;
-      const paid = await buy(c, auth);
+    it("the purchasing agent pays an approved purchase order through the real Gateway; research and negotiation agents cannot, even with its Authority id; the bare Authority cannot pay at all", async () => {
+      const m = await settledPurchase(h, { pay: false });
+      const { a, b, c, poId } = m;
+      const auth = await authorityOf(poId);
+      // R0: a mission-compiled Authority cannot be used without naming the approved order, however valid it is
+      expect(await buy(c, auth)).toMatchObject({
+        decision: "DENY",
+        effectCount: 0,
+        reason: "MISSION_BINDING_REQUIRED",
+      });
+      expect(h.provider.captureCalls).toBe(0);
+      const paid = await buy(c, auth, "c", undefined, poId);
       expect(paid).toMatchObject({ status: "COMPLETED", effectCount: 1 });
       expect(h.provider.captureCalls).toBe(1);
       for (const [token, agent] of [
         [a, "a"],
         [b, "b"],
       ] as const) {
-        const r = await buy(token, auth, agent);
+        const r = await buy(token, auth, agent, undefined, poId);
         expect(r).toMatchObject({
           decision: "DENY",
           effectCount: 0,
@@ -130,7 +147,7 @@ const url = process.env.TEST_DATABASE_URL;
         });
       }
       // The purchasing agent cannot present an agent id that is not its own either.
-      expect(await buy(c, auth, "a")).toMatchObject({
+      expect(await buy(c, auth, "a", undefined, poId)).toMatchObject({
         decision: "DENY",
         effectCount: 0,
       });
@@ -152,16 +169,22 @@ const url = process.env.TEST_DATABASE_URL;
         decision: "DENY",
         status: "DENIED",
         effectCount: 0,
-        reason: "NO_OFFER_INSIDE_AUTHORITY",
+        reason: "MISSION_BINDING_REQUIRED",
       });
       expect(h.provider.createCalls + h.provider.captureCalls).toBe(0);
     });
 
     it("pausing, revoking, cancelling, completing or expiring a mission revokes its Authority at once; resuming compiles a fresh one that remembers what was spent", async () => {
-      const { owner, id, c } = await activeMission(h, buyContract());
+      const m = await settledPurchase(h, {
+        pay: false,
+        contract: { totalBudgetMinor: 80_000 },
+      });
+      const { owner, id, c, poId } = m;
       const security = await h.member("SECURITY_ADMIN");
-      const first = (await listing(owner, id)).authorities[0]!.authorityId;
-      expect(await buy(c, first)).toMatchObject({ status: "COMPLETED" });
+      const first = await authorityOf(poId);
+      expect(await buy(c, first, "c", undefined, poId)).toMatchObject({
+        status: "COMPLETED",
+      });
       expect(
         (await post(security, `${MISSIONS}/${id}/pause`, { reason: "review" }))
           .status,
@@ -172,25 +195,31 @@ const url = process.env.TEST_DATABASE_URL;
         status: "REVOKED",
       });
       expect((await mandateRow(first)).revoked_at).not.toBeNull();
+      // paused: neither the bare Authority nor its order can move money
       expect(await buy(c, first)).toMatchObject({
         decision: "DENY",
         effectCount: 0,
-        reason: "AUTHORITY_REVOKED",
+        reason: "MISSION_BINDING_REQUIRED",
+      });
+      expect(await buy(c, first, "c", undefined, poId)).toMatchObject({
+        decision: "DENY",
+        effectCount: 0,
       });
       expect(h.provider.captureCalls).toBe(1);
       // Resume: a NEW Authority, and the allocation is reduced by what the old one already used (no laundering by pausing).
       expect((await post(owner, `${MISSIONS}/${id}/resume`)).status).toBe(200);
       const resumed = await listing(owner, id);
-      const fresh = resumed.authorities.find((a) => a.status === "ACTIVE")!;
+      const fresh = resumed.authorities.find(
+        (a) => a.status === "ACTIVE" && a.agentId === "c",
+      )!;
       expect(fresh.authorityId).not.toBe(first);
-      expect(fresh.allocationMinor).toBe(150_000 - 8_400);
+      // two purchasing agents split the 80,000 budget evenly; agent c's share is reduced by its 8,400 spent
+      expect(fresh.allocationMinor).toBe(40_000 - 8_400);
       expect(
-        resumed.authorities.filter((a) => a.status === "ACTIVE"),
+        resumed.authorities.filter(
+          (a) => a.status === "ACTIVE" && a.agentId === "c",
+        ),
       ).toHaveLength(1);
-      // The Trust Kernel accepts the fresh Authority (ALLOW). The provider double can complete only one capture per instance, so the
-      // outcome after ALLOW is the double's limit and is not asserted here; the first purchase above proved real completion.
-      const again = await buy(c, fresh.authorityId);
-      expect(again.decision).toBe("ALLOW");
       // Each ending revokes.
       for (const [op, body] of [
         ["cancel", {}],

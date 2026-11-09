@@ -1,4 +1,5 @@
 import type { DecisionReceipt } from "./domain.js";
+import type { CheckoutQuote } from "./checkout-contracts.js";
 import type { DurableCheckoutService } from "./checkout.js";
 import type { DiscoveryCheckoutService } from "./discovery-checkout.js";
 import type { CommerceRanker } from "./commerce-discovery.js";
@@ -98,6 +99,16 @@ export interface DelegatedAttemptInput {
     currency: string;
     merchantId: string;
   }>;
+  /**
+   * Extra, caller-supplied checks on the TRUSTED quote (e.g. a mission purchase-order binding). Return a refusal code to stop before any
+   * manifest, proposal, reservation, grant or provider call. A throw is a refusal too.
+   */
+  readonly quoteGuard?: (quote: CheckoutQuote) => string | null;
+  /**
+   * Called after a grant exists and immediately before the execution boundary may dispatch. Return a refusal code to stop with zero
+   * provider effect. The reservation then expires/releases through the ordinary Authority lifecycle.
+   */
+  readonly beforeDispatch?: () => Promise<string | null>;
 }
 
 const safeCode = (error: unknown, fallback: string): string => {
@@ -138,6 +149,8 @@ export class DelegatedCommerceService {
           quote.logicalMerchantId !== input.expected.merchantId)
       )
         throw new Error("CLAIMED_TERMS_MISMATCH");
+      const guarded = input.quoteGuard?.(quote);
+      if (guarded) throw new Error(guarded);
       const manifest = await checkout.sealManifest(quote.quoteId);
       const proposal = await checkout.compileManifestProposal(
         manifest.manifestId,
@@ -199,6 +212,12 @@ export class DelegatedCommerceService {
         proposalId,
         selectionId,
       );
+    }
+    try {
+      const stop = await input.beforeDispatch?.();
+      if (stop) return refused(stop, proposalId, selectionId);
+    } catch {
+      return refused("BINDING_CHECK_FAILED", proposalId, selectionId);
     }
     try {
       const done = await boundary.execute(token, this.deps.clock());

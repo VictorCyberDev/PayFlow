@@ -470,6 +470,57 @@ describe("M39 acceptance checklist (pure)", () => {
         }[];
       };
 
+    it("R0: approving the budget item and recording the acceptance are one transaction — a crash between them leaves no approved item and no half acceptance, and a retry completes it once", async () => {
+      const s = await scene();
+      const q = await quote(s, 44_000);
+      const exposure0 = (await ledger(s.owner, s.id)).summary.exposureMinor;
+      await h.repo.sql
+        .unsafe(`create or replace function r0_accept_failpoint() returns trigger language plpgsql as $f$
+        begin raise exception 'FAILPOINT_ACCEPTANCE_INSERT'; end $f$`);
+      await h.repo.sql.unsafe(
+        `create trigger r0_accept_failpoint before insert on mission_acceptances for each row execute function r0_accept_failpoint()`,
+      );
+      let crashed: Response;
+      try {
+        crashed = await accept(s.owner, q);
+      } finally {
+        await h.repo.sql.unsafe(
+          `drop trigger if exists r0_accept_failpoint on mission_acceptances`,
+        );
+      }
+      expect(crashed.status).toBeGreaterThanOrEqual(500);
+      // no budget is held and nothing is half recorded: the item (if it exists) is still only QUOTED
+      expect((await ledger(s.owner, s.id)).summary.exposureMinor).toBe(
+        exposure0,
+      );
+      expect((await lists(s.owner, s.id)).acceptances).toHaveLength(0);
+      const retry = await accept(s.owner, q);
+      expect(retry.status, await retry.clone().text()).toBe(201);
+      expect((await reason(retry)).replayed).toBe(false);
+      expect((await ledger(s.owner, s.id)).summary.exposureMinor).toBe(
+        exposure0 + 44_000,
+      );
+      expect((await lists(s.owner, s.id)).acceptances).toHaveLength(1);
+    });
+
+    it("R0: many simultaneous acceptances of one quote record one acceptance and approve the budget once", async () => {
+      const s = await scene();
+      const q = await quote(s, 44_000);
+      const rs = await Promise.all(
+        Array.from({ length: 6 }, () => accept(s.owner, q)),
+      );
+      for (const r of rs)
+        expect([200, 201, 409], await r.clone().text()).toContain(r.status);
+      expect(rs.filter((r) => r.status === 201).length).toBeGreaterThanOrEqual(
+        1,
+      );
+      const accs = (await lists(s.owner, s.id)).acceptances;
+      expect(accs).toHaveLength(1);
+      const led = await ledger(s.owner, s.id);
+      expect(led.items.filter((i) => i.stage === "APPROVED")).toHaveLength(1);
+      expect(led.summary.exposureMinor).toBe(44_000);
+    });
+
     it("a person accepts: the budget is committed, the negotiation concludes, no one is told and no one is paid; only the owner may", async () => {
       const s = await scene();
       const q = await quote(s, 44_000);

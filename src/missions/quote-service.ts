@@ -31,7 +31,8 @@ export type QuoteRefusal =
   | "QUOTE_SUPERSEDED"
   | "QUOTE_INCOMPLETE"
   | "CURRENCY_MISMATCH"
-  | "LEDGER_REFUSED";
+  | "LEDGER_REFUSED"
+  | "LINK_INTEGRITY_FAILURE";
 export type QResult<T> =
   | { ok: true; value: T }
   | { ok: false; refusal: QuoteRefusal; detail?: string };
@@ -419,11 +420,22 @@ export class QuoteService {
     const view = await this.one(r, now);
     const [existing] =
       await sql`select item_id from mission_quote_ledger where quote_id = ${quoteId}`;
-    if (existing)
+    if (existing) {
+      // A replay is only a replay if the stored link is really this quote's: same item, mission, amount, currency, identity.
+      const bad = await this.linkProblem(
+        quoteId,
+        String(existing.item_id),
+        missionId,
+        view.landed.totalMinor,
+        view.currency,
+      );
+      if (bad)
+        return { ok: false, refusal: "LINK_INTEGRITY_FAILURE", detail: bad };
       return {
         ok: true,
         value: { quoteId, itemId: String(existing.item_id), replayed: true },
       };
+    }
     if (view.status === "EXPIRED")
       return { ok: false, refusal: "QUOTE_EXPIRED" };
     if (view.status === "SUPERSEDED")
@@ -465,6 +477,52 @@ export class QuoteService {
         { amountMinor: view.landed.totalMinor },
         now,
       );
+    else {
+      // Lost a race (or the link pre-existed). Do not assume the winner linked THIS quote to THIS item: read it and verify.
+      const [won] =
+        await sql`select item_id from mission_quote_ledger where quote_id = ${quoteId}`;
+      if (!won)
+        return {
+          ok: false,
+          refusal: "LINK_INTEGRITY_FAILURE",
+          detail: "ITEM_LINKED_TO_ANOTHER_QUOTE",
+        };
+      if (String(won.item_id) !== itemId)
+        return {
+          ok: false,
+          refusal: "LINK_INTEGRITY_FAILURE",
+          detail: "QUOTE_LINKED_TO_ANOTHER_ITEM",
+        };
+      const bad = await this.linkProblem(
+        quoteId,
+        itemId,
+        missionId,
+        view.landed.totalMinor,
+        view.currency,
+      );
+      if (bad)
+        return { ok: false, refusal: "LINK_INTEGRITY_FAILURE", detail: bad };
+    }
     return { ok: true, value: { quoteId, itemId, replayed: !linked } };
+  }
+
+  /** Null when the ledger item really is this quote's budget item; otherwise the first thing that differs. */
+  private async linkProblem(
+    quoteId: string,
+    itemId: string,
+    missionId: string,
+    totalMinor: number | null,
+    currency: string,
+  ): Promise<string | null> {
+    const [i] = await this.deps
+      .sql`select mission_id, amount_minor, currency, idempotency_key from mission_ledger_items where item_id = ${itemId}`;
+    if (!i) return "ITEM_MISSING";
+    if (String(i.mission_id) !== missionId) return "ITEM_IN_ANOTHER_MISSION";
+    if (String(i.idempotency_key) !== `quote-${quoteId}-ledger`)
+      return "ITEM_NOT_CREATED_FOR_THIS_QUOTE";
+    if (String(i.currency).trim() !== currency) return "ITEM_CURRENCY_DIFFERS";
+    if (totalMinor === null || Number(i.amount_minor) !== totalMinor)
+      return "ITEM_AMOUNT_DIFFERS";
+    return null;
   }
 }

@@ -304,6 +304,7 @@ describe("M50 milestone state and payment description (pure)", () => {
         nonce: `m50-${Math.random().toString(36).slice(2)}-0123456789`,
         authority: p.authorityId,
         agent: "c",
+        missionOrder: p.paymentId,
       });
       expect(paid, JSON.stringify(paid)).toMatchObject({ status: "COMPLETED" });
       const proposalId = paid.proof!.proposalId!;
@@ -353,27 +354,45 @@ describe("M50 milestone state and payment description (pure)", () => {
       expect(h.provider.captureCalls).toBe(1);
     });
 
-    it("a payment that differs from the instruction holds the budget as UNKNOWN", async () => {
+    it("a payment that differs from the instruction is refused at the Gateway before the provider; reconciliation stays a second line that holds the budget as UNKNOWN", async () => {
       const s = await contractScene(h);
-      const did = await accept(s, 2); // the instruction says 12,000
-      const p = (await body(await pay(s.owner, did))).payment;
-      expect(p.amountMinor).toBe(12_000);
-      const paid = await new PayFlowClient({
-        baseUrl: h.origin,
-        accessToken: s.c,
-      }).actions.execute({
-        item: "Quiet keyboard",
-        amount: 8_400,
-        currency: "USD",
-        merchant: DEMO_MERCHANT,
-        nonce: `m50-${Math.random().toString(36).slice(2)}-0123456789`,
-        authority: p.authorityId,
-        agent: "c",
+      const did1 = await accept(s, 1); // 8,400
+      const did2 = await accept(s, 2); // 12,000
+      const p1 = (await body(await pay(s.owner, did1))).payment;
+      const p2 = (await body(await pay(s.owner, did2))).payment;
+      expect(p2.amountMinor).toBe(12_000);
+      const exec = (amount: number, authority: string, order: string) =>
+        new PayFlowClient({
+          baseUrl: h.origin,
+          accessToken: s.c,
+        }).actions.execute({
+          item: "Quiet keyboard",
+          amount,
+          currency: "USD",
+          merchant: DEMO_MERCHANT,
+          nonce: `m50-${Math.random().toString(36).slice(2)}-0123456789`,
+          authority,
+          agent: "c",
+          missionOrder: order,
+        });
+      // first line: neither the instruction's amount nor the catalog's amount gets 12,000 paid through the demo rail
+      expect(await exec(8_400, p2.authorityId, p2.paymentId)).toMatchObject({
+        status: "DENIED",
+        effectCount: 0,
+        reason: "ORDER_CLAIMED_TERMS_MISMATCH",
       });
+      expect(await exec(12_000, p2.authorityId, p2.paymentId)).toMatchObject({
+        status: "DENIED",
+        effectCount: 0,
+      });
+      expect(h.provider.captureCalls).toBe(0);
+      // second line: a genuine payment for instruction 1 offered as the payment for instruction 2 holds instruction 2's budget
+      const paid = await exec(8_400, p1.authorityId, p1.paymentId);
+      expect(paid).toMatchObject({ status: "COMPLETED" });
       const r = await body(
         await post(
           s.owner,
-          `/v1/admin/org/contractor-payments/${p.paymentId}/reconcile`,
+          `/v1/admin/org/contractor-payments/${p2.paymentId}/reconcile`,
           { proposalId: paid.proof!.proposalId! },
         ),
       );
@@ -397,6 +416,7 @@ describe("M50 milestone state and payment description (pure)", () => {
         nonce: `m50-${Math.random().toString(36).slice(2)}-0123456789`,
         authority: p.authorityId,
         agent: "c",
+        missionOrder: p.paymentId,
       });
       await h.repo
         .sql`insert into mission_contractor_payment_reconciliations (payment_id, proposal_id, classification, trace_status, financial_outcome, refs, problems, ledger_steps, actor_kind, actor_id, occurred_at)
@@ -452,21 +472,25 @@ describe("M50 milestone state and payment description (pure)", () => {
       const s = await contractScene(h);
       const did = await accept(s, 1);
       const p = (await body(await pay(s.owner, did))).payment;
-      // agent b pays under ITS OWN Authority
-      const [bAuth] = await h.repo.sql<
-        { authority_id: string }[]
-      >`select authority_id from mission_authorities where mission_id = ${s.id} and agent_id = 'b' and category = 'KEYBOARD'`;
+      // a payment under an unrelated (non-mission) Authority of the same tenant is foreign to the instruction
+      const generic = await h.authority();
+      const gAgent = String(
+        (
+          await h.repo
+            .sql`select authorized_agent_id from mandates where id = ${generic}`
+        )[0]!.authorized_agent_id,
+      );
       const bPaid = await new PayFlowClient({
         baseUrl: h.origin,
-        accessToken: s.b,
+        accessToken: await h.agentToken(gAgent),
       }).actions.execute({
         item: "Quiet keyboard",
         amount: 8_400,
         currency: "USD",
         merchant: DEMO_MERCHANT,
         nonce: `m50-${Math.random().toString(36).slice(2)}-0123456789`,
-        authority: bAuth!.authority_id,
-        agent: "b",
+        authority: generic,
+        agent: gAgent,
       });
       expect(bPaid).toMatchObject({ status: "COMPLETED" });
       const notBuyer = await post(
