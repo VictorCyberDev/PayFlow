@@ -39,6 +39,8 @@ async function api(path, { method = "GET", body } = {}) {
   return { status: res.status, ok: res.ok, data };
 }
 
+/** replaceChildren that accepts nested arrays and skips empty values, like `h`. */
+const put = (el, ...kids) => el.replaceChildren(...kids.flat().filter(Boolean));
 const SVG = "http://www.w3.org/2000/svg";
 function svg(tag, attrs = {}, ...kids) {
   const el = document.createElementNS(SVG, tag);
@@ -576,6 +578,8 @@ async function wizard() {
     merchant: "payflow.demo.merchant",
     days: "14",
     roles: {},
+    providers: new Set(["COMMERCE_MARKETPLACE"]),
+    currency: "USD",
   };
   const steps = ["Goal", "Money", "Agents", "Review"];
   const err = h("div");
@@ -621,23 +625,19 @@ async function wizard() {
         {},
         input(
           "budget",
-          "Total budget (USD)",
+          "Total budget",
           d.budget,
           "number",
           "The most this mission can ever commit.",
           { min: "1", step: "0.01" },
         ),
-        input(
-          "maxOne",
-          "Largest single purchase (USD)",
-          d.maxOne,
-          "number",
-          "",
-          { min: "1", step: "0.01" },
-        ),
+        input("maxOne", "Largest single purchase", d.maxOne, "number", "", {
+          min: "1",
+          step: "0.01",
+        }),
         input(
           "approveAbove",
-          "Ask me first above (USD)",
+          "Ask me first above",
           d.approveAbove,
           "number",
           "Anything larger waits for your decision.",
@@ -708,7 +708,7 @@ async function wizard() {
         h("h2", { text: "Review" }),
         h("p", { text: d.objective }),
         h("p", {
-          text: `Budget ${money(toMinor(d.budget))}; largest purchase ${money(toMinor(d.maxOne))}; ask first above ${money(toMinor(d.approveAbove))}.`,
+          text: `Budget ${money(toMinor(d.budget), d.currency)}; largest purchase ${money(toMinor(d.maxOne), d.currency)}; ask first above ${money(toMinor(d.approveAbove), d.currency)}.`,
         }),
         h("p", {
           text: `Only ${d.merchant} · category ${d.category} · ends in ${d.days} days.`,
@@ -721,6 +721,8 @@ async function wizard() {
     body.replaceChildren(
       nav,
       panel,
+      d.step === 1 ? currencyBox() : null,
+      d.step === 1 ? providersBox() : null,
       h(
         "div",
         { class: "actions" },
@@ -820,6 +822,61 @@ async function wizard() {
       note,
     );
   }
+  /** What kinds of source agents may look at. Choosing one only lets agents LOOK; nothing is bought or booked without your rules and approval. */
+  function providersBox() {
+    const opts = [
+      ["COMMERCE_MARKETPLACE", "Products (equipment, supplies)"],
+      ["WORKSPACE_PROVIDER", "Workspaces (desks, offices, meeting rooms)"],
+      ["TALENT_MARKETPLACE", "Freelancers and contractors"],
+    ];
+    return h(
+      "fieldset",
+      {},
+      h("legend", { text: "Where may agents look?" }),
+      opts.map(([k, label]) =>
+        h(
+          "label",
+          { class: "check" },
+          h("input", {
+            type: "checkbox",
+            ...(d.providers.has(k) ? { checked: true } : {}),
+            onchange: (e) => {
+              e.target.checked ? d.providers.add(k) : d.providers.delete(k);
+            },
+          }),
+          label,
+        ),
+      ),
+    );
+  }
+  function currencyBox() {
+    const sel = h(
+      "select",
+      {
+        id: "w-currency",
+        onchange: (e) => {
+          d.currency = e.target.value;
+        },
+      },
+      ["USD", "GBP", "EUR"].map((c) =>
+        h("option", {
+          value: c,
+          ...(d.currency === c ? { selected: true } : {}),
+          text: c,
+        }),
+      ),
+    );
+    return h(
+      "div",
+      {},
+      h("label", { for: "w-currency", text: "Currency" }),
+      sel,
+      h("p", {
+        class: "hint",
+        text: "Every amount in this mission uses this currency.",
+      }),
+    );
+  }
   function collect() {
     for (const el of body.querySelectorAll("input[name],textarea[name]"))
       if (el.name in d) d[el.name] = el.value;
@@ -855,6 +912,8 @@ async function wizard() {
           "Merchant and category may use letters, numbers and . _ : - only.",
         );
     }
+    if (d.step === 1 && d.providers.size === 0)
+      bad.push("Choose at least one place agents may look.");
     if (d.step === 2 && !Object.values(d.roles).some((s) => s.size > 0))
       bad.push("Give at least one agent a role.");
     if (bad.length)
@@ -871,11 +930,11 @@ async function wizard() {
         .split("\n")
         .map((s) => s.trim())
         .filter(Boolean),
-      currency: "USD",
+      currency: d.currency,
       totalBudgetMinor: toMinor(d.budget),
       maxCommitmentMinor: toMinor(d.maxOne),
       spendingCategories: [d.category],
-      approvedProviderTypes: ["COMMERCE_MARKETPLACE"],
+      approvedProviderTypes: [...d.providers],
       merchantRestrictions: { mode: "ONLY", ids: [d.merchant] },
       agents: Object.entries(d.roles)
         .filter(([, s]) => s.size)
@@ -1016,7 +1075,18 @@ async function missionPage(id) {
         row("Buys only from", c.merchantRestrictions?.ids?.join(", ") ?? "—"),
         row("Ends", when(c.expiresAt)),
       ),
-      h("div", { class: "actions" }, actions),
+      h(
+        "div",
+        { class: "actions" },
+        actions,
+        (c.approvedProviderTypes ?? []).includes("WORKSPACE_PROVIDER")
+          ? h("a", {
+              class: "btn",
+              href: `#/missions/${id}/workspaces`,
+              text: "Find a workspace",
+            })
+          : null,
+      ),
     ),
     h(
       "section",
@@ -1367,6 +1437,224 @@ async function approvalsPage() {
   );
 }
 
+const PROBLEM_WORDS = {
+  WRONG_CITY: "Different city",
+  WRONG_KIND: "Not the kind of space you asked for",
+  TOO_SMALL: "Too small",
+  WRONG_CURRENCY: "Different currency",
+  MISSING_AMENITY: "Missing something you need",
+  NOT_AVAILABLE_FOR_STAY: "Not open for your dates",
+  AVAILABILITY_UNKNOWN: "Availability not stated",
+  ABOVE_EXPOSURE_LIMIT: "More at risk than your limit",
+  EXPOSURE_UNKNOWN: "Total cost or deposit not stated",
+  TERM_TOO_LONG: "Minimum term too long",
+  STAY_SHORTER_THAN_MIN_TERM: "Your stay is shorter than their minimum term",
+  TERM_UNKNOWN: "Minimum term not stated",
+  CANCELLATION_UNKNOWN: "Cancellation terms not stated",
+};
+/** Workspace search and comparison (M51/M52). Observations only: nothing is booked, reserved, paid or signed here. */
+async function workspacesPage(id) {
+  const r = await api(`/v1/admin/org/missions/${id}`);
+  if (!r.ok)
+    return shell(
+      "#/missions",
+      h("h1", { text: "Mission not found" }),
+      notice("bad", "That mission doesn't exist, or you can't see it."),
+    );
+  const c = r.data.mission.activeContract ?? r.data.mission.latestContract;
+  const out = h("div");
+  const results = h("div");
+  const prior = await api(`/v1/admin/org/missions/${id}/workspaces`);
+  const draw = (v) => {
+    put(
+      results,
+      h("p", { class: "notice", role: "status", text: v.notice }),
+      v.sourceKind === "SANDBOX_FIXTURE"
+        ? h("p", {
+            class: "notice bad",
+            text: "These are fictional sandbox listings for testing. No live workspace source is connected.",
+          })
+        : null,
+      v.results.length === 0
+        ? h("p", { text: "The source returned nothing for that city." })
+        : v.results.map(({ listing: l, assessment: a }) =>
+            h(
+              "article",
+              { class: "card" },
+              h(
+                "div",
+                { class: "row" },
+                h("h2", { text: l.name }),
+                h(
+                  "span",
+                  { class: "badge" },
+                  glyph(a.qualified ? "bar-open" : "dot"),
+                  a.qualified ? "Fits your needs" : "Does not fit yet",
+                ),
+              ),
+              h(
+                "dl",
+                {},
+                row(
+                  "Space",
+                  `${l.kind.replaceAll("_", " ").toLowerCase()} · up to ${l.capacity} people · ${l.locality.city}`,
+                ),
+                row(
+                  "Rate",
+                  `${money(l.rate.minor, l.rate.currency)} per ${l.rate.basis === "HOURLY" ? "hour" : l.rate.basis === "DAILY" ? "day" : "month"}`,
+                ),
+                row(
+                  "Cost for your dates",
+                  a.liability.totalCostMinor === null
+                    ? "Not stated by the source"
+                    : money(a.liability.totalCostMinor, a.liability.currency),
+                ),
+                row(
+                  "Deposit held",
+                  a.liability.depositMinor === null
+                    ? "Not stated by the source"
+                    : money(a.liability.depositMinor, a.liability.currency),
+                ),
+                row(
+                  "Most at risk at once",
+                  a.liability.maxExposureMinor === null
+                    ? "Cannot be worked out"
+                    : money(a.liability.maxExposureMinor, a.liability.currency),
+                ),
+                row(
+                  "If you cancel on your date",
+                  a.liability.cancellationExposureMinor === null
+                    ? "Not stated by the source"
+                    : money(
+                        a.liability.cancellationExposureMinor,
+                        a.liability.currency,
+                      ),
+                ),
+                row(
+                  "Source",
+                  `${l.provenance.sourceId} · seen ${when(l.provenance.observedAt)}`,
+                ),
+              ),
+              a.problems.length
+                ? h(
+                    "ul",
+                    {},
+                    a.problems.map((p) =>
+                      h("li", { text: PROBLEM_WORDS[p] ?? p }),
+                    ),
+                  )
+                : null,
+            ),
+          ),
+    );
+  };
+  const latest = prior.data?.searches?.[0];
+  if (latest) draw(latest);
+  const form = h(
+    "form",
+    {
+      class: "card",
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const f = new FormData(form);
+        const start = new Date(String(f.get("start")) + "T09:00:00.000Z");
+        const end = new Date(String(f.get("end")) + "T17:00:00.000Z");
+        const limit = Math.round(Number(f.get("limit")) * 100);
+        const res = await api(`/v1/admin/org/missions/${id}/workspaces`, {
+          method: "POST",
+          body: {
+            sourceId: String(f.get("source")),
+            need: {
+              country: String(f.get("country")).toUpperCase(),
+              city: String(f.get("city")),
+              kinds: ["DESK", "PRIVATE_OFFICE", "MEETING_ROOM", "EVENT_SPACE"],
+              minCapacity: Number(f.get("people")),
+              currency: c.currency,
+              maxExposureMinor: limit,
+              requiredAmenities: [],
+            },
+            stay: {
+              start: start.toISOString(),
+              end: end.toISOString(),
+              people: Number(f.get("people")),
+            },
+            cancelAt: new Date(start.getTime() - 7 * 86_400_000).toISOString(),
+            idempotencyKey: idem("ws"),
+          },
+        });
+        if (!res.ok)
+          return out.replaceChildren(
+            notice(
+              "bad",
+              `${reasonText(res.data?.reason)}${res.data?.detail ? " (" + res.data.detail + ")" : ""}`,
+            ),
+          );
+        out.replaceChildren();
+        draw(res.data.search);
+      },
+    },
+    h("h2", { text: "Find a workspace" }),
+    field("country", "Country (2 letters)", "text", "off", "", {
+      maxlength: "2",
+      value: c.currency === "GBP" ? "GB" : "US",
+    }),
+    field("city", "City", "text"),
+    field("people", "People", "number", "off", "", { min: "1", value: "4" }),
+    field("start", "First day", "date"),
+    field("end", "Last day", "date"),
+    field(
+      "limit",
+      `Most you will have at risk at once (${c.currency})`,
+      "number",
+      "off",
+      "Rent, fees and deposit together.",
+      {
+        min: "1",
+        step: "0.01",
+        value: String(Math.min(c.maxCommitmentMinor, 200000) / 100),
+      },
+    ),
+    h(
+      "div",
+      {},
+      h("label", { for: "f-source", text: "Source" }),
+      h(
+        "select",
+        { id: "f-source", name: "source" },
+        h("option", {
+          value: "sandbox-workspaces",
+          text: "Sandbox workspaces (fictional)",
+        }),
+      ),
+    ),
+    h(
+      "div",
+      { class: "actions" },
+      h("button", { class: "primary", type: "submit" }, "Search"),
+    ),
+    h("p", {
+      class: "hint",
+      text: "A search only looks. It reserves nothing, books nothing and contacts no one.",
+    }),
+  );
+  shell(
+    "#/missions",
+    h(
+      "div",
+      { class: "row" },
+      h("h1", { text: "Workspaces" }),
+      h("a", {
+        class: "link",
+        href: `#/missions/${id}`,
+        text: "Back to mission",
+      }),
+    ),
+    out,
+    form,
+    results,
+  );
+}
+
 // ------------------------------------------------------------------------------------------------ router
 async function render() {
   const hash = location.hash || "#/";
@@ -1385,6 +1673,8 @@ async function render() {
     if (hash === "#/approvals") return await approvalsPage();
     if (hash === "#/missions") return await missionList();
     if (hash === "#/missions/new") return await wizard();
+    const w = /^#\/missions\/(msn_[a-f0-9]{24})\/workspaces$/.exec(hash);
+    if (w) return await workspacesPage(w[1]);
     const m = /^#\/missions\/(msn_[a-f0-9]{24})$/.exec(hash);
     if (m) return await missionPage(m[1]);
     return await home();

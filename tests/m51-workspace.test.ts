@@ -245,7 +245,15 @@ describe("M52 qualification", () => {
       "ABOVE_EXPOSURE_LIMIT",
     ]);
     expect(p({}, { maxExposureMinor: 136_500 })).toEqual([]); // the limit is inclusive
-    expect(p({ minTermDays: 30 })).toEqual(["TERM_TOO_LONG"]);
+    expect(p({ minTermDays: 30 })).toEqual([
+      "STAY_SHORTER_THAN_MIN_TERM",
+      "TERM_TOO_LONG",
+    ]);
+    // a stay exactly as long as the minimum term is fine; one hour short is not
+    expect(p({ minTermDays: 7 })).toEqual([]);
+    expect(
+      p({ minTermDays: 7 }, {}, { ...stay, end: "2026-12-15T08:00:00.000Z" }),
+    ).toEqual(["STAY_SHORTER_THAN_MIN_TERM"]);
   });
   it("UNKNOWN is a problem, never a favourable reading", () => {
     const p = (over: Partial<WorkspaceListing>) =>

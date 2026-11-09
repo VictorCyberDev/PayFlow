@@ -241,6 +241,7 @@ export type Problem =
   | "AVAILABILITY_UNKNOWN"
   | "ABOVE_EXPOSURE_LIMIT"
   | "EXPOSURE_UNKNOWN"
+  | "STAY_SHORTER_THAN_MIN_TERM"
   | "TERM_TOO_LONG"
   | "TERM_UNKNOWN"
   | "CANCELLATION_UNKNOWN";
@@ -285,11 +286,18 @@ export function assess(
   else if (lia.maxExposureMinor > need.maxExposureMinor)
     p.push("ABOVE_EXPOSURE_LIMIT");
   if (l.minTermDays === null) p.push("TERM_UNKNOWN");
-  else if (
-    need.maxMinTermDays !== undefined &&
-    l.minTermDays > need.maxMinTermDays
-  )
-    p.push("TERM_TOO_LONG");
+  else {
+    if (
+      Date.parse(stay.end) - Date.parse(stay.start) <
+      l.minTermDays * 24 * HOUR
+    )
+      p.push("STAY_SHORTER_THAN_MIN_TERM");
+    if (
+      need.maxMinTermDays !== undefined &&
+      l.minTermDays > need.maxMinTermDays
+    )
+      p.push("TERM_TOO_LONG");
+  }
   if (l.cancellation.policy === "UNKNOWN") p.push("CANCELLATION_UNKNOWN");
   return {
     listingId: l.listingId,

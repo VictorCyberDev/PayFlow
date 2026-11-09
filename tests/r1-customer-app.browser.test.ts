@@ -19,6 +19,7 @@ interface Loc {
   waitFor(o?: { timeout?: number }): Promise<void>;
   click(): Promise<void>;
   fill(v: string): Promise<void>;
+  selectOption(v: string): Promise<unknown>;
   check(): Promise<void>;
   innerText(): Promise<string>;
   count(): Promise<number>;
@@ -81,7 +82,7 @@ const chromePath = [
           }),
       }),
       extraTruncate:
-        "user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
+        "mission_workspace_listings,mission_workspace_searches,user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
     });
     const require_ = createRequire(import.meta.url);
     let axeSource = "";
@@ -198,10 +199,10 @@ const chromePath = [
         .getByLabel("How will you judge it? (one per line)")
         .fill("Under budget\nQuiet switches");
       await page.getByRole("button", { name: "Next" }).click();
-      await page.getByLabel("Largest single purchase (USD)").fill("2000");
+      await page.getByLabel("Largest single purchase").fill("2000");
       await page.getByRole("button", { name: "Next" }).click();
       await page.getByText("cannot exceed the total budget").waitFor();
-      await page.getByLabel("Largest single purchase (USD)").fill("300");
+      await page.getByLabel("Largest single purchase").fill("300");
       await page.getByRole("button", { name: "Next" }).click();
       await page.getByRole("button", { name: "Next" }).click();
       await page.getByText("Give at least one agent a role").waitFor();
@@ -412,6 +413,99 @@ const chromePath = [
           )[0]!.n,
         ),
       ).toBe(1);
+      await ctx.close();
+    }, 90_000);
+
+    it("workspace search from the mission page: honest sandbox labelling, unknown terms shown as unknown, nothing booked or spent", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "space@example.com",
+          password: "a long enough passphrase",
+          displayName: "Sam Space",
+          organizationName: "Space Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("space@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await page.goto(`${h.origin}/workspace#/agents`);
+      await page.getByLabel("Agent name").fill("Scout");
+      await page.getByRole("button", { name: "Add agent" }).click();
+      await page.getByText("Scout").first().waitFor();
+      await page.goto(`${h.origin}/workspace#/missions/new`);
+      await page
+        .getByLabel("What should be done?")
+        .fill("Find a small office in Bristol");
+      await page
+        .getByLabel("What does done look like?")
+        .fill("Three offices compared");
+      await page
+        .getByLabel("How will you judge it? (one per line)")
+        .fill("Under budget");
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByLabel("Currency").selectOption("GBP");
+      await page.getByLabel("Total budget").fill("5000");
+      await page.getByLabel("Largest single purchase").fill("2000");
+      await page.getByLabel("Ask me first above").fill("1500");
+      await page
+        .getByLabel("Workspaces (desks, offices, meeting rooms)")
+        .check();
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByLabel("Research and compare").check();
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByRole("button", { name: "Create mission" }).click();
+      await page.getByRole("button", { name: "Submit for approval" }).click();
+      await page.getByRole("button", { name: "Approve" }).click();
+      await page.getByText("In force", { exact: true }).first().waitFor();
+      await page.getByRole("link", { name: "Find a workspace" }).click();
+      await page
+        .getByRole("heading", { name: "Workspaces", level: 1 })
+        .waitFor();
+      await page.getByLabel("City").fill("Bristol");
+      await page.getByLabel("First day").fill("2026-12-08");
+      await page.getByLabel("Last day").fill("2026-12-15");
+      await page.getByRole("button", { name: "Search" }).click();
+      await page
+        .getByText("fictional sandbox listings")
+        .waitFor()
+        .catch(async (e: unknown) => {
+          throw new Error(
+            `${String(e)} PAGE: ${(await page.locator("main").innerText()).slice(0, 600)}`,
+          );
+        });
+      await page
+        .getByRole("heading", { name: "Harbour Studio (fictional)" })
+        .waitFor();
+      const text = await page.locator("main").innerText();
+      expect(text).toContain("Fits your needs");
+      expect(text).toContain("Not stated by the source"); // the incomplete listing never shows a made-up figure
+      expect(text).toContain("not quotes, bookings or reservations");
+      if (process.env.SHOTS_DIR)
+        await page.screenshot({
+          path: `${process.env.SHOTS_DIR}/workspaces-1280.png`,
+          fullPage: true,
+        });
+      expect(await axe(page)).toEqual([]);
+      expect(
+        Number(
+          (
+            await h.repo
+              .sql`select count(*)::int n from mission_workspace_searches`
+          )[0]!.n,
+        ),
+      ).toBe(1);
+      expect(
+        Number(
+          (
+            await h.repo.sql`select count(*)::int n from mission_ledger_items`
+          )[0]!.n,
+        ),
+      ).toBe(0);
       await ctx.close();
     }, 90_000);
 
