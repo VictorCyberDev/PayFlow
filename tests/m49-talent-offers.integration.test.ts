@@ -533,7 +533,7 @@ describe("M49 checks and terms (pure)", () => {
         for (const r of rs) expect(r.status, await r.clone().text()).toBe(200);
         const bodies = await Promise.all(rs.map((r) => body(r)));
         expect(bodies.filter((b) => b.replayed === false)).toHaveLength(1);
-        expect(new Set(bodies.map((b) => b.contractId)).size).toBe(1);
+        expect(new Set(bodies.map((b) => b.contractId as string)).size).toBe(1);
         expect(await milestoneItems()).toBe(2);
         expect(await contracts()).toBe(1);
       }

@@ -508,19 +508,19 @@ export class TalentOfferService {
           where o.offer_id = ${offerId} and m.organization_id = ${caller.organizationId} and m.environment = ${caller.environment} for update of o`;
         if (!o) return refuse("NOT_FOUND");
         // A concurrent ACCEPT that won the lock first already did everything: this one is a replay, not an error.
-        if (o!.status === "ACCEPTED")
+        if (o.status === "ACCEPTED")
           return { ok: true as const, value: { afters: [], replayed: true } };
-        if (o!.status !== "SENT")
-          return refuse("ILLEGAL_MOVE", `${String(o!.status)}->ACCEPTED`);
-        if (new Date(o!.expires_at as string).getTime() <= Date.parse(now))
+        if (o.status !== "SENT")
+          return refuse("ILLEGAL_MOVE", `${String(o.status)}->ACCEPTED`);
+        if (new Date(o.expires_at as string).getTime() <= Date.parse(now))
           return refuse("OFFER_EXPIRED");
-        const missionId = String(o!.mission_id);
+        const missionId = String(o.mission_id);
         const [scope] =
           await tx`select scope_id, document from mission_talent_scopes where mission_id = ${missionId} and status = 'APPROVED'`;
-        if (!scope || String(scope.scope_id) !== String(o!.scope_id))
+        if (!scope || String(scope.scope_id) !== String(o.scope_id))
           return refuse("SCOPE_CHANGED");
         const facts =
-          await tx`select seq, kind, result from mission_talent_checks where candidate_id = ${String(o!.candidate_id)} order by seq`;
+          await tx`select seq, kind, result from mission_talent_checks where candidate_id = ${String(o.candidate_id)} order by seq`;
         const problems = checkProblems(
           (scope.document as { requiredChecks: CheckKind[] }).requiredChecks,
           facts.map((f) => ({
@@ -531,7 +531,7 @@ export class TalentOfferService {
         );
         if (problems.length > 0)
           return refuse("CHECKS_NOT_PASSED", problems.join(","));
-        const terms = o!.terms as OfferTerms;
+        const terms = o.terms as OfferTerms;
         const afters: (() => Promise<void>)[] = [];
         const itemIds: string[] = [];
         for (const [i, ms] of terms.milestones.entries()) {
@@ -566,7 +566,7 @@ export class TalentOfferService {
           ledgerItemId: itemIds[i]!,
         }));
         await tx`insert into mission_talent_contracts (contract_id, mission_id, offer_id, candidate_id, role_id, currency, total_minor, milestones, created_by, created_at)
-          values (${contractId}, ${missionId}, ${offerId}, ${String(o!.candidate_id)}, ${String(o!.role_id)}, ${terms.currency}, ${Number(o!.total_minor)}, ${tx.json(milestones)}, ${caller.id}, ${now})`;
+          values (${contractId}, ${missionId}, ${offerId}, ${String(o.candidate_id)}, ${String(o.role_id)}, ${terms.currency}, ${Number(o.total_minor)}, ${tx.json(milestones)}, ${caller.id}, ${now})`;
         const moved =
           await tx`update mission_talent_offers set status = 'ACCEPTED', resolved_by = ${caller.id}, resolved_at = ${now}, resolution_evidence_kind = ${answer.evidenceKind},
           resolution_evidence_ref = ${answer.evidenceRef ?? null}, resolution_note = ${answer.note || null} where offer_id = ${offerId} and status = 'SENT' returning offer_id`;
