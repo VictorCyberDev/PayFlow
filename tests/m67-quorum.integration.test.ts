@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from "vitest";
 import { hostHarness } from "./helpers/host-harness.js";
 import { TRUNCATE } from "./helpers/settled-order.js";

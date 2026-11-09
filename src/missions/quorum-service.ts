@@ -49,7 +49,7 @@ export class QuorumService {
     if (!p.success) return { ok: false };
     await this.deps
       .sql`insert into org_quorum_policies (organization_id, environment, policy, updated_by, updated_at)
-      values (${t.organizationId}, ${t.environment}, ${this.deps.sql.json(p.data as never)}, ${actor}, ${this.deps.now()})
+      values (${t.organizationId}, ${t.environment}, ${this.deps.sql.json(p.data)}, ${actor}, ${this.deps.now()})
       on conflict (organization_id, environment) do update set policy = excluded.policy, updated_by = excluded.updated_by, updated_at = excluded.updated_at`;
     return { ok: true };
   }
