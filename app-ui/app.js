@@ -2345,7 +2345,7 @@ function scalarRows(obj, cur) {
   }
   return rows;
 }
-function recordCard(rec, cur) {
+function recordCard(rec, cur, extra) {
   const stateKey = STATE_KEYS.find((k) => typeof rec[k] === "string");
   const titleKey = TITLE_KEYS.find((k) => typeof rec[k] === "string" && rec[k]);
   return h(
@@ -2362,7 +2362,132 @@ function recordCard(rec, cur) {
         : null,
     ),
     h("dl", {}, scalarRows(rec, cur)),
+    extra ?? null,
   );
+}
+const GROUND_WORDS = {
+  DAMAGED: "It arrived damaged",
+  WRONG_ITEM: "Wrong item",
+  SHORT_DELIVERY: "Fewer than ordered",
+  OVER_DELIVERY: "More than ordered",
+  NOT_DELIVERED_LATE: "Not delivered, or very late",
+};
+/** Decisions a person can make from a record. Every one calls the same route the API exposes; the server decides, this only asks. */
+function recordActions(key, rec, redraw, out, cur) {
+  const ask = async (path, body) => {
+    const r = await api(path, { method: "POST", body });
+    if (!r.ok)
+      return out.replaceChildren(notice("bad", reasonText(r.data?.reason)));
+    out.replaceChildren();
+    await redraw();
+  };
+  if (key === "negotiations") {
+    const f = h(
+      "form",
+      {
+        onsubmit: (e) => e.preventDefault(),
+      },
+      h("label", {
+        for: `nr-${rec.negotiationId}`,
+        text: "Your reason (optional)",
+      }),
+      h("input", {
+        id: `nr-${rec.negotiationId}`,
+        name: "reason",
+        maxlength: "300",
+      }),
+    );
+    const reason = () => String(new FormData(f).get("reason") ?? "");
+    const base = `/v1/admin/org/negotiations/${rec.negotiationId}`;
+    const btns = [];
+    if (rec.pending)
+      btns.push(
+        h("button", {
+          type: "button",
+          class: "primary",
+          text: `Approve version ${rec.pending.version}`,
+          onclick: () =>
+            ask(`${base}/versions/${rec.pending.version}/approve`, {
+              reason: reason(),
+            }),
+        }),
+        h("button", {
+          type: "button",
+          text: `Reject version ${rec.pending.version}`,
+          onclick: () =>
+            ask(`${base}/versions/${rec.pending.version}/reject`, {
+              reason: reason(),
+            }),
+        }),
+      );
+    if (!rec.revoked && rec.inForce)
+      btns.push(
+        h("button", {
+          type: "button",
+          text: "Withdraw the rules in force",
+          onclick: () => ask(`${base}/revoke`, { reason: reason() }),
+        }),
+      );
+    return btns.length
+      ? h("div", {}, f, h("div", { class: "actions" }, btns))
+      : null;
+  }
+  if (key === "orders") {
+    const f = h(
+      "form",
+      {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          const d = new FormData(f);
+          await ask(`/v1/admin/org/orders/${rec.orderId}/disputes`, {
+            ground: String(d.get("ground")),
+            claimedMinor: Math.round(Number(d.get("amount")) * 100),
+            reason: String(d.get("reason")),
+            idempotencyKey: idem("dp"),
+          });
+        },
+      },
+      h("label", { for: `dg-${rec.orderId}`, text: "What went wrong" }),
+      h(
+        "select",
+        { id: `dg-${rec.orderId}`, name: "ground" },
+        Object.entries(GROUND_WORDS).map(([v, t]) =>
+          h("option", { value: v, text: t }),
+        ),
+      ),
+      h("label", {
+        for: `da-${rec.orderId}`,
+        text: `Amount you say you are owed (${cur})`,
+      }),
+      h("input", {
+        id: `da-${rec.orderId}`,
+        name: "amount",
+        type: "number",
+        min: "0.01",
+        step: "0.01",
+        required: true,
+      }),
+      h("label", { for: `drs-${rec.orderId}`, text: "Tell us what happened" }),
+      h("input", {
+        id: `drs-${rec.orderId}`,
+        name: "reason",
+        maxlength: "500",
+        required: true,
+      }),
+      h("button", { type: "submit", text: "Open a dispute" }),
+      h("p", {
+        class: "hint",
+        text: "A dispute is a claim. Only you resolve it, and a refund is recorded only with proof.",
+      }),
+    );
+    return h(
+      "details",
+      {},
+      h("summary", { text: "Something wrong with this order?" }),
+      f,
+    );
+  }
+  return null;
 }
 async function recordsPage(id, key) {
   const sec = SECTIONS[key];
@@ -2377,6 +2502,8 @@ async function recordsPage(id, key) {
   const c =
     mission.data.mission.activeContract ?? mission.data.mission.latestContract;
   const cur = c?.currency ?? "USD";
+  const out = h("div");
+  const redraw = () => recordsPage(id, key);
   const body = [];
   if (!r.ok)
     body.push(
@@ -2405,7 +2532,9 @@ async function recordsPage(id, key) {
     body.push(
       items.length === 0
         ? h("p", { class: "hint", text: sec.empty })
-        : items.map((rec) => recordCard(rec, cur)),
+        : items.map((rec) =>
+            recordCard(rec, cur, recordActions(key, rec, redraw, out, cur)),
+          ),
     );
   }
   shell(
@@ -2421,6 +2550,7 @@ async function recordsPage(id, key) {
       }),
     ),
     h("p", { text: sec.blurb }),
+    out,
     ...body.flat(),
   );
 }

@@ -42,6 +42,18 @@ interface Page {
   addScriptTag(o: { content: string }): Promise<unknown>;
   setViewportSize(s: { width: number; height: number }): Promise<void>;
   on(e: "dialog", h: (d: { accept(): Promise<void> }) => void): void;
+  route(
+    pattern: RegExp,
+    handler: (r: {
+      request(): { method(): string; postData(): string | null; url(): string };
+      fulfill(o: {
+        status: number;
+        contentType: string;
+        body: string;
+      }): Promise<void>;
+      continue(): Promise<void>;
+    }) => Promise<void> | void,
+  ): Promise<void>;
 }
 interface Ctx {
   newPage(): Promise<Page>;
@@ -665,6 +677,112 @@ const chromePath = [
       expect(
         Number((await h.repo.sql`select count(*)::int n from missions`)[0]!.n),
       ).toBe(0);
+      await ctx.close();
+    }, 60_000);
+
+    it("record actions send the right request from the right button: approve or reject a negotiation, open a dispute (server rules are tested elsewhere)", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "act@example.com",
+          password: "a long enough passphrase",
+          displayName: "Al Action",
+          organizationName: "Action Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("act@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      const mid = "msn_" + "a".repeat(24);
+      const posts: { path: string; body: unknown }[] = [];
+      const ok = (body: unknown) => ({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+      await page.route(/\/v1\/admin\/org\//u, async (r) => {
+        const req = r.request();
+        const path = new URL(req.url()).pathname;
+        if (req.method() === "POST") {
+          posts.push({
+            path,
+            body: JSON.parse(req.postData() ?? "{}") as unknown,
+          });
+          return r.fulfill(ok({}));
+        }
+        if (path === `/v1/admin/org/missions/${mid}`)
+          return r.fulfill(
+            ok({ mission: { activeContract: { currency: "GBP" } } }),
+          );
+        if (path.endsWith("/negotiations"))
+          return r.fulfill(
+            ok({
+              negotiations: [
+                {
+                  negotiationId: "neg_" + "b".repeat(24),
+                  status: "WAITING_FOR_A_PERSON",
+                  revoked: false,
+                  inForce: null,
+                  pending: { version: 2 },
+                  versions: [],
+                },
+              ],
+            }),
+          );
+        if (path.endsWith("/orders"))
+          return r.fulfill(
+            ok({
+              orders: [
+                {
+                  orderId: "ord_" + "c".repeat(24),
+                  status: "SHIPPED",
+                  supplierId: "sup",
+                },
+              ],
+            }),
+          );
+        return r.continue();
+      });
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/negotiations`);
+      await page
+        .getByRole("heading", { name: "Negotiations", level: 1 })
+        .waitFor();
+      await page.getByLabel("Your reason (optional)").fill("too high");
+      await page.getByRole("button", { name: "Approve version 2" }).click();
+      await page.getByRole("button", { name: "Reject version 2" }).click();
+      expect(posts.map((p) => p.path)).toEqual([
+        `/v1/admin/org/negotiations/neg_${"b".repeat(24)}/versions/2/approve`,
+        `/v1/admin/org/negotiations/neg_${"b".repeat(24)}/versions/2/reject`,
+      ]);
+      expect(posts[0]!.body).toEqual({ reason: "too high" });
+      expect(await axe(page)).toEqual([]);
+      posts.length = 0;
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/orders`);
+      await page
+        .getByRole("heading", { name: "Purchases and orders", level: 1 })
+        .waitFor();
+      await page.getByText("Something wrong with this order?").click();
+      await page.getByLabel("What went wrong").selectOption("DAMAGED");
+      await page.getByLabel("Amount you say you are owed (GBP)").fill("12.50");
+      await page.getByLabel("Tell us what happened").fill("Box crushed");
+      await page.getByRole("button", { name: "Open a dispute" }).click();
+      expect(posts).toHaveLength(1);
+      expect(posts[0]!.path).toBe(
+        `/v1/admin/org/orders/ord_${"c".repeat(24)}/disputes`,
+      );
+      expect(posts[0]!.body).toMatchObject({
+        ground: "DAMAGED",
+        claimedMinor: 1250,
+        reason: "Box crushed",
+      });
+      expect(
+        (posts[0]!.body as { idempotencyKey: string }).idempotencyKey.length,
+      ).toBeGreaterThanOrEqual(16);
+      expect(await axe(page)).toEqual([]);
       await ctx.close();
     }, 60_000);
 
