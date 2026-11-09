@@ -16,6 +16,11 @@ import {
   type AgentState,
 } from "../missions/agent-lifecycle.js";
 import { PACKS, applyPack } from "../missions/policy-packs.js";
+import {
+  RECURRING_KIND,
+  RecurringService,
+} from "../missions/recurring-service.js";
+import { createRecurringRoutes } from "./recurring-routes.js";
 import { QuorumService } from "../missions/quorum-service.js";
 import { createQuorumRoutes } from "./quorum-routes.js";
 import { createAutomationRoutes } from "./automation-routes.js";
@@ -1626,7 +1631,15 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     automation,
   });
   // The only handlers that exist. A job kind with no handler FAILS; nothing here moves money or contacts anyone.
+  const recurringService = new RecurringService({
+    sql,
+    missions: missionService,
+    ledger: ledgerService,
+    automation,
+    now: iso,
+  });
   const automationHandlers: Record<string, Handler> = {
+    [RECURRING_KIND]: (job) => recurringService.runCheck(job),
     BOOKING_EXPIRE: async (job) => {
       const missionId = job.payload.missionId;
       if (typeof missionId !== "string")
@@ -1699,6 +1712,17 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   });
   const quorumRoutes = createQuorumRoutes({
     service: quorumService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+  });
+  const recurringRoutes = createRecurringRoutes({
+    service: recurringService,
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(
@@ -3406,6 +3430,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => serviceMarketRoutes.member(request))) ??
         (await safely(() => automationRoutes.member(request))) ??
         (await safely(() => quorumRoutes.member(request))) ??
+        (await safely(() => recurringRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
         (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => contractorRoutes.member(request))) ??

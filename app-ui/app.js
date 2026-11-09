@@ -2896,6 +2896,15 @@ function recordsNav(id) {
         {},
         h("a", {
           class: "link",
+          href: `#/missions/${id}/recurring`,
+          text: "Recurring items",
+        }),
+      ),
+      h(
+        "li",
+        {},
+        h("a", {
+          class: "link",
           href: `#/missions/${id}/launch`,
           text: "Launch board: where each part stands",
         }),
@@ -3107,6 +3116,169 @@ async function launchBoardPage(id) {
         }),
       ),
     ),
+  );
+}
+const RECURRING_WORDS = {
+  DUE_FOR_OWNER: "Due. Your decision is needed. Nothing was bought.",
+  SKIPPED_MISSION_NOT_ACTIVE: "Skipped: the mission is not active.",
+  SKIPPED_MISSION_EXPIRED: "Skipped: the mission has ended.",
+  SKIPPED_ABOVE_PURCHASE_LIMIT: "Skipped: more than the single-purchase limit.",
+  SKIPPED_NO_BUDGET_LEFT: "Skipped: not enough budget is left.",
+  SKIPPED_CURRENCY_CHANGED: "Skipped: the mission's currency changed.",
+};
+/** Recurring items (M57 slice): each time one comes due it is checked against the mission as it is then. It never buys; it asks you. */
+async function recurringPage(id) {
+  const m = await api(`/v1/admin/org/missions/${id}`);
+  if (!m.ok)
+    return shell(
+      "#/missions",
+      h("h1", { text: "Mission not found" }),
+      notice("bad", "That mission doesn't exist, or you can't see it."),
+    );
+  const c = m.data.mission.activeContract ?? m.data.mission.latestContract;
+  const r = await api(`/v1/admin/org/missions/${id}/recurring`);
+  const d = r.data ?? { schedules: [], checks: [] };
+  const out = h("div");
+  const form = h(
+    "form",
+    {
+      class: "card",
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const f = new FormData(form);
+        const res = await api(`/v1/admin/org/missions/${id}/recurring`, {
+          method: "POST",
+          body: {
+            label: String(f.get("label")),
+            amountMinor: Math.round(Number(f.get("amount")) * 100),
+            everySeconds: Math.round(Number(f.get("days")) * 86400),
+          },
+        });
+        if (!res.ok)
+          return out.replaceChildren(
+            notice(
+              "bad",
+              res.data?.reason === "MISSION_NOT_ACTIVE"
+                ? "Only an active mission can have recurring items."
+                : reasonText(res.data?.reason),
+            ),
+          );
+        await recurringPage(id);
+      },
+    },
+    h("h2", { text: "Add a recurring item" }),
+    field(
+      "label",
+      "What is it?",
+      "text",
+      "off",
+      "For example “Design tool subscription”.",
+      { maxlength: "120" },
+    ),
+    field(
+      "amount",
+      `Amount each time (${c?.currency ?? ""})`,
+      "number",
+      "off",
+      "",
+      { min: "0.01", step: "0.01" },
+    ),
+    field("days", "Check every (days)", "number", "off", "At least 1.", {
+      min: "1",
+      max: "366",
+      value: "30",
+    }),
+    h(
+      "div",
+      { class: "actions" },
+      h("button", { class: "primary", type: "submit", text: "Add" }),
+    ),
+    h("p", {
+      class: "hint",
+      text: "PayFlow will check it each time it comes due and ask you. It never buys or renews anything itself.",
+    }),
+  );
+  shell(
+    "#/missions",
+    h(
+      "div",
+      { class: "row" },
+      h("h1", { text: "Recurring items" }),
+      h("a", {
+        class: "link",
+        href: `#/missions/${id}`,
+        text: "Back to mission",
+      }),
+    ),
+    h("p", {
+      text:
+        d.notice ??
+        "A recurring item is only checked. PayFlow never buys, renews or pays on its own.",
+    }),
+    out,
+    d.schedules.length === 0
+      ? h("p", { class: "hint", text: "No recurring items yet." })
+      : d.schedules.map((s) =>
+          h(
+            "article",
+            { class: "card" },
+            h(
+              "div",
+              { class: "row" },
+              h("h3", { text: s.label }),
+              h(
+                "span",
+                { class: "badge" },
+                glyph("dot"),
+                s.active ? "Checking" : "Stopped",
+              ),
+            ),
+            h(
+              "dl",
+              {},
+              row("Amount each time", money(s.amountMinor, s.currency)),
+              row(
+                "Checked every",
+                `${Math.round(s.everySeconds / 86400)} days`,
+              ),
+              s.active ? row("Next check", when(s.nextCheck)) : null,
+            ),
+            s.active
+              ? h("div", { class: "actions" }, [
+                  h("button", {
+                    type: "button",
+                    text: `Stop ${s.label}`,
+                    onclick: async () => {
+                      const x = await api(
+                        `/v1/admin/org/missions/${id}/recurring/${s.scheduleId}/stop`,
+                        { method: "POST", body: {} },
+                      );
+                      if (!x.ok)
+                        return out.replaceChildren(
+                          notice("bad", reasonText(x.data?.reason)),
+                        );
+                      await recurringPage(id);
+                    },
+                  }),
+                ])
+              : null,
+          ),
+        ),
+    form,
+    h("h2", { text: "What was checked" }),
+    d.checks.length === 0
+      ? h("p", { class: "hint", text: "Nothing has come due yet." })
+      : d.checks.map((k) =>
+          h(
+            "article",
+            { class: "card" },
+            h("h3", {
+              text: `${k.label}: ${money(k.amountMinor, k.currency)}`,
+            }),
+            h("p", { text: RECURRING_WORDS[k.outcome] ?? "Checked." }),
+            h("p", { class: "hint", text: `For ${when(k.slot)}` }),
+          ),
+        ),
   );
 }
 /** Proof: the append-only record of every change to this mission's budget. It is read from the ledger's history, not summarised. */
@@ -3437,6 +3609,7 @@ async function render() {
     if (hash === "#/help") return helpPage();
     const sec = /^#\/missions\/(msn_[a-f0-9]{24})\/([a-z]+)$/.exec(hash);
     if (sec && sec[2] === "proof") return await proofPage(sec[1]);
+    if (sec && sec[2] === "recurring") return await recurringPage(sec[1]);
     if (sec && sec[2] === "launch") return await launchBoardPage(sec[1]);
     if (sec && sec[2] === "services") return await servicesPage(sec[1]);
     if (sec && SECTIONS[sec[2]]) return await recordsPage(sec[1], sec[2]);

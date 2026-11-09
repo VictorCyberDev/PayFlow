@@ -22,6 +22,8 @@ export interface Job extends JobTenant {
   kind: string;
   effect: JobEffect;
   payload: Record<string, unknown>;
+  /** For a job made by a schedule this ends in `@<slot time>`. */
+  dedupeKey: string;
   state: JobState;
   attempts: number;
   maxAttempts: number;
@@ -53,6 +55,7 @@ export class AutomationService {
       kind: String(r.kind),
       effect: r.effect as JobEffect,
       payload: r.payload as Record<string, unknown>,
+      dedupeKey: String(r.dedupe_key),
       state: r.state as JobState,
       attempts: Number(r.attempts),
       maxAttempts: Number(r.max_attempts),
@@ -239,6 +242,31 @@ export class AutomationService {
       values (${id}, ${t.organizationId}, ${t.environment}, ${o.kind}, ${o.effect}, ${this.deps.sql.json((o.payload ?? {}) as never)},
         ${o.everySeconds}, ${o.firstSlot ?? now}, ${o.createdBy}, ${now})`;
     return id;
+  }
+  async listSchedules(
+    t: JobTenant,
+    missionId: string,
+  ): Promise<
+    {
+      scheduleId: string;
+      kind: string;
+      payload: Record<string, unknown>;
+      everySeconds: number;
+      nextSlot: string;
+      active: boolean;
+    }[]
+  > {
+    const rows = await this.deps
+      .sql`select * from automation_schedules where organization_id = ${t.organizationId} and environment = ${t.environment}
+      and payload->>'missionId' = ${missionId} order by created_at desc, schedule_id`;
+    return rows.map((r) => ({
+      scheduleId: String(r.schedule_id),
+      kind: String(r.kind),
+      payload: r.payload as Record<string, unknown>,
+      everySeconds: Number(r.every_seconds),
+      nextSlot: iso(r.next_slot),
+      active: Boolean(r.active),
+    }));
   }
   async setScheduleActive(
     t: JobTenant,
