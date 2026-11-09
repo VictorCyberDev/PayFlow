@@ -553,8 +553,8 @@ const chromePath = [
         });
       expect(await axe(page)).toEqual([]);
       expect(
-        (await h.repo.sql`select state from mission_bookings`).map(
-          (r) => r.state,
+        (await h.repo.sql`select state from mission_bookings`).map((r) =>
+          String(r.state),
         ),
       ).toEqual(["CONFIRMED"]);
       await ctx.close();
