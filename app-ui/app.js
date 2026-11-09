@@ -847,6 +847,10 @@ async function wizard() {
       ["COMMERCE_MARKETPLACE", "Products (equipment, supplies)"],
       ["WORKSPACE_PROVIDER", "Workspaces (desks, offices, meeting rooms)"],
       ["TALENT_MARKETPLACE", "Freelancers and contractors"],
+      [
+        "PROFESSIONAL_SERVICES",
+        "Professional services (design, writing, bookkeeping)",
+      ],
     ];
     return h(
       "fieldset",
@@ -1098,6 +1102,13 @@ async function missionPage(id) {
         "div",
         { class: "actions" },
         actions,
+        (c.approvedProviderTypes ?? []).includes("PROFESSIONAL_SERVICES")
+          ? h("a", {
+              class: "btn",
+              href: `#/missions/${id}/services`,
+              text: "Find a service",
+            })
+          : null,
         (c.approvedProviderTypes ?? []).includes("WORKSPACE_PROVIDER")
           ? h("a", {
               class: "btn",
@@ -1727,6 +1738,203 @@ async function workspacesPage(id) {
   );
 }
 
+const SERVICE_PROBLEM_WORDS = {
+  WRONG_CATEGORY: "Not the kind of service you asked for",
+  WRONG_CURRENCY: "Different currency",
+  PRICE_UNKNOWN: "Price not stated",
+  ABOVE_PRICE_LIMIT: "More than your limit",
+  DELIVERY_UNKNOWN: "Delivery time not stated",
+  TOO_SLOW: "Takes longer than you want",
+  REVISIONS_UNKNOWN: "Revisions not stated",
+  TOO_FEW_REVISIONS: "Fewer revisions than you want",
+  REFUND_TERMS_UNKNOWN: "Refund terms not stated",
+  REFUND_TOO_SMALL: "Refunds less than you want if you cancel",
+};
+const SERVICE_CATEGORY_WORDS = {
+  DESIGN: "Design",
+  SOFTWARE: "Software",
+  WRITING: "Writing",
+  LEGAL_REVIEW: "Legal review",
+  BOOKKEEPING: "Bookkeeping",
+  MARKETING: "Marketing",
+};
+/** Services (M54): fixed-scope packages a source states. A search only looks; nothing is bought, engaged or paid. */
+async function servicesPage(id) {
+  const r = await api(`/v1/admin/org/missions/${id}`);
+  if (!r.ok)
+    return shell(
+      "#/missions",
+      h("h1", { text: "Mission not found" }),
+      notice("bad", "That mission doesn't exist, or you can't see it."),
+    );
+  const c = r.data.mission.activeContract ?? r.data.mission.latestContract;
+  const out = h("div");
+  const results = h("div");
+  const form = h(
+    "form",
+    {
+      class: "card",
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const f = new FormData(form);
+        const res = await api(`/v1/admin/org/missions/${id}/services/search`, {
+          method: "POST",
+          body: {
+            sourceId: "sandbox-services",
+            need: {
+              category: String(f.get("category")),
+              currency: c.currency,
+              maxPriceMinor: Math.round(Number(f.get("price")) * 100),
+              maxDeliveryDays: Number(f.get("days")),
+              minRevisions: Number(f.get("revisions")),
+              minRefundBeforeStartBps: 0,
+            },
+          },
+        });
+        if (!res.ok) {
+          put(results);
+          return out.replaceChildren(
+            notice(
+              "bad",
+              res.data?.reason === "PROVIDER_TYPE_NOT_APPROVED"
+                ? "This mission was not approved to look at professional services."
+                : reasonText(res.data?.reason),
+            ),
+          );
+        }
+        out.replaceChildren();
+        const v = res.data;
+        put(
+          results,
+          h("p", { class: "notice", role: "status", text: v.notice }),
+          v.sourceKind === "SANDBOX_FIXTURE"
+            ? h("p", {
+                class: "notice bad",
+                text: "These are fictional sandbox packages for testing. No live marketplace is connected.",
+              })
+            : null,
+          v.results.length === 0
+            ? h("p", { text: "The source returned nothing for that category." })
+            : v.results.map(({ package: p, assessment: a }) =>
+                h(
+                  "article",
+                  { class: "card" },
+                  h(
+                    "div",
+                    { class: "row" },
+                    h("h2", { text: p.title }),
+                    h(
+                      "span",
+                      { class: "badge" },
+                      glyph(a.qualified ? "bar-open" : "dot"),
+                      a.qualified ? "Fits your needs" : "Does not fit yet",
+                    ),
+                  ),
+                  h(
+                    "dl",
+                    {},
+                    row("Provider", p.providerName),
+                    row(
+                      "Price",
+                      a.priceMinor === null
+                        ? "Not stated by the source"
+                        : money(a.priceMinor, p.currency),
+                    ),
+                    row(
+                      "Delivery",
+                      p.deliveryDays === null
+                        ? "Not stated by the source"
+                        : `${p.deliveryDays} days`,
+                    ),
+                    row(
+                      "Revisions included",
+                      p.revisionsIncluded === null
+                        ? "Not stated by the source"
+                        : String(p.revisionsIncluded),
+                    ),
+                    row(
+                      "Lost if you cancel before work starts",
+                      a.lostIfCancelledBeforeStartMinor === null
+                        ? "Cannot be worked out"
+                        : money(a.lostIfCancelledBeforeStartMinor, p.currency),
+                    ),
+                    row("You would get", p.deliverables.join(", ")),
+                  ),
+                  a.problems.length
+                    ? h(
+                        "ul",
+                        {},
+                        a.problems.map((x) =>
+                          h("li", { text: SERVICE_PROBLEM_WORDS[x] ?? x }),
+                        ),
+                      )
+                    : null,
+                ),
+              ),
+        );
+      },
+    },
+    h("h2", { text: "Find a service" }),
+    h(
+      "div",
+      {},
+      h("label", { for: "f-category", text: "Kind of service" }),
+      h(
+        "select",
+        { id: "f-category", name: "category" },
+        Object.entries(SERVICE_CATEGORY_WORDS).map(([v, t]) =>
+          h("option", { value: v, text: t }),
+        ),
+      ),
+    ),
+    field(
+      "price",
+      `Most you will pay (${c.currency})`,
+      "number",
+      "off",
+      "For one package.",
+      {
+        min: "1",
+        step: "0.01",
+        value: String(Math.min(c.maxCommitmentMinor, 100000) / 100),
+      },
+    ),
+    field("days", "Needed within (days)", "number", "off", "", {
+      min: "1",
+      value: "14",
+    }),
+    field("revisions", "Revisions you want", "number", "off", "", {
+      min: "0",
+      value: "1",
+    }),
+    h(
+      "div",
+      { class: "actions" },
+      h("button", { class: "primary", type: "submit", text: "Search" }),
+    ),
+    h("p", {
+      class: "hint",
+      text: "A search only looks. It buys nothing, engages no one and contacts no one.",
+    }),
+  );
+  shell(
+    "#/missions",
+    h(
+      "div",
+      { class: "row" },
+      h("h1", { text: "Services" }),
+      h("a", {
+        class: "link",
+        href: `#/missions/${id}`,
+        text: "Back to mission",
+      }),
+    ),
+    out,
+    form,
+    results,
+  );
+}
+
 const BOOKING_STATE_WORDS = {
   PROPOSED: "Proposed",
   APPROVED: "Approved",
@@ -2318,6 +2526,7 @@ async function render() {
     if (hash === "#/help") return helpPage();
     const sec = /^#\/missions\/(msn_[a-f0-9]{24})\/([a-z]+)$/.exec(hash);
     if (sec && sec[2] === "proof") return await proofPage(sec[1]);
+    if (sec && sec[2] === "services") return await servicesPage(sec[1]);
     if (sec && SECTIONS[sec[2]]) return await recordsPage(sec[1], sec[2]);
     const w = /^#\/missions\/(msn_[a-f0-9]{24})\/workspaces$/.exec(hash);
     if (w) return await workspacesPage(w[1]);

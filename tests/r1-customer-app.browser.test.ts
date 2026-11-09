@@ -461,6 +461,9 @@ const chromePath = [
       await page
         .getByLabel("Workspaces (desks, offices, meeting rooms)")
         .check();
+      await page
+        .getByLabel("Professional services (design, writing, bookkeeping)")
+        .check();
       await page.getByRole("button", { name: "Next" }).click();
       await page.getByLabel("Research and compare").check();
       await page.getByRole("button", { name: "Next" }).click();
@@ -579,6 +582,18 @@ const chromePath = [
       await page.goto(`${h.origin}/workspace#/missions/${mid}/finance`);
       await page.getByRole("heading", { name: "Finance", level: 1 }).waitFor();
       expect(await page.locator("main").innerText()).toContain("£");
+      // services: a search lists fictional packages honestly, and an unstated price is shown as unstated
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/services`);
+      await page.getByRole("heading", { name: "Services", level: 1 }).waitFor();
+      await page.getByLabel("Most you will pay (GBP)").fill("1000");
+      await page.getByRole("button", { name: "Search" }).click();
+      await page.getByText("fictional sandbox packages").waitFor();
+      const svc = await page.locator("main").innerText();
+      expect(svc).toContain("Logo and one-page style sheet");
+      expect(svc).toContain("Fits your needs");
+      expect(svc).toContain("Price not stated");
+      expect(svc).not.toMatch(/undefined|\[object|NaN/u);
+      expect(await axe(page)).toEqual([]);
       for (const [hash, heading] of [
         ["notifications", "Notifications"],
         ["settings", "Settings"],
