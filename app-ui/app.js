@@ -184,6 +184,7 @@ function shell(active, ...content) {
     ["#/missions", "Missions"],
     ["#/launch", "Templates"],
     ["#/approvals", "Approvals"],
+    ["#/checking", "Needs checking"],
     ["#/agents", "Agents"],
     ["#/notifications", "Notifications"],
     ["#/settings", "Settings"],
@@ -2659,6 +2660,104 @@ async function proofPage(id) {
       : [h("p", { class: "hint", text: "Nothing has been recorded yet." })]),
   );
 }
+/**
+ * Needs checking (M71): everything whose outcome PayFlow could not see, in one place. PayFlow never retries these and never guesses; each one
+ * is settled by a person with what they know. Nothing here is hidden when it is unpleasant.
+ */
+async function checkingPage() {
+  const ms = (await api("/v1/admin/org/missions")).data?.missions ?? [];
+  const unclearBookings = [];
+  for (const m of ms.slice(0, 25)) {
+    const r = await api(`/v1/admin/org/missions/${m.missionId}/bookings`);
+    for (const b of r.data?.bookings ?? [])
+      if (b.state === "UNKNOWN") unclearBookings.push({ m, b });
+  }
+  const jobsR = await api("/v1/admin/org/automation/jobs");
+  const unclearJobs = (jobsR.data?.jobs ?? []).filter(
+    (j) => j.state === "UNKNOWN",
+  );
+  const out = h("div");
+  const settleJob = (j) => {
+    const f = h(
+      "form",
+      {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          const d = new FormData(f);
+          const r = await api(
+            `/v1/admin/org/automation/jobs/${j.jobId}/settle`,
+            {
+              method: "POST",
+              body: {
+                outcome: String(d.get("outcome")),
+                note: String(d.get("note")),
+              },
+            },
+          );
+          if (!r.ok)
+            return out.replaceChildren(
+              notice("bad", reasonText(r.data?.reason)),
+            );
+          await checkingPage();
+        },
+      },
+      h("label", { for: `jo-${j.jobId}`, text: "What actually happened" }),
+      h(
+        "select",
+        { id: `jo-${j.jobId}`, name: "outcome" },
+        h("option", { value: "SUCCEEDED", text: "It was done" }),
+        h("option", { value: "FAILED", text: "It was not done" }),
+      ),
+      h("label", { for: `jn-${j.jobId}`, text: "How do you know?" }),
+      h("input", {
+        id: `jn-${j.jobId}`,
+        name: "note",
+        maxlength: "300",
+        required: true,
+      }),
+      h("button", { class: "primary", type: "submit", text: "Settle" }),
+    );
+    return f;
+  };
+  shell(
+    "#/checking",
+    h("h1", { text: "Needs checking" }),
+    h("p", {
+      text: "These are things where PayFlow cannot tell what happened. It will not try again or guess. The money involved stays set aside until you settle them.",
+    }),
+    out,
+    unclearBookings.length === 0 && unclearJobs.length === 0
+      ? h("p", { text: "Nothing needs checking." })
+      : null,
+    unclearBookings.map(({ m, b }) =>
+      h(
+        "article",
+        { class: "card" },
+        h("h3", { text: b.listing.name }),
+        h("p", { text: b.headline }),
+        h(
+          "dl",
+          {},
+          row("Money set aside", money(b.heldMinor, b.frozen.currency)),
+        ),
+        h("a", {
+          class: "link",
+          href: `#/missions/${m.missionId}/workspaces`,
+          text: "Open the booking",
+        }),
+      ),
+    ),
+    unclearJobs.map((j) =>
+      h(
+        "article",
+        { class: "card" },
+        h("h3", { text: wordsOf(j.kind) }),
+        h("p", { text: j.note ?? "The outcome is not known." }),
+        settleJob(j),
+      ),
+    ),
+  );
+}
 async function notificationsPage() {
   const r = await api("/v1/admin/org/missions");
   const ms = r.data?.missions ?? [];
@@ -2812,6 +2911,7 @@ async function render() {
     if (hash === "#/missions") return await missionList();
     if (hash === "#/missions/new") return await wizard();
     if (hash === "#/launch") return launchPage();
+    if (hash === "#/checking") return await checkingPage();
     if (hash === "#/notifications") return await notificationsPage();
     if (hash === "#/settings") return await settingsPage();
     if (hash === "#/help") return helpPage();

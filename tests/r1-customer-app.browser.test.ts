@@ -803,6 +803,105 @@ const chromePath = [
       await ctx.close();
     }, 60_000);
 
+    it("Needs checking lists unclear bookings and jobs, never retries them, and settles a job only with the person's words", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "chk@example.com",
+          password: "a long enough passphrase",
+          displayName: "Cy Check",
+          organizationName: "Check Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("chk@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      const mid = "msn_" + "d".repeat(24);
+      const jid = "job_" + "e".repeat(24);
+      const posts: { path: string; body: unknown }[] = [];
+      let settled = false;
+      const ok = (body: unknown) => ({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+      await page.route(/\/v1\/admin\/org\//u, async (r) => {
+        const req = r.request();
+        const path = new URL(req.url()).pathname;
+        if (req.method() === "POST") {
+          posts.push({
+            path,
+            body: JSON.parse(req.postData() ?? "{}") as unknown,
+          });
+          settled = true;
+          return r.fulfill(ok({}));
+        }
+        if (path === "/v1/admin/org/missions")
+          return r.fulfill(ok({ missions: [{ missionId: mid }] }));
+        if (path === `/v1/admin/org/missions/${mid}/bookings`)
+          return r.fulfill(
+            ok({
+              bookings: [
+                {
+                  bookingId: "bkg_" + "f".repeat(24),
+                  state: "UNKNOWN",
+                  headline: "Checking what happened. Don't book again yet.",
+                  heldMinor: 148500,
+                  frozen: { currency: "GBP" },
+                  listing: { name: "Harbour Studio (fictional)" },
+                },
+              ],
+            }),
+          );
+        if (path === "/v1/admin/org/automation/jobs")
+          return r.fulfill(
+            ok({
+              jobs: [
+                {
+                  jobId: jid,
+                  kind: "PAY_SUPPLIER",
+                  state: settled ? "SUCCEEDED" : "UNKNOWN",
+                  note: "the worker was lost; PayFlow cannot tell whether it acted",
+                },
+              ],
+            }),
+          );
+        return r.continue();
+      });
+      await page.goto(`${h.origin}/workspace#/checking`);
+      await page
+        .getByRole("heading", { name: "Needs checking", level: 1 })
+        .waitFor();
+      const text = await page.locator("main").innerText();
+      expect(text).toContain("Harbour Studio (fictional)");
+      expect(text).toContain("£1,485.00");
+      expect(text).toContain("PayFlow cannot tell whether it acted");
+      expect(await axe(page)).toEqual([]);
+      await page.getByLabel("What actually happened").selectOption("FAILED");
+      await page
+        .getByLabel("How do you know?")
+        .fill("Provider confirmed by phone it never ran");
+      await page.getByRole("button", { name: "Settle" }).click();
+      await page.getByText("Harbour Studio (fictional)").waitFor();
+      expect(posts).toEqual([
+        {
+          path: `/v1/admin/org/automation/jobs/${jid}/settle`,
+          body: {
+            outcome: "FAILED",
+            note: "Provider confirmed by phone it never ran",
+          },
+        },
+      ]);
+      expect(await page.locator("main").innerText()).not.toContain(
+        "PAY SUPPLIER",
+      );
+      await ctx.close();
+    }, 60_000);
+
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
       await page.goto(`${h.origin}/workspace`);

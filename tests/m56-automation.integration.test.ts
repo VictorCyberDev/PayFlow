@@ -303,4 +303,73 @@ const T: JobTenant = { organizationId: "org-a", environment: "SANDBOX" };
       (await h.call(CRON, "GET", "/v1/admin/ops/alerts")).status,
     ).toBeGreaterThanOrEqual(401);
   });
+
+  it("a member sees their own organization's jobs and settles an unclear one with a note; a viewer cannot, and another organization sees nothing", async () => {
+    const a = mk();
+    const tenant: JobTenant = {
+      organizationId: "payflow-sandbox",
+      environment: "SANDBOX",
+    };
+    await a.enqueue(tenant, {
+      kind: "PAY",
+      effect: "EXTERNAL",
+      dedupeKey: "u1",
+    });
+    await a.enqueue(
+      { ...tenant, organizationId: "org-other" },
+      { kind: "PAY", effect: "EXTERNAL", dedupeKey: "u1" },
+    );
+    await a.claim("dead", 5);
+    h.advance(61_000);
+    await a.reapExpired();
+    const owner = await h.ownerOf();
+    const viewer = await h.member("VIEWER");
+    const list = await h.call(owner, "GET", "/v1/admin/org/automation/jobs");
+    const jobs = (
+      (await list.json()) as {
+        jobs: { jobId: string; state: string; organizationId: string }[];
+      }
+    ).jobs;
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      state: "UNKNOWN",
+      organizationId: "payflow-sandbox",
+    });
+    const path = `/v1/admin/org/automation/jobs/${jobs[0]!.jobId}/settle`;
+    expect(
+      (await h.call(viewer, "POST", path, { outcome: "SUCCEEDED", note: "x" }))
+        .status,
+    ).toBe(403);
+    expect(
+      (await h.call(owner, "POST", path, { outcome: "SUCCEEDED" })).status,
+    ).toBe(400);
+    expect(
+      (
+        await h.call(owner, "POST", path, {
+          outcome: "SUCCEEDED",
+          note: "provider emailed confirmation",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await h.call(owner, "POST", path, { outcome: "FAILED", note: "again" }))
+        .status,
+    ).toBe(404);
+    const stranger = await h.ownerOf("org-other");
+    const theirs = (
+      (await (
+        await h.call(stranger, "GET", "/v1/admin/org/automation/jobs")
+      ).json()) as { jobs: { jobId: string; state: string }[] }
+    ).jobs;
+    expect(theirs).toHaveLength(1);
+    expect(theirs[0]!.state).toBe("UNKNOWN"); // untouched by the other organization's settlement
+    expect(
+      (
+        await h.call(stranger, "POST", path, {
+          outcome: "FAILED",
+          note: "not mine",
+        })
+      ).status,
+    ).toBe(404);
+  });
 });

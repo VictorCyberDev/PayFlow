@@ -11,6 +11,7 @@ import {
   AutomationService,
   type Handler,
 } from "../automation/automation-service.js";
+import { createAutomationRoutes } from "./automation-routes.js";
 import { createServiceMarketRoutes } from "./service-market-routes.js";
 import { ServiceMarketService } from "../missions/service-market-service.js";
 import { sandboxServiceSource } from "../missions/service-market-sources.js";
@@ -1687,6 +1688,17 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         caller.environment,
       )) !== null,
   });
+  const automationRoutes = createAutomationRoutes({
+    service: automation,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+  });
   const talentCandidateRoutes = createTalentCandidateRoutes({
     service: talentCandidateService,
     reply: (requestId, status, body) => reply(requestId, status, body),
@@ -3315,6 +3327,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => workspaceRoutes.member(request))) ??
         (await safely(() => bookingRoutes.member(request))) ??
         (await safely(() => serviceMarketRoutes.member(request))) ??
+        (await safely(() => automationRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
         (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => contractorRoutes.member(request))) ??
