@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * V3 M63 — foreign exchange for budgets. Pure and deterministic. Integer math only (BigInt); no floats anywhere.
+ * V3 M65 — multi-currency / FX authority (the FX part) for budgets. Pure and deterministic. Integer math only (BigInt); no floats anywhere.
  *
  * A rate is an OBSERVATION with a source and a time. A rate that is stale, malformed or for the wrong pair is not used: the result is an
  * explicit refusal, never a guess. Rounding is always stated and always against the owner's interest being understated: what could be

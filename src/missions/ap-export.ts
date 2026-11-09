@@ -1,5 +1,5 @@
 /**
- * V3 M68 — accounting export (accounts-payable style). Pure and deterministic.
+ * V3 M70 — procurement / AP integration (export only) (accounts-payable style). Pure and deterministic.
  *
  * What goes out is the commitment ledger as rows a bookkeeper can open: one line per item with integer-exact decimal amounts (no floats),
  * the stage in words, and how it was verified. It is an EXPORT: it connects to no ERP, posts nothing and claims no entry is booked anywhere.

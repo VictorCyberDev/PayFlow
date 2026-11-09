@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cell, decimal, toCsv, HEADER } from "../src/missions/ap-export.js";
 
-describe("M68 accounting export", () => {
+describe("M70 accounting export (export only)", () => {
   it("writes decimals exactly, with no floating point, for every currency exponent", () => {
     expect(decimal(12_345, "USD")).toBe("123.45");
     expect(decimal(5, "USD")).toBe("0.05");

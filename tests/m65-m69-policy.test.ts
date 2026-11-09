@@ -28,7 +28,7 @@ const ctx = (direction: "OWED" | "AVAILABLE") => ({
   direction,
 });
 
-describe("M63 FX", () => {
+describe("M65 FX", () => {
   it("converts with integer math, rounding what is owed UP and what is available DOWN", () => {
     // 10.01 GBP at 1.2745 = 12.7575… USD
     const owed = convert(1_001, "GBP", "USD", rate, ctx("OWED"));
@@ -116,7 +116,7 @@ const vote = (
 ): Vote => ({ memberId, roleNow, decision, at });
 const exp = { expiresAt: "2026-11-10T00:00:00.000Z" };
 
-describe("M65 quorum", () => {
+describe("M67 quorum", () => {
   it("picks the tier by amount; below every threshold nothing extra is needed", () => {
     expect(tierFor(policy, 99_999)).toBeNull();
     expect(tierFor(policy, 100_000)?.approvals).toBe(1);
@@ -208,7 +208,7 @@ describe("M65 quorum", () => {
   });
 });
 
-describe("M66 agent lifecycle", () => {
+describe("M68 agent lifecycle", () => {
   it("only legal moves exist; retired is final; suspended can resume", () => {
     expect(canMoveAgent("ENROLLED", "ACTIVE")).toBe(true);
     expect(canMoveAgent("ACTIVE", "SUSPENDED")).toBe(true);
@@ -258,7 +258,7 @@ describe("M66 agent lifecycle", () => {
   });
 });
 
-describe("M67 policy packs", () => {
+describe("M69 policy packs", () => {
   const asked = {
     totalBudgetMinor: 100_000,
     maxPurchaseMinor: 90_000,

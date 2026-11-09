@@ -1,5 +1,5 @@
 /**
- * V3 M66 — agent lifecycle. Pure and deterministic. An agent holds authority only while ACTIVE with a credential that has not expired.
+ * V3 M68 — agent lifecycle governance. Pure and deterministic. An agent holds authority only while ACTIVE with a credential that has not expired.
  * SUSPENDED agents hold none and can be resumed by a person; RETIRED is final. A credential nearing its end is flagged for rotation
  * before it lapses, so a working agent is not silently cut off, and an overdue credential never keeps working.
  */

@@ -1,4 +1,4 @@
--- V3 M65: approval quorum. Additive only. With NO policy row, mission approval behaves exactly as before (one owner approves).
+-- V3 M67: approval quorum. Additive only. With NO policy row, mission approval behaves exactly as before (one owner approves).
 -- A policy makes approvals above a threshold need N distinct owners other than the requester. Votes are append-only: the first vote of a member counts.
 CREATE TABLE org_quorum_policies (
   organization_id text NOT NULL REFERENCES organizations(id),

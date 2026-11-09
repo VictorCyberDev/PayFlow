@@ -5,12 +5,12 @@ import { TRUNCATE } from "./helpers/settled-order.js";
 import { contract, idemKey, MISSIONS } from "./helpers/mission-fixtures.js";
 
 /**
- * V3 M65 — approval quorum through the real Gateway on PostgreSQL. With no policy nothing changes. With one, a large mission needs approvals
+ * V3 M67 — approval quorum through the real Gateway on PostgreSQL. With no policy nothing changes. With one, a large mission needs approvals
  * from distinct owners other than the person who proposed it, and the mission stays out of force until enough have approved.
  */
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)(
-  "M65 approval quorum (PostgreSQL + real Gateway)",
+  "M67 approval quorum (PostgreSQL + real Gateway)",
   () => {
     const h = hostHarness({
       extraTruncate: TRUNCATE + ",org_quorum_policies,mission_approval_votes",

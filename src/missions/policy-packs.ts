@@ -1,5 +1,5 @@
 /**
- * V3 M67 — policy packs. Pure and deterministic. A pack is a named set of ceilings. Applying a pack only ever TIGHTENS what the owner
+ * V3 M69 — organization policy packs. Pure and deterministic. A pack is a named set of ceilings. Applying a pack only ever TIGHTENS what the owner
  * asked for: a limit above the pack's ceiling is lowered to it (and the change is reported), a limit below it is left alone. A pack
  * can never raise a limit, add a provider type or widen a window.
  */

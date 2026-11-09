@@ -11,7 +11,7 @@ import {
 import type { MissionCaller } from "./service.js";
 
 /**
- * V3 M65 — approval quorum in front of mission approval. With no policy it does nothing, so every existing path is unchanged. With one, an
+ * V3 M67 — approval quorum in front of mission approval. With no policy it does nothing, so every existing path is unchanged. With one, an
  * approval above a threshold is recorded as a vote and the mission is put in force only when enough distinct, current, eligible owners other
  * than the requester have approved. The arithmetic is quorum.ts; this file only loads facts and stores votes.
  */

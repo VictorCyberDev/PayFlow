@@ -2753,7 +2753,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         });
         return true;
       }
-      // ---- Safety packs (M67): named ceilings. Applying one only ever lowers what the person asked for, and says what it changed.
+      // ---- Safety packs (M69): named ceilings. Applying one only ever lowers what the person asked for, and says what it changed.
       if (
         path === "/v1/app/policy-packs" ||
         path === "/v1/app/policy-packs/apply"

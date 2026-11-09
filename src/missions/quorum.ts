@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * V3 M65 — approval quorum. Pure and deterministic. A large decision can need more than one person.
+ * V3 M67 — separation of duties and multi-party approval. Pure and deterministic. A large decision can need more than one person.
  *
  * Rules that cannot be configured away: approvals count once per distinct member; the requester never counts toward their own request
  * (separation of duties); any rejection from a member of a required role blocks the decision; an approval that arrives after the request
