@@ -1,19 +1,22 @@
 /**
  * V3 M68 — agent lifecycle governance. Pure and deterministic. An agent holds authority only while ACTIVE with a credential that has not expired.
- * SUSPENDED agents hold none and can be resumed by a person; RETIRED is final. A credential nearing its end is flagged for rotation
+ * SUSPENDED agents hold none and can be resumed by a person; REVOKED and RETIRED are final. A credential nearing its end is flagged for rotation
  * before it lapses, so a working agent is not silently cut off, and an overdue credential never keeps working.
  */
+/** The same five values the database stores in `organization_agents.lifecycle`. This module adds no state of its own. */
 export const AGENT_STATES = [
-  "ENROLLED",
+  "REGISTERED",
   "ACTIVE",
   "SUSPENDED",
+  "REVOKED",
   "RETIRED",
 ] as const;
 export type AgentState = (typeof AGENT_STATES)[number];
 const NEXT: Record<AgentState, readonly AgentState[]> = {
-  ENROLLED: ["ACTIVE", "RETIRED"],
-  ACTIVE: ["SUSPENDED", "RETIRED"],
-  SUSPENDED: ["ACTIVE", "RETIRED"],
+  REGISTERED: ["ACTIVE", "REVOKED", "RETIRED"],
+  ACTIVE: ["SUSPENDED", "REVOKED", "RETIRED"],
+  SUSPENDED: ["ACTIVE", "REVOKED", "RETIRED"],
+  REVOKED: [], // final: a revoked agent is never brought back
   RETIRED: [],
 };
 export const canMoveAgent = (from: AgentState, to: AgentState) =>
@@ -26,6 +29,7 @@ export type Readiness =
       why:
         | "NOT_ACTIVATED"
         | "SUSPENDED"
+        | "REVOKED"
         | "RETIRED"
         | "CREDENTIAL_EXPIRED"
         | "CREDENTIAL_NOT_YET_VALID";
@@ -37,8 +41,9 @@ export function readiness(
   now: string,
   rotateWithinDays = 7,
 ): Readiness {
-  if (state === "ENROLLED") return { canAct: false, why: "NOT_ACTIVATED" };
+  if (state === "REGISTERED") return { canAct: false, why: "NOT_ACTIVATED" };
   if (state === "SUSPENDED") return { canAct: false, why: "SUSPENDED" };
+  if (state === "REVOKED") return { canAct: false, why: "REVOKED" };
   if (state === "RETIRED") return { canAct: false, why: "RETIRED" };
   const t = Date.parse(now);
   if (t < Date.parse(credential.issuedAt))

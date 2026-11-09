@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { convert, exponentOf } from "../src/missions/fx.js";
 import {
@@ -7,6 +8,7 @@ import {
   type Vote,
 } from "../src/missions/quorum.js";
 import {
+  AGENT_STATES,
   canMoveAgent,
   readiness,
   type AgentState,
@@ -209,18 +211,27 @@ describe("M67 quorum", () => {
 });
 
 describe("M68 agent lifecycle", () => {
+  it("uses exactly the states the database allows (no second vocabulary)", () => {
+    const sql = readFileSync(
+      "db/migrations/013_m7_m15_network_control_plane.sql",
+      "utf8",
+    );
+    const m =
+      /lifecycle text NOT NULL DEFAULT 'REGISTERED' CHECK \(lifecycle IN \(([^)]*)\)\)/u.exec(
+        sql,
+      );
+    const db = (m?.[1] ?? "")
+      .split(",")
+      .map((x) => x.trim().replaceAll("'", ""));
+    expect([...AGENT_STATES]).toEqual(db);
+  });
   it("only legal moves exist; retired is final; suspended can resume", () => {
-    expect(canMoveAgent("ENROLLED", "ACTIVE")).toBe(true);
+    expect(canMoveAgent("REGISTERED", "ACTIVE")).toBe(true);
     expect(canMoveAgent("ACTIVE", "SUSPENDED")).toBe(true);
     expect(canMoveAgent("SUSPENDED", "ACTIVE")).toBe(true);
-    expect(canMoveAgent("ENROLLED", "SUSPENDED")).toBe(false);
-    for (const to of [
-      "ENROLLED",
-      "ACTIVE",
-      "SUSPENDED",
-      "RETIRED",
-    ] as AgentState[])
-      expect(canMoveAgent("RETIRED", to)).toBe(false);
+    expect(canMoveAgent("REGISTERED", "SUSPENDED")).toBe(false);
+    for (const from of ["REVOKED", "RETIRED"] as AgentState[])
+      for (const to of AGENT_STATES) expect(canMoveAgent(from, to)).toBe(false);
   });
   it("authority needs ACTIVE and a live credential; rotation is flagged before it lapses and an expired one never works", () => {
     const cred = {
@@ -247,9 +258,13 @@ describe("M68 agent lifecycle", () => {
       canAct: false,
       why: "SUSPENDED",
     });
-    expect(readiness("ENROLLED", cred, NOW)).toEqual({
+    expect(readiness("REGISTERED", cred, NOW)).toEqual({
       canAct: false,
       why: "NOT_ACTIVATED",
+    });
+    expect(readiness("REVOKED", cred, NOW)).toEqual({
+      canAct: false,
+      why: "REVOKED",
     });
     expect(readiness("RETIRED", cred, NOW)).toEqual({
       canAct: false,
