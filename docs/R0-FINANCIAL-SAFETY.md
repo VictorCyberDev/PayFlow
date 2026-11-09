@@ -84,7 +84,17 @@ The execution intent also records the exact trusted checkout quote (id + fingerp
 
 ## 6. Regression record
 
-_Filled in below with the actual results of the full run on the final head, including the historical failure of the first full run (M49 only, caused by running while sources were still being edited)._
+Local, PostgreSQL 16 on `localhost`, `TEST_DATABASE_URL` set, one vitest process at a time:
+
+| Run | Head                       | Result                                                       | Note                                                                                                                                                                                                      |
+| --- | -------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | pre-`88ea488` working tree | 135/136 files; M49 failed (3 tests)                          | **Invalid as acceptance**: the run overlapped edits to the M49 service and tests. Kept as a historical record.                                                                                            |
+| 2   | `8748751`+                 | aborted                                                      | Killed to add M43/M50 failure tests; two orphan vitest processes briefly corrupted a following run (test-infrastructure interference, not product).                                                       |
+| 3   | `afe7700`                  | 2563 pass, **1 fail**: M29 lifecycle test                    | Test defect: it indexed `authorities[0]` while two agents hold purchasing Authorities; order is not guaranteed. Fixed to select by id.                                                                    |
+| 4   | `848a907`                  | **136 files passed, 3 skipped; 2564 tests passed, 0 failed** | `FULL_REGRESSION_PASSED`. The 3 skipped files are the credentialed provider sandbox tests (`paypal.sandbox`, `paypal-commerce.sandbox`, `groq.smoke`) — `BLOCKED_EXTERNAL`; no database test was skipped. |
+
+Also on `848a907`: `format:check`, `lint`, `typecheck`, `build`, `secret:scan` (0 findings) and `evidence:check` pass. Migration `053` applies cleanly after `001`–`052` on an empty isolated database (this is also the upgrade path from 052).
+GitHub CI on the PR head is recorded in `docs/V3-EXECUTION-LEDGER.md`.
 
 ## 7. Gate
 
