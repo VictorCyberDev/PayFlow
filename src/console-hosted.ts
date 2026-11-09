@@ -1,4 +1,5 @@
 import type { ConnectorRegistry } from "./missions/connectors.js";
+import { GroqDraftModel, type DraftModel } from "./missions/draft-assistant.js";
 import type { ChannelRegistry } from "./missions/channels.js";
 import type { TalentSourceRegistry } from "./missions/talent-candidates.js";
 import { createPrivateKey, createPublicKey } from "node:crypto";
@@ -256,6 +257,8 @@ export function createHostedConsole(
     channels?: ChannelRegistry;
     /** Test seam: the talent sources candidates are imported from instead of the built-in fictional sandbox source. */
     talentSources?: TalentSourceRegistry;
+    /** Test/operator override for the wizard's AI suggestion model. */
+    draftModel?: DraftModel;
     sendTimeoutMs?: number;
   } = {},
 ) {
@@ -370,6 +373,15 @@ export function createHostedConsole(
         ...(deps.connectors ? { connectors: deps.connectors } : {}),
         ...(deps.channels ? { channels: deps.channels } : {}),
         ...(deps.talentSources ? { talentSources: deps.talentSources } : {}),
+        // The AI suggestion is OFF unless the operator turns it on AND supplies a key (cost and data-sharing decision).
+        ...(deps.draftModel
+          ? { draftModel: deps.draftModel }
+          : process.env["PAYFLOW_AI_DRAFT"] === "true"
+            ? (() => {
+                const m = GroqDraftModel.fromEnvironment();
+                return m ? { draftModel: m } : {};
+              })()
+            : {}),
         ...(deps.sendTimeoutMs ? { sendTimeoutMs: deps.sendTimeoutMs } : {}),
         principalId: config.PAYFLOW_M5_PRINCIPAL_ID,
         agentId: config.PAYFLOW_M5_AGENT_ID,

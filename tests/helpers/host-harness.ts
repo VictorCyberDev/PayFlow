@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach } from "vitest";
+import type { DraftModel } from "../../src/missions/draft-assistant.js";
 import { generateKeyPairSync } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -33,6 +34,7 @@ export function hostHarness(
     connectors?: () => ConnectorRegistry;
     channels?: () => ChannelRegistry;
     talentSources?: () => TalentSourceRegistry;
+    draftModel?: () => DraftModel;
     sendTimeoutMs?: number;
   } = {},
 ) {
@@ -82,6 +84,7 @@ export function hostHarness(
         ...(options.talentSources
           ? { talentSources: options.talentSources() }
           : {}),
+        ...(options.draftModel ? { draftModel: options.draftModel() } : {}),
         ...(options.sendTimeoutMs
           ? { sendTimeoutMs: options.sendTimeoutMs }
           : {}),

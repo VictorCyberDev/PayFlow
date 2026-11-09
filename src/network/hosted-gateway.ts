@@ -4,6 +4,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { draftMission, type DraftModel } from "../missions/draft-assistant.js";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import {
@@ -170,6 +171,8 @@ export interface HostedGatewayOptions {
    * unsafe requests from any other Origin are refused (CSRF). Empty = cookie sessions cannot change anything.
    */
   readonly appOrigins?: readonly string[];
+  /** Model that SUGGESTS mission wording in the wizard. Absent = the suggestion route answers MODEL_NOT_CONFIGURED. */
+  readonly draftModel?: DraftModel;
   /** Set `Secure` on the session cookie (default true). Only local plain-http development turns this off. */
   readonly secureCookies?: boolean;
   /** Requests per minute allowed from one client address across ALL credentials (default 600). */
@@ -2592,6 +2595,87 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           csrfToken: csrfFor(sessionTokenIn),
           expiresAt: view.expiresAt,
         });
+        return true;
+      }
+      // ---- AI assist: a model SUGGESTS wording and rough numbers for the wizard. It decides nothing and is optional.
+      if (method === "POST" && path === "/v1/app/missions/draft") {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        if (!can(view.member.role, "mission:create")) {
+          json(403, {
+            reason: "PERMISSION_DENIED",
+            requiredPermission: "mission:create",
+          });
+          return true;
+        }
+        // Cost discipline: a per-minute and a per-day cap for each member, before any model call.
+        for (const [windowSeconds, limit] of [
+          [60, 6],
+          [86_400, 40],
+        ] as const) {
+          let gate;
+          try {
+            gate = await enforceRateLimit(limiter, {
+              bucket: `ai-draft-${windowSeconds}`,
+              subject: view.member.memberId,
+              limit,
+              windowSeconds,
+              now: iso(),
+            });
+          } catch {
+            gate = { allowed: false, remaining: 0, resetAt: iso() };
+          }
+          if (!gate.allowed) {
+            json(
+              429,
+              { reason: "RATE_LIMITED", recoverable: true },
+              { "retry-after": "60" },
+            );
+            return true;
+          }
+        }
+        const text = (body as { text?: unknown } | undefined)?.text;
+        const result = await draftMission(options.draftModel, text);
+        await audit.append({
+          organizationId: view.member.organizationId,
+          environment: view.member.environment,
+          actorKind: "MEMBER",
+          actorId: view.member.memberId,
+          action: "MISSION_DRAFT_SUGGESTED",
+          subjectKind: "MISSION_DRAFT",
+          subjectId: view.member.memberId,
+          // The text itself is never stored in the audit trail.
+          detail: {
+            status: result.status,
+            characters: typeof text === "string" ? text.length : 0,
+          },
+          occurredAt: iso(),
+        });
+        if (result.status === "DRAFTED") {
+          json(200, {
+            source: "MODEL",
+            notice:
+              "Suggested by an AI model. Review every field: nothing is created or approved until you do it yourself.",
+            draft: result.draft,
+          });
+          return true;
+        }
+        json(
+          result.status === "INVALID_INPUT"
+            ? 400
+            : result.status === "MODEL_NOT_CONFIGURED"
+              ? 503
+              : 502,
+          {
+            reason: result.status,
+            recoverable: true,
+          },
+        );
         return true;
       }
       // ---- agents: a person enrolls the agents their missions will use, and issues each one a credential (shown once).

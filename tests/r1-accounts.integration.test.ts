@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hostHarness } from "./helpers/host-harness.js";
+import type { DraftModel } from "../src/missions/draft-assistant.js";
 import { MISSIONS, contract, idemKey } from "./helpers/mission-fixtures.js";
 import {
   LOCKOUT_MS,
@@ -55,7 +56,25 @@ describe("R1a password hashing and cookies (pure)", () => {
 (url ? describe : describe.skip)(
   "R1a accounts and sessions (PostgreSQL + real HTTP host)",
   () => {
+    let modelCalls = 0;
     const h = hostHarness({
+      draftModel: (): DraftModel => ({
+        complete: () => {
+          modelCalls++;
+          return Promise.resolve({
+            status: "OK" as const,
+            text: JSON.stringify({
+              objective: "Buy two quiet keyboards",
+              intendedOutcome: "Two keyboards ordered",
+              successCriteria: ["Under budget"],
+              suggestedBudgetMinor: 100_000,
+              suggestedMaxPurchaseMinor: 30_000,
+              suggestedCategory: "KEYBOARDS",
+              questions: [],
+            }),
+          });
+        },
+      }),
       extraTruncate:
         "user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
     });
@@ -333,6 +352,49 @@ describe("R1a password hashing and cookies (pure)", () => {
             .sql`select count(*)::int n from agent_passports where display_name = 'Sneaky'`
         )[0]!.n,
       ).toBe(0);
+    });
+
+    it("AI suggestion route: needs a session, the CSRF token and a role that may create missions; is capped; stores no text in the audit trail", async () => {
+      const a = await signedIn();
+      const draft = (
+        who: { cookie: string; csrf: string } | null,
+        text: unknown = "I need two quiet keyboards for the studio",
+      ) =>
+        send("POST", "/v1/app/missions/draft", {
+          ...(who ? { cookie: who.cookie, csrf: who.csrf } : {}),
+          body: { text },
+        });
+      expect((await draft(null)).status).toBe(401);
+      const before = modelCalls;
+      expect(
+        (
+          await send("POST", "/v1/app/missions/draft", {
+            cookie: a.cookie,
+            body: { text: "I need two quiet keyboards" },
+          })
+        ).status,
+      ).toBe(403); // no CSRF
+      expect(modelCalls).toBe(before);
+      expect((await draft(a, 5)).status).toBe(400);
+      const ok = await draft(a, "SECRET-GOAL-TEXT I need two quiet keyboards");
+      expect(ok.status).toBe(200);
+      const body = (await ok.json()) as {
+        source: string;
+        notice: string;
+        draft: { objective: string };
+      };
+      expect(body.source).toBe("MODEL");
+      expect(body.notice).toContain("Review every field");
+      expect(body.draft.objective).toBe("Buy two quiet keyboards");
+      const audit = await h.repo
+        .sql`select detail from organization_audit_events where action = 'MISSION_DRAFT_SUGGESTED' and organization_id = ${a.organizationId}`;
+      expect(JSON.stringify(audit)).not.toContain("SECRET-GOAL-TEXT");
+      expect(audit.length).toBeGreaterThanOrEqual(1);
+      // a per-minute cap protects cost: the 7th request inside a minute never reaches the model
+      for (let i = 0; i < 5; i++) expect((await draft(a)).status).toBe(200);
+      const calls = modelCalls;
+      expect((await draft(a)).status).toBe(429);
+      expect(modelCalls).toBe(calls);
     });
 
     it("logout revokes the session; an idle session expires; a disabled account's sessions stop working", async () => {

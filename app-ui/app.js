@@ -488,6 +488,7 @@ async function wizard() {
       panel = h(
         "div",
         {},
+        suggestBox(),
         input(
           "objective",
           "What should be done?",
@@ -647,6 +648,65 @@ async function wizard() {
       h("label", { for: id, text: label }),
       el,
       hint && h("p", { class: "hint", text: hint }),
+    );
+  }
+  /** Optional AI suggestion: pre-fills the fields for the person to review. It never creates or approves anything. */
+  function suggestBox() {
+    const status = h("p", { class: "hint", role: "status" });
+    const note = h("p", { id: "ai-note", class: "hint", role: "status" });
+    const box = h("textarea", { id: "ai-text", rows: 3, maxlength: "1500" });
+    return h(
+      "div",
+      { class: "card" },
+      h("label", {
+        for: "ai-text",
+        text: "Or describe it in your own words (optional)",
+      }),
+      box,
+      h(
+        "div",
+        { class: "actions" },
+        h(
+          "button",
+          {
+            type: "button",
+            onclick: async () => {
+              status.textContent = "Thinking…";
+              const r = await api("/v1/app/missions/draft", {
+                method: "POST",
+                body: { text: box.value },
+              });
+              if (!r.ok) {
+                status.textContent =
+                  r.status === 503
+                    ? "AI suggestions aren't switched on for this workspace. Fill in the fields yourself."
+                    : r.status === 429
+                      ? "Too many suggestions. Try again in a minute."
+                      : "No suggestion this time. Fill in the fields yourself.";
+                return;
+              }
+              const s = r.data.draft;
+              d.objective = s.objective;
+              d.outcome = s.intendedOutcome;
+              d.criteria = s.successCriteria.join("\n");
+              d.budget = String(s.suggestedBudgetMinor / 100);
+              d.maxOne = String(s.suggestedMaxPurchaseMinor / 100);
+              d.approveAbove = String(
+                Math.max(1, Math.round(s.suggestedMaxPurchaseMinor * 0.7)) /
+                  100,
+              );
+              d.category = s.suggestedCategory;
+              draw();
+              const n = document.getElementById("ai-note");
+              if (n)
+                n.textContent = `${r.data.notice}${s.questions.length ? " Questions to consider: " + s.questions.join(" ") : ""}`;
+            },
+          },
+          "Suggest",
+        ),
+      ),
+      status,
+      note,
     );
   }
   function collect() {
