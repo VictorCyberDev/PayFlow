@@ -36,6 +36,7 @@ const STATUS: Record<QuoteRefusal, number> = {
   QUOTE_INCOMPLETE: 422,
   CURRENCY_MISMATCH: 422,
   LEDGER_REFUSED: 409,
+  LINK_INTEGRITY_FAILURE: 409,
 };
 const MID = "msn_[a-f0-9]{24}";
 const QID = "qte_[a-f0-9]{24}";

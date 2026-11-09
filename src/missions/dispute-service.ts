@@ -268,56 +268,89 @@ export class DisputeService {
         ? { ok: true, value: { dispute: await this.view(d), replayed: true } }
         : { ok: false, refusal: "ALREADY_RESOLVED" };
     const now = this.deps.now();
-    if (b.data.decision === "REFUND") {
-      if (
-        b.data.refundMinor === undefined ||
+    if (
+      b.data.decision === "REFUND" &&
+      (b.data.refundMinor === undefined ||
         !b.data.evidenceKind ||
-        !b.data.evidenceRef
-      )
-        return {
-          ok: false,
-          refusal: "REFUND_NOT_ALLOWED",
-          detail: "REFUND_NEEDS_AMOUNT_AND_EVIDENCE",
-        };
-      const [item] =
-        await sql`select amount_minor, refunded_minor from mission_ledger_items where item_id = ${String(d.ledger_item_id)}`;
-      const problems = refundProblems({
-        claimedMinor: Number(d.claimed_minor),
-        refundMinor: b.data.refundMinor,
-        paidMinor: Number(item!.amount_minor),
-        alreadyRefundedMinor: Number(item!.refunded_minor),
-      });
-      if (problems.length > 0)
-        return {
-          ok: false,
-          refusal: "REFUND_NOT_ALLOWED",
-          detail: problems.join(","),
-        };
-      // The ledger applies the refund (it demands the evidence). Its key is fixed per dispute, so a retry is a replay, never a second refund.
-      const moved = await this.deps.ledger.transition(
-        caller,
-        String(d.ledger_item_id),
-        {
-          to: "SETTLED",
-          refundMinor: b.data.refundMinor,
-          evidenceKind: b.data.evidenceKind,
-          evidence: { dispute: disputeId, ref: b.data.evidenceRef },
-          idempotencyKey: `refund-${disputeId}`,
-        },
-      );
-      if (!moved.ok)
-        return { ok: false, refusal: "LEDGER_REFUSED", detail: moved.refusal };
+        !b.data.evidenceRef)
+    )
+      return {
+        ok: false,
+        refusal: "REFUND_NOT_ALLOWED",
+        detail: "REFUND_NEEDS_AMOUNT_AND_EVIDENCE",
+      };
+    // R0: the refund in the ledger and the dispute's resolution are ONE transaction, under a lock on the dispute. Before, a crash
+    // between them left the refund applied and the dispute OPEN, and the retry's own pre-check then saw the refund already applied
+    // and refused it, so the dispute could never be resolved.
+    class Rollback extends Error {
+      constructor(readonly refusal: DRefusalOut) {
+        super("ROLLBACK");
+      }
     }
-    const upd =
-      await sql`update mission_disputes set status = ${want}, refunded_minor = ${b.data.decision === "REFUND" ? b.data.refundMinor! : 0},
-      resolved_by = ${caller.id}, resolved_at = ${now}, resolution_note = ${b.data.note || null}
-      where dispute_id = ${disputeId} and status = 'OPEN' returning *`;
-    if (upd.length === 0) return { ok: false, refusal: "ALREADY_RESOLVED" };
-    await this.log(caller, "DISPUTE_RESOLVED", disputeId, now);
-    return {
-      ok: true,
-      value: { dispute: await this.view(upd[0]!), replayed: false },
-    };
+    type DRefusalOut = { refusal: string; detail?: string };
+    const afters: (() => Promise<void>)[] = [];
+    try {
+      const resolved = await sql.begin(async (tx) => {
+        const [cur] =
+          await tx`select status from mission_disputes where dispute_id = ${disputeId} for update`;
+        if (!cur || cur.status !== "OPEN")
+          throw new Rollback({ refusal: "ALREADY_RESOLVED" });
+        if (b.data.decision === "REFUND") {
+          const [item] =
+            await tx`select amount_minor, refunded_minor from mission_ledger_items where item_id = ${String(d.ledger_item_id)} for update`;
+          const problems = refundProblems({
+            claimedMinor: Number(d.claimed_minor),
+            refundMinor: b.data.refundMinor!,
+            paidMinor: Number(item!.amount_minor),
+            alreadyRefundedMinor: Number(item!.refunded_minor),
+          });
+          if (problems.length > 0)
+            throw new Rollback({
+              refusal: "REFUND_NOT_ALLOWED",
+              detail: problems.join(","),
+            });
+          // The ledger applies the refund (it demands the evidence). Its key is fixed per dispute, so a replay is never a second refund.
+          const moved = await this.deps.ledger.transitionInTx(
+            tx,
+            caller,
+            String(d.ledger_item_id),
+            {
+              to: "SETTLED",
+              refundMinor: b.data.refundMinor,
+              evidenceKind: b.data.evidenceKind,
+              evidence: { dispute: disputeId, ref: b.data.evidenceRef },
+              idempotencyKey: `refund-${disputeId}`,
+            },
+          );
+          if (!moved.ok)
+            throw new Rollback({
+              refusal: "LEDGER_REFUSED",
+              detail: moved.refusal,
+            });
+          if (moved.after) afters.push(moved.after);
+        }
+        const [upd] =
+          await tx`update mission_disputes set status = ${want}, refunded_minor = ${b.data.decision === "REFUND" ? b.data.refundMinor! : 0},
+          resolved_by = ${caller.id}, resolved_at = ${now}, resolution_note = ${b.data.note || null}
+          where dispute_id = ${disputeId} and status = 'OPEN' returning *`;
+        if (!upd) throw new Rollback({ refusal: "ALREADY_RESOLVED" });
+        return upd;
+      });
+      for (const after of afters) await after();
+      await this.log(caller, "DISPUTE_RESOLVED", disputeId, now);
+      return {
+        ok: true,
+        value: { dispute: await this.view(resolved), replayed: false },
+      };
+    } catch (e) {
+      if (e instanceof Rollback)
+        return {
+          ok: false,
+          refusal: e.refusal.refusal as "ALREADY_RESOLVED",
+          ...(e.refusal.detail ? { detail: e.refusal.detail } : {}),
+        };
+      throw e;
+    }
   }
 
   async withdraw(

@@ -361,6 +361,57 @@ describe("M43 dispute rules (pure)", () => {
       expect((await item(t.id)).refunded_minor).toBe("3000");
     });
 
+    it("R0: a crash inside resolution (after the ledger refund, before the dispute update) rolls the refund back; the retry refunds exactly once", async () => {
+      const t = await damaged();
+      const did = (await body(await open(t.owner, t.oid))).dispute
+        .disputeId as string;
+      await h.repo.sql
+        .unsafe(`create or replace function r0_dispute_failpoint() returns trigger language plpgsql as $f$
+        begin raise exception 'FAILPOINT_DISPUTE_UPDATE'; end $f$`);
+      await h.repo.sql.unsafe(
+        `create trigger r0_dispute_failpoint before update on mission_disputes for each row execute function r0_dispute_failpoint()`,
+      );
+      let crashed: Response;
+      try {
+        crashed = await post(t.owner, `/v1/admin/org/disputes/${did}/resolve`, {
+          decision: "REFUND",
+          refundMinor: 3_000,
+          evidenceKind: "PROVIDER_CONFIRMATION",
+          evidenceRef: "re-1",
+        });
+      } finally {
+        await h.repo.sql.unsafe(
+          `drop trigger if exists r0_dispute_failpoint on mission_disputes`,
+        );
+      }
+      expect(crashed.status).toBeGreaterThanOrEqual(500);
+      // nothing survived: no refund in the ledger, no ledger entry for it, dispute still open
+      expect((await item(t.id)).refunded_minor).toBe("0");
+      const entries = await h.repo
+        .sql`select count(*)::int n from mission_ledger_entries e join mission_ledger_items i on i.item_id = e.item_id where i.mission_id = ${t.id} and e.idempotency_key = ${"refund-" + did}`;
+      expect(entries[0]!.n).toBe(0);
+      const r = await post(t.owner, `/v1/admin/org/disputes/${did}/resolve`, {
+        decision: "REFUND",
+        refundMinor: 3_000,
+        evidenceKind: "PROVIDER_CONFIRMATION",
+        evidenceRef: "re-1",
+      });
+      expect(r.status, await r.clone().text()).toBe(200);
+      expect((await item(t.id)).refunded_minor).toBe("3000");
+      const again = await post(
+        t.owner,
+        `/v1/admin/org/disputes/${did}/resolve`,
+        {
+          decision: "REFUND",
+          refundMinor: 3_000,
+          evidenceKind: "PROVIDER_CONFIRMATION",
+          evidenceRef: "re-1",
+        },
+      );
+      expect((await body(again)).replayed).toBe(true);
+      expect((await item(t.id)).refunded_minor).toBe("3000");
+    });
+
     it("a full refund closes the item as REFUNDED; a refusal or a withdrawal moves no money; a closed dispute lets a new one open", async () => {
       const t = await damaged();
       const first = (

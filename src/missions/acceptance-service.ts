@@ -467,52 +467,79 @@ export class AcceptanceService {
       id: `acceptance:${quoteId}`,
       kind: "SYSTEM" as const,
     };
-    const items = await this.deps.ledger.overview(
-      this.reader(caller),
-      q.missionId,
-    );
-    const stage = items.ok
-      ? items.value.items.find((i) => i.itemId === itemId)?.stage
-      : undefined;
-    if (stage !== "APPROVED") {
-      const moved = await this.deps.ledger.transition(
-        basis === "PERSON" ? caller : sys,
-        itemId,
-        { to: "APPROVED", idempotencyKey: `accept-approve-${quoteId}` },
-      );
-      if (!moved.ok)
-        return {
-          ok: false as const,
-          refusal: "LEDGER_REFUSED" as const,
-          detail: moved.refusal,
-        };
-    }
     const now = this.deps.now();
     const id = `acc_${randomBytes(12).toString("hex")}`;
-    const [row] =
-      await sql`insert into mission_acceptances (acceptance_id, mission_id, supplier_id, quote_id, negotiation_id, negotiation_version, total_minor, currency, basis,
-        accepted_by_kind, accepted_by, checks, override_reason, ledger_item_id, idempotency_key, created_at)
-      values (${id}, ${q.missionId}, ${q.view.supplierId}, ${quoteId}, ${negotiation?.negotiationId ?? null}, ${negotiation?.inForce?.version ?? null}, ${q.view.landed.totalMinor},
-        ${q.view.currency}, ${basis}, ${caller.kind}, ${caller.id}, ${sql.json(ev.checks as never)}, ${override}, ${itemId}, ${idempotencyKey}, ${now})
-      on conflict do nothing returning *`;
-    if (!row) {
-      const [existing] =
-        await sql`select * from mission_acceptances where quote_id = ${quoteId}`;
-      return existing
-        ? {
-            ok: true as const,
-            value: {
-              outcome: "ACCEPTED" as const,
-              acceptance: toAcceptance(existing),
-              replayed: true,
-            },
-          }
-        : {
-            ok: false as const,
-            refusal: "CHECKS_FAILED" as const,
-            detail: "NEGOTIATION_ALREADY_CONCLUDED",
-          };
+    // R0: approving the budget item and recording the acceptance are ONE transaction. A crash or a lost race can no longer leave an
+    // APPROVED item (budget held) without an acceptance, nor an acceptance without its approval. (The QUOTED item above consumes no
+    // budget, so the earlier idempotent steps are safe to leave outside.)
+    class Rollback extends Error {
+      constructor(readonly refusal: { refusal: string; detail?: string }) {
+        super("ROLLBACK");
+      }
     }
+    let row: Record<string, unknown> | undefined;
+    let replayedRow: Record<string, unknown> | undefined;
+    const afters: (() => Promise<void>)[] = [];
+    try {
+      await sql.begin(async (tx) => {
+        const [cur] =
+          await tx`select stage from mission_ledger_items where item_id = ${itemId} for update`;
+        if (cur && cur.stage !== "APPROVED") {
+          const moved = await this.deps.ledger.transitionInTx(
+            tx,
+            basis === "PERSON" ? caller : sys,
+            itemId,
+            { to: "APPROVED", idempotencyKey: `accept-approve-${quoteId}` },
+          );
+          if (!moved.ok)
+            throw new Rollback({
+              refusal: "LEDGER_REFUSED",
+              detail: moved.refusal,
+            });
+          if (moved.after) afters.push(moved.after);
+        }
+        const [inserted] =
+          await tx`insert into mission_acceptances (acceptance_id, mission_id, supplier_id, quote_id, negotiation_id, negotiation_version, total_minor, currency, basis,
+            accepted_by_kind, accepted_by, checks, override_reason, ledger_item_id, idempotency_key, created_at)
+          values (${id}, ${q.missionId}, ${q.view.supplierId}, ${quoteId}, ${negotiation?.negotiationId ?? null}, ${negotiation?.inForce?.version ?? null}, ${q.view.landed.totalMinor},
+            ${q.view.currency}, ${basis}, ${caller.kind}, ${caller.id}, ${tx.json(ev.checks as never)}, ${override}, ${itemId}, ${idempotencyKey}, ${now})
+          on conflict do nothing returning *`;
+        if (inserted) {
+          row = inserted;
+          return;
+        }
+        const [existing] =
+          await tx`select * from mission_acceptances where quote_id = ${quoteId}`;
+        if (existing) {
+          replayedRow = existing;
+          return;
+        }
+        // Another acceptance concluded the negotiation: undo anything this attempt did, including the approval.
+        throw new Rollback({
+          refusal: "CHECKS_FAILED",
+          detail: "NEGOTIATION_ALREADY_CONCLUDED",
+        });
+      });
+    } catch (e) {
+      if (e instanceof Rollback)
+        return {
+          ok: false as const,
+          refusal: e.refusal.refusal as "LEDGER_REFUSED" | "CHECKS_FAILED",
+          ...(e.refusal.detail ? { detail: e.refusal.detail } : {}),
+        };
+      throw e;
+    }
+    if (replayedRow)
+      return {
+        ok: true as const,
+        value: {
+          outcome: "ACCEPTED" as const,
+          acceptance: toAcceptance(replayedRow),
+          replayed: true,
+        },
+      };
+    if (!row) throw new Error("ACCEPTANCE_NOT_RECORDED");
+    for (const after of afters) await after();
     await this.log(
       caller,
       "OFFER_ACCEPTED",

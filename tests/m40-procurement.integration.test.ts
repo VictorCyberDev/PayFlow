@@ -373,7 +373,12 @@ describe("M40 reconciliation classification (pure)", () => {
         validUntil: "2026-11-10T10:00:00.000Z",
         document: {
           lines: [
-            { description: "Keyboard", quantity: 1, unitPrice: st(total) },
+            {
+              sku: "PF-KB-QUIET-BROWN-BLACK",
+              description: "Keyboard",
+              quantity: 1,
+              unitPrice: st(total),
+            },
           ],
           shipping: st(0),
           tax: st(0),
@@ -430,7 +435,12 @@ describe("M40 reconciliation classification (pure)", () => {
           { stage: string }[]
         >`select stage from mission_ledger_items where item_id = ${itemId}`
       )[0]!.stage;
-    const pay = async (token: string, authority: string, amount: number) => {
+    const pay = async (
+      token: string,
+      authority: string,
+      amount: number,
+      missionOrder?: string,
+    ) => {
       const r = await new PayFlowClient({
         baseUrl: h.origin,
         accessToken: token,
@@ -442,6 +452,7 @@ describe("M40 reconciliation classification (pure)", () => {
         nonce: `m40-${Math.random().toString(36).slice(2)}-0123456789`,
         authority,
         agent: "c",
+        ...(missionOrder ? { missionOrder } : {}),
       });
       return r;
     };
@@ -522,7 +533,7 @@ describe("M40 reconciliation classification (pure)", () => {
       const s = await scene();
       const acc = await accepted(s, 8_400);
       const o = (await (await issue(s.owner, acc.acceptanceId)).json()) as Po;
-      const paid = await pay(s.c, o.order.authorityId, 8_400);
+      const paid = await pay(s.c, o.order.authorityId, 8_400, o.order.poId);
       expect(paid).toMatchObject({ status: "COMPLETED", effectCount: 1 });
       const proposalId = paid.proof!.proposalId!;
       // someone who cannot see the ledger cannot reconcile; the wrong agent cannot either
@@ -560,21 +571,32 @@ describe("M40 reconciliation classification (pure)", () => {
       expect(entries[0]!.n).toBe(1);
     });
 
-    it("a payment that does not match the order holds the budget as UNKNOWN; it is never believed settled", async () => {
+    it("a payment that does not match the order is refused at the Gateway before the provider; reconciliation stays a second line of defence", async () => {
       const s = await scene();
-      const acc = await accepted(s, 9_000);
-      const o = (await (await issue(s.owner, acc.acceptanceId)).json()) as Po;
-      // the agent pays something else inside its Authority
-      const paid = await pay(s.c, o.order.authorityId, 8_400);
+      const acc1 = await accepted(s, 8_400);
+      const acc2 = await accepted(s, 9_000);
+      const o1 = (await (await issue(s.owner, acc1.acceptanceId)).json()) as Po;
+      const o2 = (await (await issue(s.owner, acc2.acceptanceId)).json()) as Po;
+      expect(o1.order.authorityId).toBe(o2.order.authorityId);
+      // first line: the 9,000 order cannot be paid with an 8,400 payment, nor the 8,400 order with 9,000
+      const wrong = await pay(s.c, o2.order.authorityId, 8_400, o2.order.poId);
+      expect(wrong).toMatchObject({
+        status: "DENIED",
+        effectCount: 0,
+        reason: "ORDER_CLAIMED_TERMS_MISMATCH",
+      });
+      expect(h.provider.captureCalls).toBe(0);
+      expect(await stage(acc2.ledgerItemId)).toBe("APPROVED");
+      // second line: if a payment for one order is offered as the payment for another, the budget is held, never settled
+      const paid = await pay(s.c, o1.order.authorityId, 8_400, o1.order.poId);
       expect(paid).toMatchObject({ status: "COMPLETED" });
       const r = await body(
-        await reconcile(s.owner, o.order.poId, paid.proof!.proposalId!),
+        await reconcile(s.owner, o2.order.poId, paid.proof!.proposalId!),
       );
       expect(r.reconciliation.classification).toBe("MISMATCH");
       expect(r.reconciliation.problems).toContain("AMOUNT_DIFFERS");
       expect(r.itemStage).toBe("UNKNOWN");
-      expect(await stage(acc.ledgerItemId)).toBe("UNKNOWN");
-      // the held budget still counts as exposure
+      expect(await stage(acc2.ledgerItemId)).toBe("UNKNOWN");
       const led = await body(await get(s.owner, `${MISSIONS}/${s.id}/ledger`));
       expect(led.summary.exposureMinor).toBeGreaterThanOrEqual(9_000);
     });
@@ -591,7 +613,7 @@ describe("M40 reconciliation classification (pure)", () => {
       const none = await reconcile(s.owner, o1.order.poId, "does-not-exist-1");
       expect(none.status).toBe(409);
       expect((await body(none)).reason).toBe("TRACE_UNAVAILABLE");
-      const paid = await pay(s.c, o1.order.authorityId, 8_400);
+      const paid = await pay(s.c, o1.order.authorityId, 8_400, o1.order.poId);
       const foreign = await body(
         await reconcile(s.owner, o2.order.poId, paid.proof!.proposalId!),
       );
@@ -619,7 +641,7 @@ describe("M40 reconciliation classification (pure)", () => {
       const s = await scene();
       const acc = await accepted(s, 8_400);
       const o = (await (await issue(s.owner, acc.acceptanceId)).json()) as Po;
-      const paid = await pay(s.c, o.order.authorityId, 8_400);
+      const paid = await pay(s.c, o.order.authorityId, 8_400, o.order.poId);
       // an earlier, different payment already settled this order
       await h.repo
         .sql`insert into mission_purchase_reconciliations (po_id, proposal_id, classification, trace_status, financial_outcome, refs, problems, ledger_steps, actor_kind, actor_id, occurred_at)

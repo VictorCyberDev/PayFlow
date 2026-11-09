@@ -4,6 +4,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { ExecutionBindingService } from "../missions/execution-binding.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Sql } from "postgres";
 import { FakeCommerceRanker } from "../commerce-discovery.js";
@@ -264,6 +265,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   };
   const gateway = new ExecutingGateway({
     repo,
+    binding: new ExecutionBindingService({ sql, now: iso }),
     // Routing is by the Authority's organization and is fail-closed in both directions: a public
     // sandbox organization (`sbx_`) can only ever reach the simulated rail, and every other
     // organization can only ever reach the configured real rail.

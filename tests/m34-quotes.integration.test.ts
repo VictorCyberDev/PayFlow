@@ -577,6 +577,73 @@ describe("M34 landed cost (pure)", () => {
       }
     });
 
+    it("R0: the loser of a link race verifies what the winner linked: the same item replays; a different item is an integrity refusal (deterministic failpoints, no timing)", async () => {
+      const { owner, id } = await mission();
+      const sid = await supplier(owner, id);
+      const put = (quoteId: string) =>
+        post(owner, `/v1/admin/org/quotes/${quoteId}/ledger`, {
+          idempotencyKey: idemKey("l"),
+        });
+      /** While the service's own insert is pending, "another caller" lands its link first (depth 1 only, so no recursion). */
+      const racer = async (quoteId: string, itemExpr: string) => {
+        await h.repo.sql
+          .unsafe(`create or replace function r0_link_failpoint() returns trigger language plpgsql as $f$
+          begin
+            if pg_trigger_depth() = 1 and new.quote_id = '${quoteId}' then
+              insert into mission_quote_ledger (quote_id, item_id, linked_by, linked_at) values (new.quote_id, ${itemExpr}, 'racer', new.linked_at);
+            end if;
+            return new;
+          end $f$`);
+        await h.repo.sql.unsafe(
+          `create trigger r0_link_failpoint before insert on mission_quote_ledger for each row execute function r0_link_failpoint()`,
+        );
+      };
+      const clear = () =>
+        h.repo.sql.unsafe(
+          `drop trigger if exists r0_link_failpoint on mission_quote_ledger`,
+        );
+      // 1. benign race: the racer links the SAME item the service created -> a replay, verified
+      const q1 = (await record(owner, id, sid)).json.quote.quoteId;
+      await racer(q1, "new.item_id");
+      try {
+        const ok = await put(q1);
+        expect([200, 201], await ok.clone().text()).toContain(ok.status);
+        expect(((await ok.json()) as { replayed: boolean }).replayed).toBe(
+          true,
+        );
+      } finally {
+        await clear();
+      }
+      const [first] = await h.repo.sql<
+        { item_id: string }[]
+      >`select item_id from mission_quote_ledger where quote_id = ${q1}`;
+      // 2. hostile race: the racer links this quote to a DIFFERENT item (a copy made for something else)
+      const foreign = "itm_" + "ab".repeat(12);
+      await h.repo.sql`insert into mission_ledger_items
+        select ${foreign}, mission_id, created_by_kind, created_by, agent_id, kind, label, currency, amount_minor, refunded_minor, stage,
+          verification, 'foreign-item-key-0000000001', request_digest, row_version, created_at, updated_at
+        from mission_ledger_items where item_id = ${first!.item_id}`;
+      h.advance(120_000);
+      const q2 = (await record(owner, id, sid, { supersedes: q1 })).json.quote
+        .quoteId;
+      await racer(q2, `'${foreign}'`);
+      try {
+        const bad = await put(q2);
+        expect(bad.status).toBe(409);
+        expect(((await bad.json()) as { reason: string }).reason).toBe(
+          "LINK_INTEGRITY_FAILURE",
+        );
+      } finally {
+        await clear();
+      }
+      // a stored link that is not this quote's own item is refused on replay too, never reported as success
+      const replay = await put(q2);
+      expect(replay.status).toBe(409);
+      expect(((await replay.json()) as { reason: string }).reason).toBe(
+        "LINK_INTEGRITY_FAILURE",
+      );
+    });
+
     it("putting a quote in the budget creates exactly one QUOTED, unverified ledger item that holds nothing until a person approves it", async () => {
       const { owner, a, c, id } = await mission();
       const sid = await supplier(owner, id);

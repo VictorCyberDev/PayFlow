@@ -51,3 +51,12 @@ OAuth provider choice, design-partner outreach sends (approved text + sender), a
 - A transaction that holds a pooled connection must not ask the pool for another (`authorizeCapability` takes an `executor`).
 - Prettier rewrites source; mutation scripts must read the formatted text first.
 - Test clocks are fixed: advance them past rate-limit windows and keep the member token (30 days) alive.
+
+## Recovery program — R0 (2026-11-09)
+
+Dated addendum; earlier entries are not rewritten. Detail and evidence levels: `docs/R0-FINANCIAL-SAFETY.md`, baseline: `docs/RECOVERY-BASELINE-2026-11-09.md`.
+
+- Branch `claude/r0-purchase-order-binding`, PR #60 against `main` (`eec9c68`). The historical branch `claude/eloquent-einstein-dw0mxk` was left untouched by owner decision.
+- Delivered (IMPLEMENTED + TARGETED_TEST_PASSED + local FULL_REGRESSION_PASSED on `848a907`): Gateway order binding with durable single-use execution intents and dispatch-time quote/digest pins (migration 053); atomic M49 acceptance, M39 approve+accept, M43 refund+resolve, M50 termination; M34 link verification.
+- Not delivered / external: no deployment; migration 053 on no public database; no payout rail (contractor payments are a catalog-purchase simulator); credentialed provider sandbox tests skipped.
+- GitHub CI result on the merged head and the resulting `main` SHA are appended below when known.

@@ -254,6 +254,19 @@ describe("M49 checks and terms (pure)", () => {
       });
     const act = (t: string, offerId: string, what: string, b: unknown = {}) =>
       post(t, `/v1/admin/org/talent-offers/${offerId}/${what}`, b);
+    const milestoneItems = async () =>
+      Number(
+        (
+          await h.repo
+            .sql`select count(*)::int n from mission_ledger_items where kind = 'CONTRACTOR_MILESTONE'`
+        )[0]!.n,
+      );
+    const contracts = async () =>
+      Number(
+        (
+          await h.repo.sql`select count(*)::int n from mission_talent_contracts`
+        )[0]!.n,
+      );
 
     it("only a shortlisted candidate can be offered, inside the role's limits; an agent with DRAFT may draft; one live offer per candidate", async () => {
       const s = await scene();
@@ -466,6 +479,8 @@ describe("M49 checks and terms (pure)", () => {
       const cons = await h.repo
         .sql`select count(*)::int n from mission_talent_contracts`;
       expect(cons[0]!.n).toBe(0);
+      // R0: the first milestone fitted, the second did not -> NOTHING of the acceptance remains (it used to leak the first)
+      expect(await milestoneItems()).toBe(0);
       expect(
         (
           await body(
@@ -481,6 +496,134 @@ describe("M49 checks and terms (pure)", () => {
       expect((await body(dec)).offer.status).toBe("DECLINED");
       // the candidate may be offered again once the earlier offer ended
       expect((await draft(s.owner, s.id, s.ada)).status).toBe(201);
+    });
+
+    it("R0: acceptance is one transaction — ACCEPT/ACCEPT commits once; ACCEPT/DECLINE ends in exactly one terminal state with no stray ledger items or contract", async () => {
+      const ready = async () => {
+        h.advance(120_000); // past the request rate-limit window
+        const s = await scene();
+        await check(s.owner, s.id, s.ada, "IDENTITY_VERIFIED");
+        await check(s.owner, s.id, s.ada, "PORTFOLIO_REVIEWED");
+        const dr = await draft(s.owner, s.id, s.ada);
+        const db = await body(dr);
+        const o = db.offer;
+        if (!o) throw new Error(`draft ${dr.status} ${JSON.stringify(db)}`);
+        await act(s.owner, o.offerId, "approve");
+        await act(s.owner, o.offerId, "sent");
+        return { s, offerId: o.offerId as string };
+      };
+      const accept = (t: string, offerId: string) =>
+        act(t, offerId, "answer", {
+          outcome: "ACCEPTED",
+          evidenceKind: "DOCUMENT_REF",
+          evidenceRef: "signed.pdf",
+        });
+      const decline = (t: string, offerId: string) =>
+        act(t, offerId, "answer", {
+          outcome: "DECLINED",
+          evidenceKind: "OWNER_ATTESTATION",
+          note: "no",
+        });
+      // ACCEPT / ACCEPT: every caller succeeds, exactly one does the work
+      {
+        const { s, offerId } = await ready();
+        const rs = await Promise.all(
+          Array.from({ length: 5 }, () => accept(s.owner, offerId)),
+        );
+        for (const r of rs) expect(r.status, await r.clone().text()).toBe(200);
+        const bodies = await Promise.all(rs.map((r) => body(r)));
+        expect(bodies.filter((b) => b.replayed === false)).toHaveLength(1);
+        expect(new Set(bodies.map((b) => b.contractId as string)).size).toBe(1);
+        expect(await milestoneItems()).toBe(2);
+        expect(await contracts()).toBe(1);
+      }
+      // ACCEPT / DECLINE, several rounds: one terminal state, and the ledger and contract agree with it
+      let accepted = 0;
+      let declined = 0;
+      for (let round = 0; round < 6; round++) {
+        const { s, offerId } = await ready();
+        const before = {
+          items: await milestoneItems(),
+          cons: await contracts(),
+        };
+        const [a, d] = await Promise.all(
+          round % 2 === 0
+            ? [accept(s.owner, offerId), decline(s.owner, offerId)]
+            : [decline(s.owner, offerId), accept(s.owner, offerId)].reverse(),
+        );
+        const final = String(
+          (
+            await h.repo
+              .sql`select status from mission_talent_offers where offer_id = ${offerId}`
+          )[0]!.status,
+        );
+        expect(["ACCEPTED", "DECLINED"]).toContain(final);
+        if (final === "ACCEPTED") {
+          accepted++;
+          expect([a!.status, d!.status]).toEqual([200, 409]);
+          expect(await milestoneItems()).toBe(before.items + 2);
+          expect(await contracts()).toBe(before.cons + 1);
+        } else {
+          declined++;
+          expect([a!.status, d!.status]).toEqual([409, 200]);
+          expect(await milestoneItems()).toBe(before.items);
+          expect(await contracts()).toBe(before.cons);
+        }
+      }
+      expect(accepted + declined).toBe(6);
+    });
+
+    it("R0: a crash at any point inside acceptance rolls the whole acceptance back, and a retry then completes it exactly once (failpoints)", async () => {
+      for (const failAt of ["CONTRACT_INSERT", "OFFER_UPDATE"] as const) {
+        const s = await scene();
+        await check(s.owner, s.id, s.ada, "IDENTITY_VERIFIED");
+        await check(s.owner, s.id, s.ada, "PORTFOLIO_REVIEWED");
+        const o = (await body(await draft(s.owner, s.id, s.ada))).offer;
+        await act(s.owner, o.offerId, "approve");
+        await act(s.owner, o.offerId, "sent");
+        const items0 = await milestoneItems();
+        const cons0 = await contracts();
+        await h.repo.sql
+          .unsafe(`create or replace function r0_accept_failpoint() returns trigger language plpgsql as $f$
+          begin raise exception 'FAILPOINT_${failAt}'; end $f$`);
+        await h.repo.sql.unsafe(
+          failAt === "CONTRACT_INSERT"
+            ? `create trigger r0_accept_failpoint before insert on mission_talent_contracts for each row execute function r0_accept_failpoint()`
+            : `create trigger r0_accept_failpoint before update on mission_talent_offers for each row when (new.status = 'ACCEPTED') execute function r0_accept_failpoint()`,
+        );
+        const crashed = await act(s.owner, o.offerId, "answer", {
+          outcome: "ACCEPTED",
+          evidenceKind: "DOCUMENT_REF",
+          evidenceRef: "signed.pdf",
+        });
+        await h.repo.sql.unsafe(
+          failAt === "CONTRACT_INSERT"
+            ? `drop trigger r0_accept_failpoint on mission_talent_contracts`
+            : `drop trigger r0_accept_failpoint on mission_talent_offers`,
+        );
+        expect(crashed.status, failAt).toBeGreaterThanOrEqual(500);
+        // nothing of the acceptance survived
+        expect(await milestoneItems(), failAt).toBe(items0);
+        expect(await contracts(), failAt).toBe(cons0);
+        expect(
+          String(
+            (
+              await h.repo
+                .sql`select status from mission_talent_offers where offer_id = ${o.offerId}`
+            )[0]!.status,
+          ),
+        ).toBe("SENT");
+        // the retry completes it, once
+        const retry = await act(s.owner, o.offerId, "answer", {
+          outcome: "ACCEPTED",
+          evidenceKind: "DOCUMENT_REF",
+          evidenceRef: "signed.pdf",
+        });
+        expect(retry.status, await retry.clone().text()).toBe(200);
+        expect((await body(retry)).replayed).toBe(false);
+        expect(await milestoneItems(), failAt).toBe(items0 + 2);
+        expect(await contracts(), failAt).toBe(cons0 + 1);
+      }
     });
 
     it("an offer cannot be approved once the scope it was drafted under is no longer in force", async () => {
