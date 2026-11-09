@@ -2531,6 +2531,111 @@ function recordActions(key, rec, redraw, out, cur) {
       ? h("div", {}, f, h("div", { class: "actions" }, btns))
       : null;
   }
+  if (key === "contractors") {
+    const blocks = [];
+    for (const ms of rec.milestones ?? []) {
+      const subs = (ms.deliverables ?? []).filter(
+        (d) => d.status === "SUBMITTED",
+      );
+      blocks.push(
+        h(
+          "section",
+          {},
+          h("h4", {
+            text: `Milestone ${ms.index}: ${wordsOf(ms.state)}`,
+          }),
+          h("dl", {}, scalarRows(ms, cur)),
+          (ms.deliverables ?? []).length === 0
+            ? h("p", { class: "hint", text: "Nothing has been submitted yet." })
+            : h(
+                "ul",
+                {},
+                ms.deliverables.map((d) =>
+                  h("li", {
+                    text: `${wordsOf(d.status)}${d.decisionNote ? ": " + d.decisionNote : ""}`,
+                  }),
+                ),
+              ),
+          subs.map((d) => {
+            const f = h(
+              "form",
+              {
+                onsubmit: async (e) => {
+                  e.preventDefault();
+                  const x = new FormData(f);
+                  const ref = String(x.get("ref")).trim();
+                  await ask(
+                    `/v1/admin/org/deliverables/${d.deliverableId}/decide`,
+                    {
+                      decision: String(x.get("decision")),
+                      evidenceKind: String(x.get("kind")),
+                      ...(ref ? { evidenceRef: ref } : {}),
+                      note: String(x.get("note")),
+                    },
+                  );
+                },
+              },
+              h("label", {
+                for: `dd-${d.deliverableId}`,
+                text: "Your decision on the submitted work",
+              }),
+              h(
+                "select",
+                { id: `dd-${d.deliverableId}`, name: "decision" },
+                h("option", { value: "ACCEPT", text: "Accept it" }),
+                h("option", { value: "REJECT", text: "Reject it" }),
+              ),
+              h("label", {
+                for: `dk-${d.deliverableId}`,
+                text: "What shows it",
+              }),
+              h(
+                "select",
+                { id: `dk-${d.deliverableId}`, name: "kind" },
+                h("option", {
+                  value: "OWNER_ATTESTATION",
+                  text: "My word only",
+                }),
+                h("option", {
+                  value: "DOCUMENT_REF",
+                  text: "A document I have",
+                }),
+              ),
+              h("label", {
+                for: `dr-${d.deliverableId}`,
+                text: "Document name or link (if any)",
+              }),
+              h("input", {
+                id: `dr-${d.deliverableId}`,
+                name: "ref",
+                maxlength: "500",
+              }),
+              h("label", {
+                for: `dn-${d.deliverableId}`,
+                text: "A short note",
+              }),
+              h("input", {
+                id: `dn-${d.deliverableId}`,
+                name: "note",
+                maxlength: "300",
+              }),
+              h("button", {
+                class: "primary",
+                type: "submit",
+                text: "Record my decision",
+              }),
+              h("p", {
+                class: "hint",
+                text: "Accepting only records that the work is acceptable. It pays nothing by itself.",
+              }),
+            );
+            return f;
+          }),
+        ),
+      );
+    }
+    return blocks.length ? h("div", {}, blocks) : null;
+  }
   if (key === "orders") {
     const f = h(
       "form",

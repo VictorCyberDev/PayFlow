@@ -1015,6 +1015,105 @@ const chromePath = [
       await ctx.close();
     }, 60_000);
 
+    it("a submitted deliverable can be accepted or rejected from the Contractors screen, with a note, and says accepting pays nothing", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "con@example.com",
+          password: "a long enough passphrase",
+          displayName: "Cass Contract",
+          organizationName: "Contract Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("con@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      const mid = "msn_" + "9".repeat(24);
+      const did = "del_" + "8".repeat(24);
+      const posts: { path: string; body: unknown }[] = [];
+      const ok = (body: unknown) => ({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+      await page.route(/\/v1\/admin\/org\//u, async (r) => {
+        const req = r.request();
+        const path = new URL(req.url()).pathname;
+        if (req.method() === "POST") {
+          posts.push({
+            path,
+            body: JSON.parse(req.postData() ?? "{}") as unknown,
+          });
+          return r.fulfill(ok({}));
+        }
+        if (path === `/v1/admin/org/missions/${mid}`)
+          return r.fulfill(
+            ok({ mission: { activeContract: { currency: "GBP" } } }),
+          );
+        if (path.endsWith("/contracts"))
+          return r.fulfill(
+            ok({
+              contracts: [
+                {
+                  contractId: "ctr_" + "7".repeat(24),
+                  currency: "GBP",
+                  totalMinor: 90000,
+                  terminated: false,
+                  milestones: [
+                    {
+                      index: 1,
+                      state: "AWAITING_DECISION",
+                      amountMinor: 90000,
+                      deliverables: [
+                        {
+                          deliverableId: did,
+                          status: "SUBMITTED",
+                          decisionNote: null,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            }),
+          );
+        return r.continue();
+      });
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/contractors`);
+      await page
+        .getByRole("heading", { name: "Contractors", level: 1 })
+        .waitFor();
+      const text = await page.locator("main").innerText();
+      expect(text).toContain("Milestone 1");
+      expect(text).toContain("pays nothing by itself");
+      expect(await axe(page)).toEqual([]);
+      await page
+        .getByLabel("Your decision on the submitted work")
+        .selectOption("REJECT");
+      await page.getByLabel("A short note").fill("Missing the second file");
+      await page.getByRole("button", { name: "Record my decision" }).click();
+      expect(posts).toEqual([
+        {
+          path: `/v1/admin/org/deliverables/${did}/decide`,
+          body: {
+            decision: "REJECT",
+            evidenceKind: "OWNER_ATTESTATION",
+            note: "Missing the second file",
+          },
+        },
+      ]);
+      // let the screen finish redrawing, then leave, so no request is still in flight when the database closes
+      await page
+        .getByRole("heading", { name: "Contractors", level: 1 })
+        .waitFor();
+      await page.goto("about:blank");
+      await ctx.close();
+    }, 60_000);
+
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
       await page.goto(`${h.origin}/workspace`);
