@@ -487,3 +487,11 @@ ol.todo li {
     color: var(--ink-2);
   }
 }
+
+ul.plain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}

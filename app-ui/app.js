@@ -129,14 +129,17 @@ const money = (minor, cur = "USD") =>
     minor / 100,
   );
 /** "Friday, Nov 6 at 6:00 PM" — plain language, no seconds (BRAND-001 section 7). */
-const when = (iso) =>
-  new Intl.DateTimeFormat("en-US", {
+const when = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "a time that was not recorded";
+  return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(iso));
+  }).format(d);
+};
 const idem = (p) => `${p}-${crypto.randomUUID()}`;
 const reasonText = (r) =>
   ({
@@ -181,6 +184,9 @@ function shell(active, ...content) {
     ["#/missions", "Missions"],
     ["#/approvals", "Approvals"],
     ["#/agents", "Agents"],
+    ["#/notifications", "Notifications"],
+    ["#/settings", "Settings"],
+    ["#/help", "Help"],
   ];
   root.replaceChildren(
     h(
@@ -1101,6 +1107,7 @@ async function missionPage(id) {
           : null,
       ),
     ),
+    recordsNav(id),
     h(
       "section",
       { class: "card", "aria-labelledby": "ma" },
@@ -1897,6 +1904,397 @@ function bookingCard(b, redraw, out) {
   );
 }
 
+/**
+ * Mission records: finance, sourcing quotes, negotiations, orders, disputes, contractors and obligations. One plain reader for server
+ * records. It shows what the record says, in words, and never builds a claim of its own: state words come from the server's state.
+ */
+const SECTIONS = {
+  finance: {
+    title: "Finance",
+    path: (id) => `/v1/admin/org/missions/${id}/ledger`,
+    empty: "Nothing has been held or spent for this mission yet.",
+    blurb:
+      "Every amount PayFlow has set aside, committed or released for this mission. Held amounts count against your limits until they end.",
+  },
+  quotes: {
+    title: "Sourcing and quotes",
+    path: (id) => `/v1/admin/org/missions/${id}/quotes`,
+    empty:
+      "No quotes yet. Quotes are recorded only when a supplier states one. PayFlow never invents a supplier or a price.",
+    blurb: "Quotes a supplier has stated, with what each would cost you.",
+  },
+  negotiations: {
+    title: "Negotiations",
+    path: (id) => `/v1/admin/org/missions/${id}/negotiations`,
+    empty: "No negotiations have started.",
+    blurb:
+      "Offers and counter-offers. Nothing is accepted on your behalf without your approval.",
+  },
+  orders: {
+    title: "Purchases and orders",
+    path: (id) => `/v1/admin/org/missions/${id}/orders`,
+    empty: "No orders have been placed.",
+    blurb: "Purchases made under this mission and where each one stands.",
+  },
+  disputes: {
+    title: "Disputes",
+    path: (id) => `/v1/admin/org/missions/${id}/disputes`,
+    empty: "No disputes are open.",
+    blurb: "Problems with an order or a payment, and how they were settled.",
+  },
+  contractors: {
+    title: "Contractors",
+    path: (id) => `/v1/admin/org/missions/${id}/contracts`,
+    empty: "No contractor work has been agreed.",
+    blurb:
+      "Agreed work, deliverables and payments. A payment is released only after you accept the deliverable.",
+  },
+  obligations: {
+    title: "Obligations",
+    path: (id) => `/v1/admin/org/missions/${id}/obligations`,
+    empty: "Nothing is owed or awaited.",
+    blurb: "Things you are owed or must do, such as refunds and deliveries.",
+  },
+};
+const humanKey = (k) =>
+  k
+    .replace(/Minor$/u, "")
+    .replace(/([a-z0-9])([A-Z])/gu, "$1 $2")
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/^./u, (c) => c.toUpperCase());
+const HIDE_KEY =
+  /^(rowVersion|notice|idempotencyKey|organizationId|environment|hash|digest|signature|.*Hash|.*Digest)$/u;
+const STATE_KEYS = ["state", "status", "stage", "decision"];
+const TITLE_KEYS = [
+  "name",
+  "title",
+  "vendorName",
+  "supplier",
+  "description",
+  "objective",
+  "kind",
+  "type",
+];
+const ISO = /^\d{4}-\d\d-\d\dT\d\d:\d\d/u;
+const wordsOf = (v) =>
+  String(v)
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/^./u, (c) => c.toUpperCase());
+function scalarRows(obj, cur) {
+  const rows = [];
+  for (const [k, v] of Object.entries(obj)) {
+    if (HIDE_KEY.test(k) || STATE_KEYS.includes(k) || k === "currency")
+      continue;
+    if (v === null || v === undefined || v === "") continue;
+    if (/Id$/u.test(k) && typeof v === "string") continue;
+    let shown;
+    if (typeof v === "number" && /Minor$/u.test(k))
+      shown = money(v, cur ?? obj.currency ?? "USD");
+    else if (typeof v === "boolean") shown = v ? "Yes" : "No";
+    else if (typeof v === "number") shown = String(v);
+    else if (typeof v === "string" && ISO.test(v)) shown = when(v);
+    else if (typeof v === "string")
+      shown = /^[A-Z0-9_]+$/u.test(v) ? wordsOf(v) : v.slice(0, 300);
+    else if (Array.isArray(v))
+      shown = `${v.length} item${v.length === 1 ? "" : "s"}`;
+    else continue;
+    rows.push(row(humanKey(k), shown));
+  }
+  return rows;
+}
+function recordCard(rec, cur) {
+  const stateKey = STATE_KEYS.find((k) => typeof rec[k] === "string");
+  const titleKey = TITLE_KEYS.find((k) => typeof rec[k] === "string" && rec[k]);
+  return h(
+    "article",
+    { class: "card" },
+    h(
+      "div",
+      { class: "row" },
+      h("h3", {
+        text: titleKey ? wordsOf(rec[titleKey]).slice(0, 120) : "Record",
+      }),
+      stateKey
+        ? h("span", { class: "badge" }, glyph("dot"), wordsOf(rec[stateKey]))
+        : null,
+    ),
+    h("dl", {}, scalarRows(rec, cur)),
+  );
+}
+async function recordsPage(id, key) {
+  const sec = SECTIONS[key];
+  const mission = await api(`/v1/admin/org/missions/${id}`);
+  if (!mission.ok)
+    return shell(
+      "#/missions",
+      h("h1", { text: "Mission not found" }),
+      notice("bad", "That mission doesn't exist, or you can't see it."),
+    );
+  const r = await api(sec.path(id));
+  const c =
+    mission.data.mission.activeContract ?? mission.data.mission.latestContract;
+  const cur = c?.currency ?? "USD";
+  const body = [];
+  if (!r.ok)
+    body.push(
+      notice(
+        "bad",
+        r.status === 403
+          ? reasonText("PERMISSION_DENIED")
+          : reasonText(r.data?.reason),
+      ),
+    );
+  else {
+    const d = r.data;
+    if (d.summary && typeof d.summary === "object")
+      body.push(
+        h(
+          "section",
+          { class: "card" },
+          h("h2", { text: "Where the money stands" }),
+          h("dl", {}, scalarRows(d.summary, cur)),
+        ),
+      );
+    const listKey = Object.keys(d).find(
+      (k) => Array.isArray(d[k]) && k !== "warnings",
+    );
+    const items = listKey ? d[listKey] : [];
+    body.push(
+      items.length === 0
+        ? h("p", { class: "hint", text: sec.empty })
+        : items.map((rec) => recordCard(rec, cur)),
+    );
+  }
+  shell(
+    "#/missions",
+    h(
+      "div",
+      { class: "row" },
+      h("h1", { text: sec.title }),
+      h("a", {
+        class: "link",
+        href: `#/missions/${id}`,
+        text: "Back to mission",
+      }),
+    ),
+    h("p", { text: sec.blurb }),
+    ...body.flat(),
+  );
+}
+function recordsNav(id) {
+  return h(
+    "section",
+    { class: "card", "aria-labelledby": "rec" },
+    h("h2", { id: "rec", text: "Records" }),
+    h(
+      "ul",
+      { class: "plain" },
+      Object.entries(SECTIONS).map(([k, v]) =>
+        h(
+          "li",
+          {},
+          h("a", {
+            class: "link",
+            href: `#/missions/${id}/${k}`,
+            text: v.title,
+          }),
+        ),
+      ),
+      h(
+        "li",
+        {},
+        h("a", {
+          class: "link",
+          href: `#/missions/${id}/proof`,
+          text: "Proof: the history of every change",
+        }),
+      ),
+    ),
+  );
+}
+/** Proof: the append-only record of every change to this mission's budget. It is read from the ledger's history, not summarised. */
+async function proofPage(id) {
+  const items = await api(`/v1/admin/org/missions/${id}/ledger`);
+  const list = items.data?.items ?? [];
+  const blocks = [];
+  for (const it of list.slice(0, 20)) {
+    const hist = await api(`/v1/admin/org/ledger/items/${it.itemId}/history`);
+    blocks.push(
+      h(
+        "section",
+        { class: "card" },
+        h("h2", { text: wordsOf(it.kind ?? "Item") }),
+        h("dl", {}, scalarRows(it, it.currency)),
+        h(
+          "ol",
+          {},
+          (hist.data?.entries ?? []).map((e) =>
+            h(
+              "li",
+              {},
+              `${when(e.at)} · ${e.from ? wordsOf(e.from) + " to " : ""}${wordsOf(e.to)} · ${money(e.amountMinor, it.currency ?? "USD")} · by ${wordsOf(e.actorKind)} · ${e.evidenceKind && e.evidenceKind !== "NONE" ? "evidence: " + wordsOf(e.evidenceKind) : "no evidence attached"}`,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  shell(
+    "#/missions",
+    h(
+      "div",
+      { class: "row" },
+      h("h1", { text: "Proof" }),
+      h("a", {
+        class: "link",
+        href: `#/missions/${id}`,
+        text: "Back to mission",
+      }),
+    ),
+    h("p", {
+      text: "Each change to this mission's budget is written once and never edited. This is that record, not a summary of it.",
+    }),
+    ...(blocks.length
+      ? blocks
+      : [h("p", { class: "hint", text: "Nothing has been recorded yet." })]),
+  );
+}
+async function notificationsPage() {
+  const r = await api("/v1/admin/org/missions");
+  const ms = r.data?.missions ?? [];
+  const waiting = ms.filter((m) =>
+    ["PENDING_APPROVAL", "DRAFT"].includes(m.status),
+  );
+  shell(
+    "#/notifications",
+    h("h1", { text: "Notifications" }),
+    h("p", {
+      class: "notice",
+      role: "status",
+      text: "PayFlow shows what needs you here. It does not send email or phone alerts yet, so check back, or open Approvals.",
+    }),
+    ...(waiting.length === 0
+      ? [h("p", { text: "Nothing needs you right now." })]
+      : waiting.map((m) =>
+          h(
+            "article",
+            { class: "card" },
+            h("h3", { text: m.objective ?? "Mission" }),
+            h("p", { text: `${wordsOf(m.status)}.` }),
+            h("a", {
+              class: "link",
+              href: `#/missions/${m.missionId}`,
+              text: "Open",
+            }),
+          ),
+        )),
+    h("a", { class: "link", href: "#/approvals", text: "Go to Approvals" }),
+  );
+}
+async function settingsPage() {
+  shell(
+    "#/settings",
+    h("h1", { text: "Settings" }),
+    h(
+      "section",
+      { class: "card" },
+      h("h2", { text: "Your account" }),
+      h(
+        "dl",
+        {},
+        row("Name", state.me.user.displayName),
+        row("Role", wordsOf(state.me.member.role)),
+        row("Environment", "Sandbox. No real money moves."),
+      ),
+    ),
+    h(
+      "section",
+      { class: "card" },
+      h("h2", { text: "Your agents" }),
+      h("a", { class: "link", href: "#/agents", text: "Manage agents" }),
+    ),
+    h(
+      "section",
+      { class: "card" },
+      h("h2", { text: "Sign out" }),
+      h("button", {
+        type: "button",
+        text: "Sign out of this browser",
+        onclick: async () => {
+          await api("/v1/app/logout", { method: "POST", body: {} });
+          state.me = null;
+          state.csrf = null;
+          location.hash = "#/login";
+          await render();
+        },
+      }),
+    ),
+  );
+}
+function helpPage() {
+  const T = (term, text) =>
+    h("div", { class: "row" }, h("dt", { text: term }), h("dd", { text }));
+  shell(
+    "#/help",
+    h("h1", { text: "Help" }),
+    h(
+      "section",
+      { class: "card" },
+      h("h2", { text: "What PayFlow will never do" }),
+      h(
+        "ul",
+        {},
+        h("li", {
+          text: "Spend more than you approved, or spend without your approval.",
+        }),
+        h("li", {
+          text: "Say something is booked, paid or confirmed without evidence.",
+        }),
+        h("li", { text: "Invent a supplier, a price, a booking or a review." }),
+        h("li", {
+          text: "Try again after an unclear result. A person decides.",
+        }),
+      ),
+    ),
+    h(
+      "section",
+      { class: "card" },
+      h("h2", { text: "Words you will see" }),
+      h(
+        "dl",
+        {},
+        T(
+          "Held",
+          "Money set aside for a purchase. It counts against your limit until it ends.",
+        ),
+        T("Committed", "A provider has confirmed. The money is owed."),
+        T(
+          "Outcome unclear",
+          "We cannot tell what happened. The money stays held until you settle it with evidence.",
+        ),
+        T(
+          "Confirmed by you",
+          "You told us it is confirmed. PayFlow has no proof of its own.",
+        ),
+        T(
+          "Sandbox",
+          "A safe test setting. Nothing real is bought, booked or paid.",
+        ),
+      ),
+    ),
+    h(
+      "section",
+      { class: "card" },
+      h("h2", { text: "Need to talk to someone?" }),
+      h("p", {
+        text: "There is no live support channel connected to this sandbox yet.",
+      }),
+    ),
+  );
+}
+
 // ------------------------------------------------------------------------------------------------ router
 async function render() {
   const hash = location.hash || "#/";
@@ -1915,6 +2313,12 @@ async function render() {
     if (hash === "#/approvals") return await approvalsPage();
     if (hash === "#/missions") return await missionList();
     if (hash === "#/missions/new") return await wizard();
+    if (hash === "#/notifications") return await notificationsPage();
+    if (hash === "#/settings") return await settingsPage();
+    if (hash === "#/help") return helpPage();
+    const sec = /^#\/missions\/(msn_[a-f0-9]{24})\/([a-z]+)$/.exec(hash);
+    if (sec && sec[2] === "proof") return await proofPage(sec[1]);
+    if (sec && SECTIONS[sec[2]]) return await recordsPage(sec[1], sec[2]);
     const w = /^#\/missions\/(msn_[a-f0-9]{24})\/workspaces$/.exec(hash);
     if (w) return await workspacesPage(w[1]);
     const m = /^#\/missions\/(msn_[a-f0-9]{24})$/.exec(hash);

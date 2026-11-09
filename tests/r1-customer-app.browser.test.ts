@@ -31,6 +31,7 @@ interface Loc {
 }
 interface Page {
   goto(u: string): Promise<unknown>;
+  url(): string;
   getByLabel(n: string, o?: { exact?: boolean }): Loc;
   getByRole(r: string, o?: { name?: string | RegExp; level?: number }): Loc;
   getByText(t: string | RegExp, o?: { exact?: boolean }): Loc;
@@ -557,6 +558,52 @@ const chromePath = [
           String(r.state),
         ),
       ).toEqual(["CONFIRMED"]);
+      // every mission record screen opens, says something plain, and passes axe; Finance shows the held budget in words
+      const mid = /msn_[a-f0-9]{24}/u.exec(page.url())![0];
+      for (const [sec, heading] of [
+        ["finance", "Finance"],
+        ["quotes", "Sourcing and quotes"],
+        ["negotiations", "Negotiations"],
+        ["orders", "Purchases and orders"],
+        ["disputes", "Disputes"],
+        ["contractors", "Contractors"],
+        ["obligations", "Obligations"],
+        ["proof", "Proof"],
+      ] as const) {
+        await page.goto(`${h.origin}/workspace#/missions/${mid}/${sec}`);
+        await page.getByRole("heading", { name: heading, level: 1 }).waitFor();
+        const t = await page.locator("main").innerText();
+        expect(t, sec).not.toMatch(/undefined|\[object|NaN|null/u);
+        expect(await axe(page), sec).toEqual([]);
+      }
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/finance`);
+      await page.getByRole("heading", { name: "Finance", level: 1 }).waitFor();
+      expect(await page.locator("main").innerText()).toContain("£");
+      for (const [hash, heading] of [
+        ["notifications", "Notifications"],
+        ["settings", "Settings"],
+        ["help", "Help"],
+      ] as const) {
+        await page.goto(`${h.origin}/workspace#/${hash}`);
+        await page.getByRole("heading", { name: heading, level: 1 }).waitFor();
+        expect(await axe(page), hash).toEqual([]);
+      }
+      if (process.env.SHOTS_DIR) {
+        await page.goto(`${h.origin}/workspace#/missions/${mid}/finance`);
+        await page
+          .getByRole("heading", { name: "Finance", level: 1 })
+          .waitFor();
+        await page.screenshot({
+          path: `${process.env.SHOTS_DIR}/finance-1280.png`,
+          fullPage: true,
+        });
+        await page.goto(`${h.origin}/workspace#/missions/${mid}/proof`);
+        await page.getByRole("heading", { name: "Proof", level: 1 }).waitFor();
+        await page.screenshot({
+          path: `${process.env.SHOTS_DIR}/proof-1280.png`,
+          fullPage: true,
+        });
+      }
       await ctx.close();
     }, 90_000);
 
