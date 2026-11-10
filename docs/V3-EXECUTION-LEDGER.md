@@ -75,3 +75,12 @@ Dated addendum. Evidence levels and honest not-done lists: `docs/M51-M53-STATUS.
 - **PR #65** (Launch board slice, contractor and dispute decisions, orders in Needs checking) squash-merged as `d3e358e`, pinned to head `cfbfc60`: `verify` (23:34–23:50Z), `console`, `console-e2e` green.
 - **PR #66** (M57 recurring renewal checks, migration 059, and a test-harness drain for an intermittent teardown error) squash-merged as `2c70ca9`, pinned to head `5b7554a`: `verify` (23:58–00:15Z), `console`, `console-e2e` green.
 - **PR #67** (Quotes screen, approval-rule Settings screen, action confirmations, checkpoint) squash-merged as `3896ea6`, pinned to head `99c6c1c`: `verify` (00:38–01:00Z), `console`, `console-e2e` green. The previous head of that PR failed only because `m34-quotes` "heavy concurrency" hit the 5 s default timeout on a loaded runner; it now has an explicit 60 s timeout.
+
+## Execution recovery — 2026-11-10 (Tracks A and B)
+
+- **PR #68** merged as `dec9bc2`, **PR #69** (root deployment builds the company site via `build:company`; fixes the 404 on `/`) as `04a42f2`, **PR #70** (hosted-state record) as `c4d19c3`. Each merged on a pinned head with `verify`, `console`, `console-e2e` green.
+- **PR #71** (B1 account lifecycle: email verification, password reset, email outbox, migration 060) squash-merged as `7b9794a`, pinned to head `e5d1959` (`verify`, `console`, `console-e2e` green).
+- **PR #72** (environment contract and exact migration plan, commissioning plan) squash-merged as `c1e3602`. Its branch was first updated onto `7b9794a`, and `verify`, `console`, `console-e2e` were re-run green on that combined head `ae92f76` before the merge.
+- **PR #73** (marketing CTA audit, Private preview page) squash-merged as `e855608`, pinned to head `ea3dd6b`. On the combined head its first `console-e2e` run failed in the customer-app "Needs checking" browser test (a 30 s heading wait, code this PR does not touch); the rerun of the failed job passed. The cause was not established and the test is recorded as intermittent.
+- Open: **#74** (sign-ins list/revoke/sign out everywhere, Settings screen) and **#75** (B1 hardening, migration 061).
+- Still owner-gated: nothing is deployed to `payflow-public`; migrations 024–061 (skipping 028) are not applied to the public database; no email sender is configured, so no real email has been sent.
