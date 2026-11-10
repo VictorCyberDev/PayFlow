@@ -29,3 +29,17 @@ A missing environment entry is not proof that a provider account does not exist.
 ## Not done in this pass
 
 Everything else in the M51–M90 completion mandate: provider commissioning, the Founder Launch executor, M57 replenishment, M59 billing and support, M61–M90 integration, and the executed M1–M90 audit. Their status is as in `docs/PROGRAM-CHECKPOINT-2026-11-10.md` and `docs/M1-M90-AUDIT-MATRIX.md`.
+
+## Observed after PR #69 (merged as `04a42f2`; deployment `payflow-lc2jogimg-start-up16.vercel.app`, READY, 13:23Z)
+
+Requested through the Vercel fetch tool (the deployment is behind Vercel SSO protection, so these are authenticated fetches, not an anonymous public visit):
+
+| Request                | Status  | Notes                                                                                            |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------------ |
+| `GET /`                | **200** | the company homepage ("Financial authority for autonomous systems"); before the fix this was 404 |
+| `GET /payer-return.js` | **200** | PayPal payer-return asset survived the new build                                                 |
+| `GET /workspace/`      | **404** | expected: the customer app is not deployed here                                                  |
+
+Not re-tested in this pass: `/paypal/*` function routes (need a live PayPal Sandbox token), `/sandbox/`, `/app/` (linked from the homepage; their content was not read), hard-refresh behaviour, security headers beyond reading them in the responses (the CSP, HSTS and frame headers were present), and anonymous access. The project has Vercel SSO protection on all non-custom domains, so a stranger visiting the `*.vercel.app` URL would be asked to sign in to Vercel. **The company site is therefore not yet publicly viewable without a custom domain or turning that protection off, which is an owner decision.**
+
+Homepage links `Sign in` to `/app/` and `Start in Sandbox` to `/sandbox/`. Neither leads to a working sign-in: no customer application is deployed.
