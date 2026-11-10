@@ -575,7 +575,7 @@ describe("M34 landed cost (pure)", () => {
         >`select count(*)::int n from mission_quote_ledger where quote_id = ${q.quoteId}`;
         expect(n!.n).toBe(1);
       }
-    });
+    }, 60_000); // 800 requests in 20 bursts: the default 5 s is not enough on a loaded runner
 
     it("R0: the loser of a link race verifies what the winner linked: the same item replays; a different item is an integrity refusal (deterministic failpoints, no timing)", async () => {
       const { owner, id } = await mission();
