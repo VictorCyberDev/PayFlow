@@ -2477,9 +2477,55 @@ function recordActions(key, rec, redraw, out, cur) {
     const r = await api(path, { method: "POST", body });
     if (!r.ok)
       return out.replaceChildren(notice("bad", reasonText(r.data?.reason)));
-    out.replaceChildren();
-    await redraw();
+    await redraw("Recorded.");
   };
+  if (key === "quotes" && rec.quoteId) {
+    const f = h(
+      "form",
+      {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          const x = new FormData(f);
+          const why = String(x.get("why")).trim();
+          const r = await api(`/v1/admin/org/quotes/${rec.quoteId}/accept`, {
+            method: "POST",
+            body: {
+              idempotencyKey: idem("acc"),
+              ...(why ? { overrideReason: why } : {}),
+            },
+          });
+          if (!r.ok)
+            return out.replaceChildren(
+              notice(
+                "bad",
+                r.data?.reason === "CHECKS_FAILED" ||
+                  r.data?.reason === "OVERRIDE_REQUIRED"
+                  ? `This quote cannot be accepted as it stands${r.data?.detail ? " (" + r.data.detail + ")" : ""}. Nothing was committed.`
+                  : reasonText(r.data?.reason),
+              ),
+            );
+          await redraw(
+            "Accepted. The amount is now set aside in your budget. No one has been paid.",
+          );
+        },
+      },
+      h("label", {
+        for: `qa-${rec.quoteId}`,
+        text: "Your reason, only if a rule needs your say-so",
+      }),
+      h("input", { id: `qa-${rec.quoteId}`, name: "why", maxlength: "300" }),
+      h("button", {
+        class: "primary",
+        type: "submit",
+        text: "Accept this quote",
+      }),
+      h("p", {
+        class: "hint",
+        text: "Accepting sets the amount aside in your budget. It pays no one and orders nothing by itself.",
+      }),
+    );
+    return h("details", {}, h("summary", { text: "Accept this quote" }), f);
+  }
   if (key === "negotiations") {
     const f = h(
       "form",
@@ -2780,7 +2826,7 @@ function recordActions(key, rec, redraw, out, cur) {
   }
   return null;
 }
-async function recordsPage(id, key) {
+async function recordsPage(id, key, flash) {
   const sec = SECTIONS[key];
   const mission = await api(`/v1/admin/org/missions/${id}`);
   if (!mission.ok)
@@ -2793,8 +2839,9 @@ async function recordsPage(id, key) {
   const c =
     mission.data.mission.activeContract ?? mission.data.mission.latestContract;
   const cur = c?.currency ?? "USD";
-  const out = h("div");
-  const redraw = () => recordsPage(id, key);
+  const out = h("div", { role: "status" });
+  if (flash) out.append(notice("ok", flash));
+  const redraw = (msg) => recordsPage(id, key, msg);
   const body = [];
   if (!r.ok)
     body.push(

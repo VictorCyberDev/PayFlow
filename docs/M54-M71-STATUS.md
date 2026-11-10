@@ -39,7 +39,7 @@ Milestone numbers and scopes are those of `docs/ADR-018-roadmap-v3-m26-m95.md`. 
 - M55 orchestration (nothing starts, sequences or retries work across areas; the board only reports); M57 supplier replenishment, invoices, budget rollover, and any renewal that executes (only the check-and-ask slice exists); M59 billing, usage, support; M60 acceptance by independent users.
 - M61–M64, M66 and M70 beyond the export; M72–M90 as scoped in ADR-018. Many of these have earlier scaffolds from the legacy M26–M60 program (see `docs/M7-M60-EXECUTION-LEDGER.md`); they have not been re-audited here.
 - M65 FX is not called by any route or screen. Agent readiness is shown, but suspending, resuming and retiring agents from the screen is not built.
-- Screens for approving a quote, resolving a dispute, or deciding a contractor deliverable. Negotiation approval and opening a dispute are done.
+- Screens now exist for accepting a quote, deciding a deliverable, settling a dispute and deciding a negotiation. Their request wiring is tested with stubbed server responses; the server rules are covered by the existing route tests, but no test drives a whole quote-to-payment journey through the browser.
 - No notification delivery (email or push); the Notifications screen is an in-app list.
 - No product research outputs, interviews or usability sessions exist, and none are claimed.
 - No public deployment. See `docs/PROGRAM-CHECKPOINT-2026-11-09.md` for what the owner must provide.
