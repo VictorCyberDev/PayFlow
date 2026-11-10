@@ -100,7 +100,7 @@ const chromePath = [
           }),
       }),
       extraTruncate:
-        "rate_limit_windows,mission_booking_events,mission_bookings,mission_workspace_listings,mission_workspace_searches,user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
+        "rate_limit_windows,email_outbox,user_tokens,mission_booking_events,mission_bookings,mission_workspace_listings,mission_workspace_searches,user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions,mission_authorities,mission_ledger_items,mission_ledger_entries,mission_plans,mission_tasks,mission_task_deps,mission_task_events,mandates",
     });
     const require_ = createRequire(import.meta.url);
     let axeSource = "";
@@ -1471,6 +1471,71 @@ const chromePath = [
       await page.goto("about:blank");
       await ctx.close();
     }, 60_000);
+
+    it("account lifecycle in a real browser against the real server: verify email from the link, forget the password, reset it from the link, sign in with the new one", async () => {
+      const { ctx, page } = await open();
+      const token = async (template: string) => {
+        const rows = await h.repo
+          .sql`select body from email_outbox where template = ${template} and state = 'QUEUED' order by created_at desc limit 1`;
+        return /token=([A-Za-z0-9_-]+)/u.exec(String(rows[0]!.body))![1]!;
+      };
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "life@example.com",
+          password: "a long enough passphrase",
+          displayName: "Lia Life",
+          organizationName: "Life Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("life@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await page.getByRole("heading", { name: "Confirm your email" }).waitFor();
+      // the link from the queued message
+      await page.goto(
+        `${h.origin}/workspace#/verify?token=${await token("VERIFY_EMAIL")}`,
+      );
+      await page.getByRole("heading", { name: "Email confirmed" }).waitFor();
+      expect(page.url()).not.toContain("token="); // the secret is gone from the address bar
+      await page.getByRole("link", { name: "Continue" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      expect(
+        await page.getByRole("heading", { name: "Confirm your email" }).count(),
+      ).toBe(0);
+      expect(await axe(page)).toEqual([]);
+      // sign out, forget the password
+      await page.getByRole("button", { name: "Sign out" }).click();
+      await page.getByRole("heading", { name: "Sign in" }).waitFor();
+      await page.getByRole("link", { name: "Forgot your password?" }).click();
+      await page
+        .getByRole("heading", { name: "Reset your password" })
+        .waitFor();
+      expect(await axe(page)).toEqual([]);
+      await page.getByLabel("Email").fill("life@example.com");
+      await page.getByRole("button", { name: "Send a reset link" }).click();
+      await page.getByText("If that address has an account").waitFor();
+      await page.goto(
+        `${h.origin}/workspace#/reset?token=${await token("RESET_PASSWORD")}`,
+      );
+      await page
+        .getByRole("heading", { name: "Choose a new password" })
+        .waitFor();
+      expect(page.url()).not.toContain("token=");
+      await page.getByLabel("New password").fill("a different long passphrase");
+      await page.getByRole("button", { name: "Change password" }).click();
+      await page.getByRole("heading", { name: "Password changed" }).waitFor();
+      await page.getByRole("link", { name: "Sign in" }).click();
+      await page.getByLabel("Email").fill("life@example.com");
+      await page.getByLabel("Password").fill("a different long passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await page.goto("about:blank");
+      await ctx.close();
+    }, 90_000);
 
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
