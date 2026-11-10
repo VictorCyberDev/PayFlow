@@ -647,6 +647,22 @@ const chromePath = [
       await page.getByText("Stopped", { exact: true }).waitFor();
       rec = await page.locator("main").innerText();
       expect(rec).not.toContain("Next check");
+      // approval rule: the owner sets it from Settings against the real server, sees it, and removes it
+      await page.goto(`${h.origin}/workspace#/settings`);
+      await page.getByRole("heading", { name: "Settings", level: 1 }).waitFor();
+      expect(await page.locator("main").innerText()).toContain(
+        "one owner can approve any mission",
+      );
+      await page.getByLabel("Needs more approvals above (amount)").fill("1000");
+      await page.getByLabel("Approvals needed from other owners").fill("2");
+      await page.getByRole("button", { name: "Save approval rule" }).click();
+      await page.getByText("need 2 approvals from other owners").waitFor();
+      expect(await page.locator("main").innerText()).toContain("above 1000.00");
+      expect(await axe(page)).toEqual([]);
+      await page
+        .getByRole("button", { name: "Remove the approval rule" })
+        .click();
+      await page.getByText("one owner can approve any mission").waitFor();
       for (const [hash, heading] of [
         ["notifications", "Notifications"],
         ["settings", "Settings"],

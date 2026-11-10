@@ -3482,6 +3482,100 @@ async function notificationsPage() {
     h("a", { class: "link", href: "#/approvals", text: "Go to Approvals" }),
   );
 }
+/** Approval quorum (M67): above an amount, more than one other owner must approve. Setting it needs member management rights; the server decides. */
+async function quorumSection() {
+  const cur = await api("/v1/admin/org/quorum-policy");
+  const policy = cur.data?.policy ?? null;
+  const out = h("div", { role: "status" });
+  const tier = policy?.tiers?.[0];
+  const form = h(
+    "form",
+    {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const f = new FormData(form);
+        const r = await api("/v1/admin/org/quorum-policy", {
+          method: "POST",
+          body: {
+            policy: {
+              tiers: [
+                {
+                  aboveMinor: Math.round(Number(f.get("above")) * 100),
+                  approvals: Number(f.get("approvals")),
+                  roles: ["OWNER"],
+                },
+              ],
+            },
+          },
+        });
+        if (!r.ok)
+          return out.replaceChildren(
+            notice(
+              "bad",
+              r.status === 403
+                ? "Your role cannot change this. Ask an owner."
+                : "That is not a valid policy.",
+            ),
+          );
+        await settingsPage();
+      },
+    },
+    field(
+      "above",
+      "Needs more approvals above (amount)",
+      "number",
+      "off",
+      "The mission's total budget is compared with this.",
+      {
+        min: "0",
+        step: "0.01",
+        value: tier ? String(tier.aboveMinor / 100) : "",
+      },
+    ),
+    field(
+      "approvals",
+      "Approvals needed from other owners",
+      "number",
+      "off",
+      "The person who proposed it never counts.",
+      { min: "1", max: "10", value: tier ? String(tier.approvals) : "2" },
+    ),
+    h("button", {
+      class: "primary",
+      type: "submit",
+      text: "Save approval rule",
+    }),
+  );
+  return h(
+    "section",
+    { class: "card" },
+    h("h2", { text: "Approval rule" }),
+    h("p", {
+      text: policy
+        ? `Missions with a total budget above ${((tier?.aboveMinor ?? 0) / 100).toFixed(2)} need ${tier?.approvals} approvals from other owners.`
+        : "Today one owner can approve any mission. You can require more than one for large ones.",
+    }),
+    form,
+    policy
+      ? h("button", {
+          type: "button",
+          text: "Remove the approval rule",
+          onclick: async () => {
+            const r = await api("/v1/admin/org/quorum-policy", {
+              method: "POST",
+              body: { policy: null },
+            });
+            if (!r.ok)
+              return out.replaceChildren(
+                notice("bad", "Your role cannot change this. Ask an owner."),
+              );
+            await settingsPage();
+          },
+        })
+      : null,
+    out,
+  );
+}
 async function settingsPage() {
   shell(
     "#/settings",
@@ -3498,6 +3592,7 @@ async function settingsPage() {
         row("Environment", "Sandbox. No real money moves."),
       ),
     ),
+    await quorumSection(),
     h(
       "section",
       { class: "card" },
