@@ -21,6 +21,7 @@ import {
   RecurringService,
 } from "../missions/recurring-service.js";
 import { createRecurringRoutes } from "./recurring-routes.js";
+import { EmailOutbox, type EmailSender } from "./email-outbox.js";
 import { QuorumService } from "../missions/quorum-service.js";
 import { createQuorumRoutes } from "./quorum-routes.js";
 import { createAutomationRoutes } from "./automation-routes.js";
@@ -188,6 +189,8 @@ export interface HostedGatewayOptions {
    * observation-only `GET /v1/admin/ops/reconcile/tick` and `GET /v1/admin/ops/automation/run` (which can only run the registered handlers), and nothing else. It is not an operator token.
    */
   readonly cronSecret?: string;
+  /** Sends the account emails queued in the outbox. Absent until the owner configures a provider and a verified sender. */
+  readonly emailSender?: EmailSender;
   /**
    * How many reverse proxies sit in front of this host and append to `x-forwarded-for`. The client address is the entry that
    * many positions from the RIGHT (the one the nearest trusted proxy appended); anything to its left is client-controlled and
@@ -457,7 +460,13 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       })
     : undefined;
   const members = new MemberStore(sql);
-  const userAuth = new UserAuthService({ sql, now: iso });
+  const emailOutbox = new EmailOutbox({ sql, now: iso });
+  const userAuth = new UserAuthService({
+    sql,
+    now: iso,
+    outbox: emailOutbox,
+    ...(options.appOrigins?.[0] ? { appBaseUrl: options.appOrigins[0] } : {}),
+  });
   const secureCookies = options.secureCookies ?? true;
   const alerts = new AlertEngine(sql);
   // The active key is registered once; older keys stay published so historical Proof still
@@ -2204,9 +2213,14 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           automationHandlers,
           20,
         );
+        // Account emails: sent only when the owner has configured a sender; otherwise they stay queued and nothing is claimed.
+        const mail = options.emailSender
+          ? await emailOutbox.drain(options.emailSender)
+          : { sent: 0, failed: 0, unknown: 0 };
         return reply(requestId, 200, {
           ...ticked,
           ...ran,
+          mail,
           via: cronCall ? "SCHEDULER" : "OPERATOR",
         });
       }
@@ -2691,7 +2705,11 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       const sessionTokenIn = readSessionCookie(req.headers.cookie);
       if (
         method === "POST" &&
-        (path === "/v1/app/signup" || path === "/v1/app/login")
+        (path === "/v1/app/signup" ||
+          path === "/v1/app/login" ||
+          path === "/v1/app/password-reset/request" ||
+          path === "/v1/app/password-reset/confirm" ||
+          path === "/v1/app/email-verification/confirm")
       ) {
         // Login CSRF: an attacker's page must not be able to sign a victim in as the attacker.
         if (!originOk) {
@@ -2718,6 +2736,38 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           );
           return true;
         }
+        if (path === "/v1/app/password-reset/request") {
+          // The same answer whether or not the address has an account.
+          await userAuth.requestPasswordReset(
+            (body as { email?: unknown } | undefined)?.email,
+          );
+          json(202, {
+            accepted: true,
+            note: "If that address has an account, a reset link has been queued.",
+          });
+          return true;
+        }
+        if (path === "/v1/app/password-reset/confirm") {
+          const b = body as { token?: unknown; password?: unknown } | undefined;
+          const r = await userAuth.resetPassword(b?.token, b?.password);
+          json(
+            r.ok ? 200 : r.refusal === "WEAK_PASSWORD" ? 400 : 410,
+            r.ok ? { ok: true } : { reason: r.refusal, recoverable: true },
+          );
+          return true;
+        }
+        if (path === "/v1/app/email-verification/confirm") {
+          const ok = await userAuth.confirmEmail(
+            (body as { token?: unknown } | undefined)?.token,
+          );
+          json(
+            ok ? 200 : 410,
+            ok
+              ? { verified: true }
+              : { reason: "INVALID_OR_EXPIRED", recoverable: true },
+          );
+          return true;
+        }
         if (path === "/v1/app/signup") {
           const r = await userAuth.signup(body);
           if (!r.ok) {
@@ -2727,6 +2777,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
             });
             return true;
           }
+          // Best effort and never a reason to fail the signup: without a configured sender the message simply stays queued.
+          await userAuth.requestEmailVerification(r.userId).catch(() => false);
           json(201, { userId: r.userId, organizationId: r.organizationId });
           return true;
         }
@@ -2759,6 +2811,24 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
             ),
           },
         );
+        return true;
+      }
+      if (method === "POST" && path === "/v1/app/email-verification/request") {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view || !sessionTokenIn) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        if (req.headers["x-pf-csrf"] !== csrfFor(sessionTokenIn)) {
+          json(403, { reason: "CSRF_CHECK_FAILED", recoverable: true });
+          return true;
+        }
+        const queued = await userAuth.requestEmailVerification(
+          view.user.userId,
+        );
+        json(202, { queued });
         return true;
       }
       if (method === "GET" && path === "/v1/app/me") {

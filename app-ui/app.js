@@ -301,6 +301,17 @@ function authScreen(mode = "login") {
         mode === "signup" ? "Create account" : "Sign in",
       ),
     ),
+    mode === "login"
+      ? h(
+          "p",
+          { class: "hint" },
+          h("a", {
+            href: "#/forgot",
+            class: "link",
+            text: "Forgot your password?",
+          }),
+        )
+      : null,
     h(
       "p",
       { class: "hint" },
@@ -336,6 +347,163 @@ function authScreen(mode = "login") {
         class: "hint",
         text: "Sandbox: nothing here moves real money.",
       }),
+    ),
+  );
+}
+
+/** A page for someone who is not signed in (reset, verify). Same header as sign-in; no navigation, nothing that needs a session. */
+function publicPage(...kids) {
+  root.replaceChildren(
+    h(
+      "header",
+      { class: "bar" },
+      h(
+        "a",
+        { class: "brand", href: "#/", "aria-label": "PayFlow" },
+        brandMark(),
+        "PayFlow",
+      ),
+      h("span", { class: "env", text: "Sandbox" }),
+    ),
+    h("main", { id: "main", tabindex: "-1" }, kids),
+  );
+}
+const hashToken = (hash) => {
+  const t = new URLSearchParams(hash.split("?")[1] ?? "").get("token") ?? "";
+  // The link's secret is removed from the address bar and history as soon as it has been read.
+  history.replaceState(null, "", location.pathname + hash.split("?")[0]);
+  return t;
+};
+function forgotScreen() {
+  const msg = h("div", { role: "status" });
+  const form = h(
+    "form",
+    {
+      class: "card",
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const r = await api("/v1/app/password-reset/request", {
+          method: "POST",
+          body: { email: String(new FormData(form).get("email")) },
+        });
+        msg.replaceChildren(
+          r.ok
+            ? notice(
+                "ok",
+                "If that address has an account, a reset link has been queued. It works once and lasts 30 minutes. In this sandbox, email delivery may not be switched on yet, so nothing may arrive.",
+              )
+            : notice("bad", reasonText(r.data?.reason)),
+        );
+      },
+    },
+    h("h1", { text: "Reset your password" }),
+    field("email", "Email", "email", "email"),
+    msg,
+    h(
+      "div",
+      { class: "actions" },
+      h("button", {
+        class: "primary",
+        type: "submit",
+        text: "Send a reset link",
+      }),
+    ),
+    h(
+      "p",
+      { class: "hint" },
+      h("a", { href: "#/login", class: "link", text: "Back to sign in" }),
+    ),
+  );
+  publicPage(form);
+}
+function resetScreen(token) {
+  const msg = h("div", { role: "status" });
+  const form = h(
+    "form",
+    {
+      class: "card",
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const r = await api("/v1/app/password-reset/confirm", {
+          method: "POST",
+          body: { token, password: String(new FormData(form).get("password")) },
+        });
+        if (r.ok) {
+          state.me = null;
+          return publicPage(
+            h(
+              "div",
+              { class: "card" },
+              h("h1", { text: "Password changed" }),
+              notice(
+                "ok",
+                "You were signed out everywhere. Sign in with your new password.",
+              ),
+              h("a", {
+                class: "btn primary",
+                href: "#/login",
+                text: "Sign in",
+              }),
+            ),
+          );
+        }
+        msg.replaceChildren(
+          notice(
+            "bad",
+            r.status === 410
+              ? "This link has expired or was already used. Ask for a new one."
+              : "Use at least 12 characters, not containing your email name.",
+          ),
+        );
+      },
+    },
+    h("h1", { text: "Choose a new password" }),
+    field(
+      "password",
+      "New password",
+      "password",
+      "new-password",
+      "At least 12 characters.",
+    ),
+    msg,
+    h(
+      "div",
+      { class: "actions" },
+      h("button", {
+        class: "primary",
+        type: "submit",
+        text: "Change password",
+      }),
+    ),
+  );
+  publicPage(form);
+}
+async function verifyScreen(token) {
+  publicPage(
+    h(
+      "div",
+      { class: "card" },
+      h("h1", { text: "Confirming your email" }),
+      h("p", { role: "status", text: "One moment." }),
+    ),
+  );
+  const r = await api("/v1/app/email-verification/confirm", {
+    method: "POST",
+    body: { token },
+  });
+  state.me = null; // reload who we are, so the banner goes away
+  publicPage(
+    h(
+      "div",
+      { class: "card" },
+      h("h1", { text: r.ok ? "Email confirmed" : "That link did not work" }),
+      notice(
+        r.ok ? "ok" : "bad",
+        r.ok
+          ? "Thank you. Your email address is confirmed."
+          : "This link has expired or was already used. Sign in and ask for a new one.",
+      ),
+      h("a", { class: "btn primary", href: "#/", text: "Continue" }),
     ),
   );
 }
@@ -387,6 +555,32 @@ async function home() {
   shell(
     "#/",
     h("h1", { text: `Welcome, ${state.me.user.displayName}` }),
+    state.me.user.emailVerified === false
+      ? h(
+          "section",
+          { class: "card", "aria-labelledby": "ev" },
+          h("h2", { id: "ev", text: "Confirm your email" }),
+          h("p", { text: `We have not confirmed ${state.me.user.email} yet.` }),
+          h("button", {
+            type: "button",
+            text: "Send me the confirmation link",
+            onclick: async (e) => {
+              const r = await api("/v1/app/email-verification/request", {
+                method: "POST",
+                body: {},
+              });
+              e.target.replaceWith(
+                notice(
+                  r.ok && r.data?.queued ? "ok" : "bad",
+                  r.ok && r.data?.queued
+                    ? "Queued. In this sandbox, email delivery may not be switched on yet."
+                    : "Nothing was queued. Email may not be enabled yet.",
+                ),
+              );
+            },
+          }),
+        )
+      : null,
     h(
       "section",
       { class: "card", "aria-labelledby": "get-started" },
@@ -3729,6 +3923,9 @@ function helpPage() {
 // ------------------------------------------------------------------------------------------------ router
 async function render() {
   const hash = location.hash || "#/";
+  if (hash.startsWith("#/forgot")) return forgotScreen();
+  if (hash.startsWith("#/reset")) return resetScreen(hashToken(hash));
+  if (hash.startsWith("#/verify")) return await verifyScreen(hashToken(hash));
   if (!state.me) {
     const me = await api("/v1/app/me");
     if (me.ok) {
