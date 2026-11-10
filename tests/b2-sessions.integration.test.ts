@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unnecessary-type-assertion */
 import { describe, expect, it } from "vitest";
 import { hostHarness } from "./helpers/host-harness.js";
 
@@ -51,9 +51,7 @@ const PASSWORD = "correct horse battery staple";
       });
       expect(r.status).toBe(200);
       const cookie = `pf_session=${/pf_session=([^;]+)/u.exec(r.headers.get("set-cookie")!)![1]!}`;
-      const me = (await (
-        await send("GET", "/v1/app/me", { cookie })
-      ).json()) as any;
+      const me = await (await send("GET", "/v1/app/me", { cookie })).json();
       return { cookie, csrf: me.csrfToken as string };
     };
 
@@ -61,9 +59,9 @@ const PASSWORD = "correct horse battery staple";
       const email = await signup();
       const a = await login(email);
       const b = await login(email);
-      const listed = (await (
+      const listed = await (
         await send("GET", "/v1/app/sessions", { cookie: a.cookie })
-      ).json()) as any;
+      ).json();
       expect(listed.sessions.length).toBeGreaterThanOrEqual(2);
       expect(listed.sessions.filter((s: any) => s.current)).toHaveLength(1);
       const other = listed.sessions.find((s: any) => !s.current);
@@ -86,9 +84,9 @@ const PASSWORD = "correct horse battery staple";
         (await send("GET", "/v1/app/me", { cookie: a.cookie })).status,
       ).toBe(200);
       // One of the two is now dead; the revoked one is whichever id we picked.
-      const after = (await (
+      const after = await (
         await send("GET", "/v1/app/sessions", { cookie: a.cookie })
-      ).json()) as any;
+      ).json();
       expect(
         after.sessions.find((s: any) => s.id === other.id),
       ).toBeUndefined();
@@ -100,12 +98,12 @@ const PASSWORD = "correct horse battery staple";
       const e2 = await signup();
       const one = await login(e1);
       const two = await login(e2);
-      const theirs = (await (
+      const theirs = await (
         await send("GET", "/v1/app/sessions", { cookie: two.cookie })
-      ).json()) as any;
-      const mine = (await (
+      ).json();
+      const mine = await (
         await send("GET", "/v1/app/sessions", { cookie: one.cookie })
-      ).json()) as any;
+      ).json();
       expect(
         mine.sessions.some((s: any) =>
           theirs.sessions.some((t: any) => t.id === s.id),
@@ -135,7 +133,7 @@ const PASSWORD = "correct horse battery staple";
         csrf: a.csrf,
       });
       expect(r.status).toBe(200);
-      expect(((await r.json()) as any).revoked).toBeGreaterThanOrEqual(1);
+      expect((await r.json()).revoked).toBeGreaterThanOrEqual(1);
       expect(
         (await send("GET", "/v1/app/me", { cookie: b.cookie })).status,
       ).toBe(401);
