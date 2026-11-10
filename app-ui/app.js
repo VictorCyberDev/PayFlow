@@ -3817,6 +3817,94 @@ async function quorumSection() {
     out,
   );
 }
+/** Where the person is signed in (B2). They can end any other sign-in, all the others, or everything including this browser. */
+async function signInsSection() {
+  const out = h("div", { class: "stack" });
+  const r = await api("/v1/app/sessions");
+  if (!r.ok) {
+    return h(
+      "section",
+      { class: "card" },
+      h("h2", { text: "Where you are signed in" }),
+      notice("bad", "We could not load your sign-ins. Nothing was changed."),
+    );
+  }
+  const stamp = (iso) => new Date(iso).toLocaleString();
+  const list = r.data.sessions;
+  const reload = async () => {
+    await settingsPage();
+  };
+  const rows = list.map((x) =>
+    h(
+      "li",
+      { class: "row" },
+      h("span", {
+        text: `${x.current ? "This browser" : "Another sign-in"} · started ${stamp(x.createdAt)} · last used ${stamp(x.lastSeenAt)}`,
+      }),
+      x.current
+        ? null
+        : h("button", {
+            type: "button",
+            text: "Sign out this sign-in",
+            onclick: async () => {
+              const d = await api(`/v1/app/sessions/${x.id}/revoke`, {
+                method: "POST",
+                body: {},
+              });
+              if (!d.ok && d.status !== 404)
+                return out.replaceChildren(
+                  notice("bad", "Could not sign that one out. Try again."),
+                );
+              await reload();
+            },
+          }),
+    ),
+  );
+  const others = list.some((x) => !x.current);
+  return h(
+    "section",
+    { class: "card" },
+    h("h2", { text: "Where you are signed in" }),
+    h("ul", { class: "list" }, ...rows),
+    others
+      ? h("button", {
+          type: "button",
+          text: "Sign out of all other sign-ins",
+          onclick: async () => {
+            const d = await api("/v1/app/sessions/revoke-others", {
+              method: "POST",
+              body: {},
+            });
+            if (!d.ok)
+              return out.replaceChildren(
+                notice("bad", "Could not sign the others out. Try again."),
+              );
+            await reload();
+          },
+        })
+      : h("p", { text: "This is your only sign-in." }),
+    h("button", {
+      type: "button",
+      text: "Sign out everywhere, including this browser",
+      onclick: async () => {
+        if (!confirm("Sign out of every browser, including this one?")) return;
+        const d = await api("/v1/app/sessions/revoke-all", {
+          method: "POST",
+          body: {},
+        });
+        if (!d.ok)
+          return out.replaceChildren(
+            notice("bad", "Could not sign you out. Try again."),
+          );
+        state.me = null;
+        state.csrf = null;
+        location.hash = "#/login";
+        await render();
+      },
+    }),
+    out,
+  );
+}
 async function settingsPage() {
   shell(
     "#/settings",
@@ -3833,6 +3921,7 @@ async function settingsPage() {
         row("Environment", "Sandbox. No real money moves."),
       ),
     ),
+    await signInsSection(),
     await quorumSection(),
     h(
       "section",

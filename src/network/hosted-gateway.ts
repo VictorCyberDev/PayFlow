@@ -2851,6 +2851,61 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         });
         return true;
       }
+      // ---- Sign-ins: the person sees where they are signed in and can end the others.
+      const signIns =
+        /^\/v1\/app\/sessions(?:\/([a-f0-9]{16})\/revoke)?$/u.exec(path);
+      if (
+        signIns ||
+        path === "/v1/app/sessions/revoke-others" ||
+        path === "/v1/app/sessions/revoke-all"
+      ) {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view || !sessionTokenIn) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        const uid = view.user.userId;
+        if (method === "GET" && signIns && !signIns[1]) {
+          json(200, {
+            sessions: await userAuth.listSessions(uid, sessionTokenIn),
+          });
+          return true;
+        }
+        if (method === "POST" && path === "/v1/app/sessions/revoke-all") {
+          await userAuth.revokeAll(uid);
+          json(
+            200,
+            { revokedAll: true },
+            { "set-cookie": clearedSessionCookie(secureCookies) },
+          );
+          return true;
+        }
+        if (method === "POST" && path === "/v1/app/sessions/revoke-others") {
+          json(200, {
+            revoked: await userAuth.revokeOthers(uid, sessionTokenIn),
+          });
+          return true;
+        }
+        if (method === "POST" && signIns?.[1]) {
+          const out = await userAuth.revokeSession(
+            uid,
+            signIns[1],
+            sessionTokenIn,
+          );
+          if (out === "NOT_FOUND") json(404, { reason: "SESSION_NOT_FOUND" });
+          else if (out === "IS_CURRENT")
+            json(409, {
+              reason: "IS_CURRENT_SESSION",
+              hint: "Use sign out for this device.",
+            });
+          else json(200, { revoked: true });
+          return true;
+        }
+        json(405, { reason: "METHOD_NOT_ALLOWED" });
+        return true;
+      }
       // ---- Safety packs (M69): named ceilings. Applying one only ever lowers what the person asked for, and says what it changed.
       if (
         path === "/v1/app/policy-packs" ||

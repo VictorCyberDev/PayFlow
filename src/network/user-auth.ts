@@ -448,6 +448,56 @@ export class UserAuthService {
     return done ? { ok: true } : { ok: false, refusal: "INVALID_OR_EXPIRED" };
   }
 
+  /** The person's own live sign-ins. The id is a prefix of the stored digest: it names a session but cannot be used to become it. */
+  async listSessions(
+    userId: string,
+    currentToken: string,
+  ): Promise<
+    {
+      id: string;
+      current: boolean;
+      createdAt: string;
+      lastSeenAt: string;
+      expiresAt: string;
+    }[]
+  > {
+    const now = this.deps.now();
+    const rows = await this.deps
+      .sql`select session_hash, created_at, last_seen_at, expires_at from user_sessions
+      where user_id = ${userId} and revoked_at is null and expires_at > ${now} and idle_expires_at > ${now}
+      order by created_at desc limit 50`;
+    const mine = sha(currentToken);
+    return rows.map((r) => ({
+      id: String(r.session_hash).slice(0, 16),
+      current: String(r.session_hash) === mine,
+      createdAt: new Date(r.created_at as string | Date).toISOString(),
+      lastSeenAt: new Date(r.last_seen_at as string | Date).toISOString(),
+      expiresAt: new Date(r.expires_at as string | Date).toISOString(),
+    }));
+  }
+
+  /** Ends one of the person's other sessions. Scoped to the user, so an id from someone else's list matches nothing. */
+  async revokeSession(
+    userId: string,
+    id: string,
+    currentToken: string,
+  ): Promise<"REVOKED" | "NOT_FOUND" | "IS_CURRENT"> {
+    if (!/^[a-f0-9]{16}$/u.test(id)) return "NOT_FOUND";
+    if (sha(currentToken).startsWith(id)) return "IS_CURRENT";
+    const done = await this.deps
+      .sql`update user_sessions set revoked_at = ${this.deps.now()}
+      where user_id = ${userId} and revoked_at is null and starts_with(session_hash, ${id}) returning 1`;
+    return done.length ? "REVOKED" : "NOT_FOUND";
+  }
+
+  /** Ends every session except the one in use. */
+  async revokeOthers(userId: string, currentToken: string): Promise<number> {
+    const done = await this.deps
+      .sql`update user_sessions set revoked_at = ${this.deps.now()}
+      where user_id = ${userId} and revoked_at is null and session_hash <> ${sha(currentToken)} returning 1`;
+    return done.length;
+  }
+
   /** Ends every session of a user (password change, account disable). */
   async revokeAll(userId: string): Promise<void> {
     await this.deps
