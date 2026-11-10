@@ -7,6 +7,7 @@ import {
 import { promisify } from "node:util";
 import type { Sql } from "postgres";
 import { z } from "zod";
+import type { EmailOutbox } from "./email-outbox.js";
 import type { Member } from "./rbac.js";
 
 /**
@@ -124,18 +125,49 @@ export interface SessionGrant {
   readonly sessionToken: string;
   readonly csrfToken: string;
   readonly expiresAt: string;
-  readonly user: { userId: string; email: string; displayName: string };
+  readonly user: {
+    userId: string;
+    email: string;
+    displayName: string;
+    emailVerified: boolean;
+  };
   readonly member: Member;
 }
 export interface SessionView {
-  readonly user: { userId: string; email: string; displayName: string };
+  readonly user: {
+    userId: string;
+    email: string;
+    displayName: string;
+    emailVerified: boolean;
+  };
   readonly member: Member;
   readonly csrfHash: string;
   readonly expiresAt: string;
 }
 
+/** The password rules beyond length: not the email, not containing its name, not a handful of repeated characters. */
+export function isWeakPassword(password: string, email: string): boolean {
+  const local = email.split("@")[0]!;
+  return (
+    password.toLowerCase() === email ||
+    (local.length >= 4 && password.toLowerCase().includes(local)) ||
+    new Set(password).size < 5
+  );
+}
+export const VERIFY_TTL_MS = 24 * 3_600_000;
+export const RESET_TTL_MS = 30 * 60_000;
+
 export class UserAuthService {
-  constructor(private readonly deps: { sql: Sql; now: () => string }) {}
+  constructor(
+    private readonly deps: {
+      sql: Sql;
+      now: () => string;
+      /** When present, verification and reset emails are queued here. Without it no email is ever claimed to be sent. */
+      outbox?: EmailOutbox;
+      /** Where links in those emails point, for example https://app.example.com */
+      appBaseUrl?: string;
+    },
+  ) {}
 
   /** Creates the person, their organization (Sandbox) and an OWNER membership in one transaction. */
   async signup(
@@ -150,12 +182,7 @@ export class UserAuthService {
       return { ok: false, refusal: weak ? "WEAK_PASSWORD" : "MALFORMED" };
     }
     const b = parsed.data;
-    if (
-      b.password.toLowerCase() === b.email ||
-      (b.email.split("@")[0]!.length >= 4 &&
-        b.password.toLowerCase().includes(b.email.split("@")[0]!)) ||
-      new Set(b.password).size < 5
-    )
+    if (isWeakPassword(b.password, b.email))
       return { ok: false, refusal: "WEAK_PASSWORD" };
     const now = this.deps.now();
     const hash = await hashPassword(b.password);
@@ -240,6 +267,7 @@ export class UserAuthService {
           userId: String(u.user_id),
           email: String(u.email),
           displayName: String(u.display_name),
+          emailVerified: u.email_verified_at !== null,
         },
         member: {
           memberId: String(m.member_id),
@@ -258,7 +286,7 @@ export class UserAuthService {
     const sql = this.deps.sql;
     const now = this.deps.now();
     const [s] =
-      await sql`select s.*, u.email, u.display_name as user_name, u.status as user_status,
+      await sql`select s.*, u.email, u.email_verified_at, u.display_name as user_name, u.status as user_status,
         m.organization_id, m.environment, m.display_name as member_name, m.role, m.status as member_status, m.expires_at as member_expires
       from user_sessions s join user_accounts u on u.user_id = s.user_id join organization_members m on m.member_id = s.member_id
       where s.session_hash = ${sha(sessionToken)}`;
@@ -282,6 +310,7 @@ export class UserAuthService {
         userId: String(s.user_id),
         email: String(s.email),
         displayName: String(s.user_name),
+        emailVerified: s.email_verified_at !== null,
       },
       member: {
         memberId: String(s.member_id),
@@ -302,6 +331,121 @@ export class UserAuthService {
   async logout(sessionToken: string): Promise<void> {
     await this.deps
       .sql`update user_sessions set revoked_at = ${this.deps.now()} where session_hash = ${sha(sessionToken)} and revoked_at is null`;
+  }
+
+  // ---------------------------------------------------------------------------------------------- email verification and reset
+  private async issueToken(
+    userId: string,
+    email: string,
+    purpose: "VERIFY_EMAIL" | "RESET_PASSWORD",
+    ttlMs: number,
+  ): Promise<string> {
+    const raw = randomBytes(32).toString("base64url");
+    const now = this.deps.now();
+    await this.deps.sql.begin(async (tx) => {
+      // One live token per purpose: asking again replaces the earlier link.
+      await tx`update user_tokens set used_at = ${now} where user_id = ${userId} and purpose = ${purpose} and used_at is null`;
+      await tx`insert into user_tokens (token_hash, user_id, purpose, email, created_at, expires_at)
+        values (${sha(raw)}, ${userId}, ${purpose}, ${email}, ${now}, ${new Date(Date.parse(now) + ttlMs).toISOString()})`;
+    });
+    return raw;
+  }
+  private link(path: string, token: string): string {
+    const base = (this.deps.appBaseUrl ?? "").replace(/\/+$/u, "");
+    // The token travels in the URL fragment so it never reaches a server log or a Referer header.
+    return `${base}/workspace/#/${path}?token=${token}`;
+  }
+
+  /** Queue a verification email for a signed-in person. Returns false when no outbox is configured (nothing is claimed). */
+  async requestEmailVerification(userId: string): Promise<boolean> {
+    const [u] = await this.deps
+      .sql`select email, email_verified_at, status from user_accounts where user_id = ${userId}`;
+    if (!u || u.status !== "ACTIVE" || u.email_verified_at || !this.deps.outbox)
+      return false;
+    const token = await this.issueToken(
+      userId,
+      String(u.email),
+      "VERIFY_EMAIL",
+      VERIFY_TTL_MS,
+    );
+    await this.deps.outbox.enqueue({
+      to: String(u.email),
+      template: "VERIFY_EMAIL",
+      subject: "Confirm your PayFlow email",
+      body: `Confirm your email to finish setting up PayFlow:\n\n${this.link("verify", token)}\n\nThis link works once and expires in 24 hours. If you did not create a PayFlow account, ignore this message.`,
+    });
+    return true;
+  }
+
+  async confirmEmail(token: unknown): Promise<boolean> {
+    if (typeof token !== "string" || token.length < 20 || token.length > 100)
+      return false;
+    const now = this.deps.now();
+    return this.deps.sql.begin(async (tx) => {
+      const [t] = await tx`update user_tokens set used_at = ${now}
+        where token_hash = ${sha(token)} and purpose = 'VERIFY_EMAIL' and used_at is null and expires_at > ${now} returning user_id, email`;
+      if (!t) return false;
+      // Only the address the token was sent to counts, and only if the account still has it.
+      const r = await tx`update user_accounts set email_verified_at = ${now}
+        where user_id = ${String(t.user_id)} and email = ${String(t.email)} and email_verified_at is null returning user_id`;
+      return r.length === 1;
+    });
+  }
+
+  /**
+   * Always answers the same way, whether or not the address has an account, so it cannot be used to find accounts. A disabled account gets nothing.
+   * The reset link works once, for 30 minutes.
+   */
+  async requestPasswordReset(rawEmail: unknown): Promise<void> {
+    const e = EmailSchema.safeParse(rawEmail);
+    if (!e.success || !this.deps.outbox) return;
+    const [u] = await this.deps
+      .sql`select user_id, email, status from user_accounts where email = ${e.data}`;
+    if (!u || u.status !== "ACTIVE") return;
+    const token = await this.issueToken(
+      String(u.user_id),
+      String(u.email),
+      "RESET_PASSWORD",
+      RESET_TTL_MS,
+    );
+    await this.deps.outbox.enqueue({
+      to: String(u.email),
+      template: "RESET_PASSWORD",
+      subject: "Reset your PayFlow password",
+      body: `Someone asked to reset the password for this PayFlow account. If it was you, choose a new one here:\n\n${this.link("reset", token)}\n\nThis link works once and expires in 30 minutes. If it was not you, ignore this message; your password has not changed.`,
+    });
+  }
+
+  async resetPassword(
+    token: unknown,
+    password: unknown,
+  ): Promise<
+    | { ok: true }
+    | { ok: false; refusal: "INVALID_OR_EXPIRED" | "WEAK_PASSWORD" }
+  > {
+    const p = PasswordSchema.safeParse(password);
+    if (typeof token !== "string" || token.length < 20 || token.length > 100)
+      return { ok: false, refusal: "INVALID_OR_EXPIRED" };
+    if (!p.success) return { ok: false, refusal: "WEAK_PASSWORD" };
+    const now = this.deps.now();
+    const sql = this.deps.sql;
+    const [peek] =
+      await sql`select u.email from user_tokens t join user_accounts u on u.user_id = t.user_id
+      where t.token_hash = ${sha(token)} and t.purpose = 'RESET_PASSWORD' and t.used_at is null and t.expires_at > ${now} and u.status = 'ACTIVE'`;
+    if (!peek) return { ok: false, refusal: "INVALID_OR_EXPIRED" };
+    if (isWeakPassword(p.data, String(peek.email)))
+      return { ok: false, refusal: "WEAK_PASSWORD" };
+    const hash = await hashPassword(p.data);
+    const done = await sql.begin(async (tx) => {
+      // The token is consumed first, in the same transaction as the change: a replay finds it used.
+      const [t] = await tx`update user_tokens set used_at = ${now}
+        where token_hash = ${sha(token)} and purpose = 'RESET_PASSWORD' and used_at is null and expires_at > ${now} returning user_id`;
+      if (!t) return null;
+      await tx`update user_accounts set password_hash = ${hash}, failed_attempts = 0, locked_until = null where user_id = ${String(t.user_id)}`;
+      await tx`update user_sessions set revoked_at = ${now} where user_id = ${String(t.user_id)} and revoked_at is null`;
+      return String(t.user_id);
+    });
+    return done ? { ok: true } : { ok: false, refusal: "INVALID_OR_EXPIRED" };
   }
 
   /** Ends every session of a user (password change, account disable). */
