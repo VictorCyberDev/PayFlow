@@ -203,6 +203,42 @@ export const companyDocuments: Record<string, CompanyDocument> = {
       ["Contact", "/contact/"],
     ],
   ),
+  preview: make(
+    "Private preview",
+    "The PayFlow customer application is not open to the public yet. This page says what that means, so a sign-in button never leads to a dead end.",
+    [
+      {
+        title: "What is not available",
+        paragraphs: [
+          "There is no public sign-up or sign-in for the customer application today. You cannot create an account, start a mission or approve spending here, and no real money moves.",
+        ],
+      },
+      {
+        title: "What you can do now",
+        paragraphs: [
+          "Explore the authority boundary in your browser with no account on the Sandbox page. It runs locally and contacts no provider. Read how Authority, Gateway, Verify and Proof work in the documentation, or check a sample Proof on the Verify page.",
+        ],
+      },
+      {
+        title: "Where it stands",
+        paragraphs: [
+          "The application exists in source and runs in tests against a real database. It has not been deployed publicly, and no availability or customer use is claimed. The Status page records what is and is not deployed.",
+        ],
+      },
+      {
+        title: "Early access",
+        paragraphs: [
+          "If you want to be told when a private preview opens, or to evaluate it for your organization, use the contact page. Nothing is promised about timing.",
+        ],
+      },
+    ],
+    [
+      ["Try the Sandbox", "/sandbox/"],
+      ["Read the documentation", "/docs/"],
+      ["See what is deployed", "/status/"],
+      ["Contact us", "/contact/"],
+    ],
+  ),
   status: make(
     "Service status",
     "Measured facts only. No uptime monitoring exists yet, so availability and uptime are not stated.",
