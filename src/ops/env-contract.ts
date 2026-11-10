@@ -97,6 +97,27 @@ export const ENV_CONTRACT: readonly Var[] = [
     why: "lets the scheduler call only GET /v1/admin/ops/reconcile/tick and GET /v1/admin/ops/automation/run; needed for the crons in hosting/m6/vercel.json to work",
   },
   {
+    name: "PAYFLOW_RESEND_API_KEY",
+    need: "FEATURE",
+    secret: true,
+    rule: "Resend API key (re_...); set together with PAYFLOW_EMAIL_FROM and PAYFLOW_EMAIL_FROM_VERIFIED",
+    why: "lets the automation run send verification and password-reset email. Without it mail is queued and the app says delivery is not configured",
+  },
+  {
+    name: "PAYFLOW_EMAIL_FROM",
+    need: "FEATURE",
+    secret: false,
+    rule: "a sender on a domain verified with Resend, e.g. PayFlow <notices@your-domain>; never @resend.dev; requires an https PAYFLOW_M5_ORIGIN",
+    why: "the From address of account email",
+  },
+  {
+    name: "PAYFLOW_EMAIL_FROM_VERIFIED",
+    need: "FEATURE",
+    secret: false,
+    rule: 'the exact string "true": the owner attests the sending domain is verified in Resend',
+    why: "the code cannot check domain verification; startup is refused without this attestation. Enabling a sender also turns on the verified-email requirement for outward and financial actions",
+  },
+  {
     name: "PAYFLOW_ALERT_WEBHOOK_URL",
     need: "FEATURE",
     secret: true,
