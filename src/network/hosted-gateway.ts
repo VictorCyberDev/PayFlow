@@ -2854,7 +2854,11 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       // ---- Sign-ins: the person sees where they are signed in and can end the others.
       const signIns =
         /^\/v1\/app\/sessions(?:\/([a-f0-9]{16})\/revoke)?$/u.exec(path);
-      if (signIns || path === "/v1/app/sessions/revoke-others") {
+      if (
+        signIns ||
+        path === "/v1/app/sessions/revoke-others" ||
+        path === "/v1/app/sessions/revoke-all"
+      ) {
         const view = sessionTokenIn
           ? await userAuth.authenticate(sessionTokenIn)
           : null;
@@ -2867,6 +2871,15 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           json(200, {
             sessions: await userAuth.listSessions(uid, sessionTokenIn),
           });
+          return true;
+        }
+        if (method === "POST" && path === "/v1/app/sessions/revoke-all") {
+          await userAuth.revokeAll(uid);
+          json(
+            200,
+            { revokedAll: true },
+            { "set-cookie": clearedSessionCookie(secureCookies) },
+          );
           return true;
         }
         if (method === "POST" && path === "/v1/app/sessions/revoke-others") {

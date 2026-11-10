@@ -1537,6 +1537,57 @@ const chromePath = [
       await ctx.close();
     }, 90_000);
 
+    it("sign-ins in a real browser: another sign-in is listed, ended from Settings, then everything is ended", async () => {
+      const { ctx, page } = await open();
+      const creds = {
+        email: "devices@example.com",
+        password: "a long enough passphrase",
+      };
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          ...creds,
+          displayName: "Dee Vice",
+          organizationName: "Vice Ltd",
+        }),
+      });
+      const other = await fetch(`${h.origin}/v1/app/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify(creds),
+      });
+      const otherCookie = `pf_session=${/pf_session=([^;]+)/u.exec(other.headers.get("set-cookie")!)![1]!}`;
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill(creds.email);
+      await page.getByLabel("Password").fill(creds.password);
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await page.goto(`${h.origin}/workspace#/settings`);
+      await page
+        .getByRole("heading", { name: "Where you are signed in" })
+        .waitFor();
+      const text = await page.locator("main").innerText();
+      expect(text).toContain("This browser");
+      expect(text).toContain("Another sign-in");
+      expect(text).not.toMatch(/undefined|\[object|NaN|Invalid Date/u);
+      expect(await axe(page)).toEqual([]);
+      const me = (cookie: string) =>
+        fetch(`${h.origin}/v1/app/me`, { headers: { cookie } });
+      expect((await me(otherCookie)).status).toBe(200);
+      await page
+        .getByRole("button", { name: "Sign out this sign-in" })
+        .first()
+        .click();
+      await page.getByText("This is your only sign-in.").waitFor();
+      expect((await me(otherCookie)).status).toBe(401);
+      await page.getByRole("button", { name: /Sign out everywhere/u }).click();
+      await page.getByRole("heading", { name: "Sign in" }).waitFor();
+      await page.goto(`${h.origin}/workspace#/settings`);
+      await page.getByRole("heading", { name: "Sign in" }).waitFor();
+      await ctx.close();
+    }, 90_000);
+
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
       await page.goto(`${h.origin}/workspace`);

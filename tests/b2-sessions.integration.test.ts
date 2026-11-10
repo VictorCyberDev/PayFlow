@@ -141,5 +141,59 @@ const PASSWORD = "correct horse battery staple";
         (await send("GET", "/v1/app/me", { cookie: a.cookie })).status,
       ).toBe(200);
     });
+
+    it("sign out everywhere ends every session including this one; expired and idle sessions are not listed", async () => {
+      const email = await signup();
+      const a = await login(email);
+      const b = await login(email);
+      const r = await send("POST", "/v1/app/sessions/revoke-all", {
+        cookie: a.cookie,
+        csrf: a.csrf,
+      });
+      expect(r.status).toBe(200);
+      expect(r.headers.get("set-cookie")).toMatch(/Max-Age=0|Expires=/iu);
+      expect(
+        (await send("GET", "/v1/app/me", { cookie: a.cookie })).status,
+      ).toBe(401);
+      expect(
+        (await send("GET", "/v1/app/me", { cookie: b.cookie })).status,
+      ).toBe(401);
+      // a fresh sign-in, then the clock moves past the idle window: it is neither usable nor listed
+      const c = await login(email);
+      h.advance(40 * 24 * 3600_000);
+      expect(
+        (await send("GET", "/v1/app/sessions", { cookie: c.cookie })).status,
+      ).toBe(401);
+      const d = await login(email);
+      const listed = await (
+        await send("GET", "/v1/app/sessions", { cookie: d.cookie })
+      ).json();
+      expect(listed.sessions).toHaveLength(1);
+      expect(listed.sessions[0].current).toBe(true);
+    });
+
+    it("concurrent revocation of the same sign-in is safe: one wins, the other sees it already gone", async () => {
+      const email = await signup();
+      const a = await login(email);
+      await login(email);
+      const listed = await (
+        await send("GET", "/v1/app/sessions", { cookie: a.cookie })
+      ).json();
+      const other = listed.sessions.find((s: any) => !s.current);
+      const results = await Promise.all(
+        [1, 2, 3, 4].map(() =>
+          send("POST", `/v1/app/sessions/${other.id}/revoke`, {
+            cookie: a.cookie,
+            csrf: a.csrf,
+          }),
+        ),
+      );
+      const codes = results.map((r) => r.status).sort();
+      expect(codes.filter((c) => c === 200)).toHaveLength(1);
+      expect(codes.filter((c) => c === 404)).toHaveLength(3);
+      expect(
+        (await send("GET", "/v1/app/me", { cookie: a.cookie })).status,
+      ).toBe(200);
+    });
   },
 );
