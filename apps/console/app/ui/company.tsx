@@ -1,4 +1,5 @@
 "use client";
+import { SIGN_IN_HREF } from "../../lib/availability";
 import Link from "next/link";
 import { useState } from "react";
 import { Wordmark, BrandMark } from "./brand";
@@ -29,7 +30,7 @@ export function CompanyShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="company-actions">
-          <Link href="/app/">Sign in</Link>
+          <Link href={SIGN_IN_HREF}>Sign in</Link>
           <Link className="company-button" href="/docs/quickstart/">
             Start building <span aria-hidden="true">↗</span>
           </Link>
