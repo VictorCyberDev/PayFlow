@@ -135,6 +135,8 @@ const NEW_PASSWORD = "a brand new passphrase 42";
         await send("GET", "/v1/app/me", { cookie }),
       )) as any;
       const csrf = me.csrfToken as string;
+      await mkOutbox().drain(capture()); // the first message has gone, so a new request may issue a new link
+      h.advance(61_000);
       expect(
         (await send("POST", "/v1/app/email-verification/request", { cookie }))
           .status,
@@ -238,6 +240,7 @@ const NEW_PASSWORD = "a brand new passphrase 42";
       const older = tokenFrom(
         String((await queued("RESET_PASSWORD")).at(-1)!.body),
       );
+      await mkOutbox().drain(capture());
       h.advance(61_000);
       await send("POST", "/v1/app/password-reset/request", { body: { email } });
       const newer = tokenFrom(
@@ -259,6 +262,8 @@ const NEW_PASSWORD = "a brand new passphrase 42";
       ).toBe(200);
       expect((await send("GET", "/v1/app/me", { cookie })).status).toBe(401); // the old session is gone
       expect((await login(email, NEW_PASSWORD)).status).toBe(200); // and the lockout is cleared
+      await mkOutbox().drain(capture());
+      h.advance(61_000);
       await send("POST", "/v1/app/password-reset/request", { body: { email } });
       const late = tokenFrom(
         String((await queued("RESET_PASSWORD")).at(-1)!.body),
@@ -335,7 +340,12 @@ const NEW_PASSWORD = "a brand new passphrase 42";
                 : { outcome: "UNKNOWN", note: "timeout" },
           ),
       };
-      expect(await o.drain(sender)).toEqual({ sent: 1, failed: 1, unknown: 1 });
+      expect(await o.drain(sender)).toEqual({
+        sent: 1,
+        failed: 1,
+        unknown: 1,
+        deferred: 0,
+      });
       const rows = await h.repo
         .sql`select outbox_id, state, body from email_outbox order by to_email`;
       expect(rows.map((r) => [r.state, r.body])).toEqual([
@@ -344,7 +354,12 @@ const NEW_PASSWORD = "a brand new passphrase 42";
         ["UNKNOWN", "link-c"],
       ]);
       const again = capture();
-      expect(await o.drain(again)).toEqual({ sent: 0, failed: 0, unknown: 0 });
+      expect(await o.drain(again)).toEqual({
+        sent: 0,
+        failed: 0,
+        unknown: 0,
+        deferred: 0,
+      });
       expect(again.sent).toEqual([]); // the unclear one is NOT retried
       await expect(
         h.repo
@@ -387,7 +402,7 @@ const NEW_PASSWORD = "a brand new passphrase 42";
     it("the Resend sender maps outcomes honestly: 2xx sent, 4xx refused, 5xx/429/timeouts unknown, and it sends an idempotency key", async () => {
       const mk = (f: typeof fetch) =>
         resendSender({
-          apiKey: "k",
+          apiKey: "re_testkey_123456",
           from: "PayFlow <no-reply@example.com>",
           fetchImpl: f,
           timeoutMs: 50,
@@ -407,7 +422,8 @@ const NEW_PASSWORD = "a brand new passphrase 42";
       expect(await mk(reply(200)).send(m)).toEqual({ outcome: "SENT" });
       expect(seen["idempotency-key"]).toBe("out_1");
       expect((await mk(reply(422)).send(m)).outcome).toBe("REFUSED");
-      for (const st of [429, 500, 503])
+      expect((await mk(reply(429)).send(m)).outcome).toBe("DEFER"); // certainly not sent; try later
+      for (const st of [409, 500, 503, 302])
         expect((await mk(reply(st)).send(m)).outcome, String(st)).toBe(
           "UNKNOWN",
         );

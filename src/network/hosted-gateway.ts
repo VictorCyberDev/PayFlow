@@ -90,7 +90,7 @@ import {
   ExecutionControls,
   PostgresRateLimitStore,
 } from "./ops-controls.js";
-import { enforceRateLimit } from "./reliability.js";
+import { enforceRateLimit, type RateLimitStore } from "./reliability.js";
 import { PostgresNetworkStore } from "./postgres-adapters.js";
 import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
@@ -191,6 +191,13 @@ export interface HostedGatewayOptions {
   readonly cronSecret?: string;
   /** Sends the account emails queued in the outbox. Absent until the owner configures a provider and a verified sender. */
   readonly emailSender?: EmailSender;
+  /** Test seam: the rate-limit store. Production always uses PostgreSQL. */
+  readonly rateLimitStore?: RateLimitStore;
+  /**
+   * Whether an account must have confirmed its email before it can take any outward or financial action. Defaults to ON exactly when a sender is
+   * configured: without one nobody could ever confirm, so requiring it would only lock everyone out. /v1/app/me says which applies.
+   */
+  readonly requireVerifiedEmail?: boolean;
   /**
    * How many reverse proxies sit in front of this host and append to `x-forwarded-for`. The client address is the entry that
    * many positions from the RIGHT (the one the nearest trusted proxy appended); anything to its left is client-controlled and
@@ -332,7 +339,43 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   const network = new PostgresNetworkStore(sql);
   const audit = new AuditLog(sql);
   const controls = new ExecutionControls(sql);
-  const limiter = new PostgresRateLimitStore(sql);
+  const limiter: RateLimitStore =
+    options.rateLimitStore ?? new PostgresRateLimitStore(sql);
+  const verifiedEmailRequired =
+    options.requireVerifiedEmail ?? Boolean(options.emailSender);
+  /**
+   * Before the email is confirmed a person may look around, draft and compare. They may not approve, spend, contact suppliers, make bookings or
+   * orders, enrol agents or credentials, change members or connect providers. Deny by default: only the listed read-like POSTs pass.
+   */
+  const SAFE_BEFORE_VERIFY = [
+    /^\/v1\/admin\/org\/missions$/u,
+    /^\/v1\/admin\/org\/missions\/[^/]+\/(?:workspaces|services\/search|candidates\/compare|quotes\/compare|recurring|plans)$/u,
+  ];
+  const blockedUntilVerified = (
+    verified: boolean,
+    method: string,
+    path: string,
+  ): boolean =>
+    verifiedEmailRequired &&
+    !verified &&
+    method !== "GET" &&
+    path.startsWith("/v1/admin/") &&
+    !SAFE_BEFORE_VERIFY.some((r) => r.test(path));
+  // Used only when the shared limiter cannot answer: a small per-process bound so a limiter fault never becomes unmetered account actions.
+  const degraded = new Map<string, { n: number; resetAt: number }>();
+  const degradedAllows = (key: string, limit: number): boolean => {
+    const nowMs = Date.parse(iso());
+    if (degraded.size > 5000)
+      for (const [k, v] of degraded) if (v.resetAt <= nowMs) degraded.delete(k);
+    if (degraded.size > 5000) return false;
+    const cur = degraded.get(key);
+    if (!cur || cur.resetAt <= nowMs) {
+      degraded.set(key, { n: 1, resetAt: nowMs + 60_000 });
+      return true;
+    }
+    cur.n++;
+    return cur.n <= limit;
+  };
   const SANDBOX = "SANDBOX" as const;
   const ownerOf = async (credentialId: string) => {
     const r =
@@ -465,6 +508,17 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     sql,
     now: iso,
     outbox: emailOutbox,
+    // At most 5 recovery/verification emails an hour per address, whoever asks and from wherever. A limiter fault means no mail.
+    allowMailFor: async (email: string) =>
+      (
+        await enforceRateLimit(limiter, {
+          bucket: "mail-for",
+          subject: email,
+          limit: 5,
+          windowSeconds: 3600,
+          now: iso(),
+        })
+      ).allowed,
     ...(options.appOrigins?.[0] ? { appBaseUrl: options.appOrigins[0] } : {}),
   });
   const secureCookies = options.secureCookies ?? true;
@@ -2214,16 +2268,27 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           20,
         );
         // Account emails: sent only when the owner has configured a sender; otherwise they stay queued and nothing is claimed.
+        const swept = await emailOutbox.sweep();
         const mail = options.emailSender
           ? await emailOutbox.drain(options.emailSender)
-          : { sent: 0, failed: 0, unknown: 0 };
+          : { sent: 0, failed: 0, unknown: 0, deferred: 0 };
         return reply(requestId, 200, {
           ...ticked,
           ...ran,
-          mail,
+          mail: {
+            ...mail,
+            ...swept,
+            senderConfigured: Boolean(options.emailSender),
+          },
           via: cronCall ? "SCHEDULER" : "OPERATOR",
         });
       }
+      // Account-email health for the operator: counts and the messages that need a person. No bodies, no tokens, masked recipients.
+      if (request.method === "GET" && op === "email-outbox")
+        return reply(requestId, 200, {
+          senderConfigured: Boolean(options.emailSender),
+          ...(await emailOutbox.summary()),
+        });
       if (request.method === "GET" && op === "alerts")
         return reply(requestId, 200, { alerts: await alerts.list() });
       // GET is accepted so a plain scheduler (cron, a hosted cron service) can call it. A tick is
@@ -2575,6 +2640,25 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
               return true;
             }
           }
+          if (blockedUntilVerified(view.user.emailVerified, method, path)) {
+            send(res, {
+              status: 403,
+              headers: {
+                "content-type": "application/json",
+                "cache-control": "no-store",
+              },
+              body: {
+                reason: "EMAIL_NOT_VERIFIED",
+                decision: "DENY",
+                effectCount: 0,
+                recoverable: true,
+                humanSummary:
+                  "Confirm your email address first. Nothing was changed and no money moved.",
+                nextAction: "CONFIRM_EMAIL",
+              },
+            });
+            return true;
+          }
           authorization = `Session ${cookieSession}`;
         }
       }
@@ -2726,7 +2810,14 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
             now: iso(),
           });
         } catch {
-          gate = { allowed: true, remaining: 0, resetAt: iso() };
+          // The shared limiter cannot answer. These are the actions an attacker wants unmetered (password guessing, mail flooding), so they are
+          // NOT waved through: a much tighter per-process bound applies (5 a minute per address and action), and a process that is tracking
+          // too many addresses refuses. People behind one address still get in; a guessing run does not.
+          const ok = degradedAllows(
+            `${path}|${clientAddressOf(req, options.trustedProxyHops ?? 1).slice(0, 64)}`,
+            5,
+          );
+          gate = { allowed: ok, remaining: 0, resetAt: iso() };
         }
         if (!gate.allowed) {
           json(
@@ -2738,12 +2829,22 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         }
         if (path === "/v1/app/password-reset/request") {
           // The same answer whether or not the address has an account.
-          await userAuth.requestPasswordReset(
-            (body as { email?: unknown } | undefined)?.email,
-          );
+          // A failure here can only happen for a real account, so reporting it would reveal which addresses have one: it is answered
+          // exactly like success. The failure is logged by code only (no address, no token) and the person can simply ask again.
+          await userAuth
+            .requestPasswordReset(
+              (body as { email?: unknown } | undefined)?.email,
+            )
+            .catch(() => {
+              console.error(
+                JSON.stringify({ event: "PASSWORD_RESET_REQUEST_FAILED" }),
+              );
+            });
           json(202, {
             accepted: true,
             note: "If that address has an account, a reset link has been queued.",
+            // Whether the system can send email at all. It says nothing about any address, so it reveals no account.
+            emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
           });
           return true;
         }
@@ -2828,7 +2929,10 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         const queued = await userAuth.requestEmailVerification(
           view.user.userId,
         );
-        json(202, { queued });
+        json(202, {
+          queued,
+          emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
+        });
         return true;
       }
       if (method === "GET" && path === "/v1/app/me") {
@@ -2848,6 +2952,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           },
           csrfToken: csrfFor(sessionTokenIn),
           expiresAt: view.expiresAt,
+          emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
+          verificationRequired: verifiedEmailRequired,
         });
         return true;
       }
@@ -3040,6 +3146,18 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           : null;
         if (!view) {
           json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        if (
+          method !== "GET" &&
+          verifiedEmailRequired &&
+          !view.user.emailVerified
+        ) {
+          json(403, {
+            reason: "EMAIL_NOT_VERIFIED",
+            recoverable: true,
+            nextAction: "CONFIRM_EMAIL",
+          });
           return true;
         }
         const m = view.member;

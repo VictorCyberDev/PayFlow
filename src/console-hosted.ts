@@ -31,6 +31,8 @@ import { PostgresTrustRepository } from "./persistence.js";
 import { ConsoleDemoAgent } from "./console-demo-agent.js";
 import { DemoShoppingAgent } from "./delegated-demo.js";
 import { createHostedGatewayHandler } from "./network/hosted-gateway.js";
+import { resendSender, type EmailSender } from "./network/email-outbox.js";
+import type { RateLimitStore } from "./network/reliability.js";
 import { SimulatedPaymentProvider } from "./simulated-rail.js";
 import type { JWTVerifyGetKey } from "jose";
 import { remoteKeys } from "./protocols/oauth-resource.js";
@@ -102,6 +104,11 @@ export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
   /** Browser origins allowed to make state-changing requests with a session cookie (default: the configured origin). */
   appOrigins?: string[];
   ipRateLimitPerMinute?: number;
+  /**
+   * Account email (verification and reset). Present only when the owner supplied a Resend key AND a sender they attest is on a verified domain.
+   * Absent: mail stays queued and nothing says it was sent. The key is never logged.
+   */
+  email?: { resendApiKey: string; from: string };
   /** External OAuth authorization server (PayFlow is only the resource server). Both are https. */
   oauthIssuer?: string;
   oauthJwksUrl?: string;
@@ -189,8 +196,32 @@ export function parseHostedConfig(
   for (const v of [issuer, jwks])
     if (v !== undefined && !/^https:\/\/[^\s]+$/u.test(v))
       throw new Error("PAYFLOW_OAUTH_MUST_BE_HTTPS");
+  const resendKey = env.PAYFLOW_RESEND_API_KEY;
+  const emailFrom = env.PAYFLOW_EMAIL_FROM;
+  if ((resendKey === undefined) !== (emailFrom === undefined))
+    throw new Error("PAYFLOW_RESEND_API_KEY_AND_EMAIL_FROM_GO_TOGETHER");
+  if (resendKey !== undefined && emailFrom !== undefined) {
+    if (!/^re_[A-Za-z0-9_]{8,}$/u.test(resendKey))
+      throw new Error("PAYFLOW_RESEND_API_KEY_INVALID");
+    // The sender must be on a domain the owner has verified with Resend. We cannot see that from here, so the owner says so explicitly,
+    // and Resend's shared test address (which only reaches the account owner) is refused.
+    if (env.PAYFLOW_EMAIL_FROM_VERIFIED !== "true")
+      throw new Error("PAYFLOW_EMAIL_FROM_MUST_BE_ATTESTED_VERIFIED");
+    if (
+      emailFrom.length > 200 ||
+      /[\r\n]/u.test(emailFrom) ||
+      !/^(?:[^<>@]+<)?[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>?$/u.test(emailFrom) ||
+      /@resend\.dev>?$/iu.test(emailFrom)
+    )
+      throw new Error("PAYFLOW_EMAIL_FROM_INVALID");
+    if (new URL(base.PAYFLOW_M5_ORIGIN).protocol !== "https:")
+      throw new Error("PAYFLOW_EMAIL_REQUIRES_HTTPS_ORIGIN");
+  }
   return {
     ...base,
+    ...(resendKey && emailFrom
+      ? { email: { resendApiKey: resendKey, from: emailFrom } }
+      : {}),
     ...(profile ? { mcpProfile: profile } : {}),
     ...(anonymous === "true" ? { mcpAnonymousVerify: true } : {}),
     ...(trustedProxyHops !== undefined ? { trustedProxyHops } : {}),
@@ -262,6 +293,11 @@ export function createHostedConsole(
     /** Test/operator override for the wizard's AI suggestion model. */
     draftModel?: DraftModel;
     sendTimeoutMs?: number;
+    /** Test seam: replaces the Resend sender built from the environment. */
+    emailSender?: EmailSender;
+    /** Test seams passed to the gateway. */
+    rateLimitStore?: RateLimitStore;
+    requireVerifiedEmail?: boolean;
   } = {},
 ) {
   const clock = deps.clock ?? (() => new Date());
@@ -388,6 +424,10 @@ export function createHostedConsole(
               })()
             : {}),
         ...(deps.sendTimeoutMs ? { sendTimeoutMs: deps.sendTimeoutMs } : {}),
+        ...(deps.rateLimitStore ? { rateLimitStore: deps.rateLimitStore } : {}),
+        ...(deps.requireVerifiedEmail !== undefined
+          ? { requireVerifiedEmail: deps.requireVerifiedEmail }
+          : {}),
         principalId: config.PAYFLOW_M5_PRINCIPAL_ID,
         agentId: config.PAYFLOW_M5_AGENT_ID,
         ...(simulated ? { simulated } : {}),
@@ -399,6 +439,17 @@ export function createHostedConsole(
           ? { trustedProxyHops: config.trustedProxyHops }
           : {}),
         appOrigins: config.appOrigins ?? [config.PAYFLOW_M5_ORIGIN],
+        // Account email: an injected sender (tests) wins; otherwise Resend from the protected environment; otherwise none, and mail stays queued.
+        ...(deps.emailSender
+          ? { emailSender: deps.emailSender }
+          : config.email
+            ? {
+                emailSender: resendSender({
+                  apiKey: config.email.resendApiKey,
+                  from: config.email.from,
+                }),
+              }
+            : {}),
         secureCookies: new URL(config.PAYFLOW_M5_ORIGIN).protocol === "https:",
         ...(config.ipRateLimitPerMinute !== undefined
           ? { ipRateLimitPerMinute: config.ipRateLimitPerMinute }

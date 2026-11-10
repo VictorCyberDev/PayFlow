@@ -1,3 +1,5 @@
+import type { EmailSender } from "../../src/network/email-outbox.js";
+import type { RateLimitStore } from "../../src/network/reliability.js";
 import { afterAll, afterEach, beforeAll, beforeEach } from "vitest";
 import type { WorkspaceSourceRegistry } from "../../src/missions/workspace-sources.js";
 import type { DraftModel } from "../../src/missions/draft-assistant.js";
@@ -38,6 +40,9 @@ export function hostHarness(
     draftModel?: () => DraftModel;
     workspaceSources?: () => WorkspaceSourceRegistry;
     sendTimeoutMs?: number;
+    emailSender?: () => EmailSender;
+    rateLimitStore?: () => RateLimitStore;
+    requireVerifiedEmail?: boolean;
   } = {},
 ) {
   const url = process.env.TEST_DATABASE_URL;
@@ -93,6 +98,13 @@ export function hostHarness(
           : {}),
         ...(options.sendTimeoutMs
           ? { sendTimeoutMs: options.sendTimeoutMs }
+          : {}),
+        ...(options.emailSender ? { emailSender: options.emailSender() } : {}),
+        ...(options.rateLimitStore
+          ? { rateLimitStore: options.rateLimitStore() }
+          : {}),
+        ...(options.requireVerifiedEmail !== undefined
+          ? { requireVerifiedEmail: options.requireVerifiedEmail }
           : {}),
       },
     );

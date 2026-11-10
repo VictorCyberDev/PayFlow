@@ -48,7 +48,7 @@ BEGIN
   END LOOP;
 END $$;
 
--- readonly: SELECT on every column EXCEPT secret digests.
+-- readonly: SELECT on every column EXCEPT secret digests, and nothing at all on the account-recovery tables.
 DO $$
 DECLARE r record;
 BEGIN
@@ -56,7 +56,10 @@ BEGIN
     SELECT c.table_name, string_agg(format('%I', c.column_name), ', ' ORDER BY c.ordinal_position) AS cols
     FROM information_schema.columns c
     JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-    WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND c.column_name <> 'secret_hash'
+    WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE'
+      AND c.column_name NOT IN ('secret_hash', 'password_hash', 'session_hash', 'csrf_hash', 'token_hash')
+      -- Account-recovery material (live reset links, recipient addresses, sign-in digests) is for the running app only.
+      AND c.table_name NOT IN ('email_outbox', 'user_tokens', 'user_sessions')
     GROUP BY c.table_name
   LOOP
     EXECUTE format('GRANT SELECT (%s) ON public.%I TO payflow_readonly', r.cols, r.table_name);
