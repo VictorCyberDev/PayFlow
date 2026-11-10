@@ -11,7 +11,9 @@ Source of truth for "is it live". Observed through the Vercel and Neon tools and
 
 ## What this changes
 
-`public/index.html` now serves a truthful landing page at `/` on the root deployment: Sandbox, application not available, no money can move. It makes no capability claim. This replaces a 404 with an honest page. **It is not the product.** Signup, login, missions and the customer app are still not publicly reachable.
+The root `vercel.json` now builds with `npm run build:company` (which stages the console's static export, the company homepage, into `public/`, keeping the PayPal payer-return assets) and installs the console's own dependencies. Verified locally: the build exits 0, `public/index.html` exists, and the payer-return files and `/paypal/*` rewrites are untouched. `tests/root-deployment.test.ts` pins this. After merge, the live URL must be requested again to confirm `/` returns 200; that result is recorded below once observed.
+
+**This is the company site, not the product.** Signup, login, missions and the customer app are still not publicly reachable.
 
 ## What is blocked, and by what
 
