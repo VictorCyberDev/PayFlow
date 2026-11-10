@@ -4,7 +4,7 @@ Durable checkpoint, **not** a completion report. It supersedes `docs/PROGRAM-CHE
 
 ## State
 
-- `main` contains everything merged through PR #65 (`d3e358e`). Each merge was pinned to a head whose `verify`, `console` and `console-e2e` were all green. PR #66 (M57 recurring checks and a test-harness fix) was open with `console` and `console-e2e` green and `verify` running when this was written.
+- `main` contains everything merged through PR #66 (`2c70ca9`). Each merge was pinned to a head whose `verify`, `console` and `console-e2e` were all green.
 - Full local regression on PostgreSQL at the last measured head: 153 files, 2680 tests passed; 3 files and 4 tests skipped for lack of credentials.
 - Migrations 055–059 exist in the repository. **None is applied to any public database.**
 
@@ -19,7 +19,7 @@ The 60-per-minute `/v1/admin` budget was shared by everyone from one address; bo
 ## Not done (so no one infers otherwise)
 
 - **No live provider of any kind.** Every source is a fictional sandbox fixture. No real availability, price, booking, quote, supplier, contractor or payment exists in this system.
-- **Not built:** M55 orchestration; M57 beyond check-and-ask; M59 billing, usage, support; M60 acceptance; M61–M64, M66; M72–M90 as scoped in ADR-018 (earlier scaffolds from the legacy program were not re-audited); M65 FX is a pure module no route calls; quote acceptance screen; account verification and recovery; notification delivery (email or push); AI orchestration beyond the wizard suggestion box.
+- **Not built:** M55 orchestration; M57 beyond check-and-ask; M59 billing, usage, support; M60 acceptance; M61–M64, M66; M72–M90 as scoped in ADR-018 (earlier scaffolds from the legacy program were not re-audited); M65 FX is a pure module no route calls; account verification and recovery; notification delivery (email or push); AI orchestration beyond the wizard suggestion box.
 - **The mandated M1–M90 audit is not complete:** the matrix is sourced and partial; the eight evidence fields per row, journeys A–H as executed runs, the nine quality gates, the security and performance audits and the 50-question reviewer report were not produced.
 - **No product or customer research.** No interviews or usability sessions have happened and none are claimed.
 - **No public deployment.**
@@ -30,8 +30,8 @@ Removal of Neon role `svc_public_app` (needs explicit approval; not to be used o
 
 ## Next executable steps
 
-1. Merge PR #66 only on an exact-head green `verify`, `console`, `console-e2e`.
-2. Quote acceptance screen; account verification and recovery.
+1. Merge the open PR only on an exact-head green `verify`, `console`, `console-e2e`.
+2. Account verification and recovery.
 3. Notification outbox so approvals and UNKNOWN outcomes reach people (needs an owner-provided sender).
 4. Re-audit legacy M26–M55 (V3 M61–M90) rows with executed evidence, then produce the per-row evidence fields.
 5. Research outputs that need no participants (competitive review, segment hypotheses, usability test plan), labelled internal.
