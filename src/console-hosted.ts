@@ -89,6 +89,8 @@ const DemoAgentSchema = z.object({
     .regex(/^[A-Z0-9]{13}$|^DEMOACCOUNT01$/)
     .default("DEMOACCOUNT01"),
 });
+const isLoopback = (h: string) =>
+  h === "localhost" || h === "127.0.0.1" || h === "[::1]";
 export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
   /** Optional Sandbox admin secret for credential issue/revoke and sample Authority. Never logged. */
   gatewayAdminToken?: string;
@@ -108,7 +110,7 @@ export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
    * Account email (verification and reset). Present only when the owner supplied a Resend key AND a sender they attest is on a verified domain.
    * Absent: mail stays queued and nothing says it was sent. The key is never logged.
    */
-  email?: { resendApiKey: string; from: string };
+  email?: { resendApiKey: string; from: string; baseUrl?: string };
   /** External OAuth authorization server (PayFlow is only the resource server). Both are https. */
   oauthIssuer?: string;
   oauthJwksUrl?: string;
@@ -214,13 +216,28 @@ export function parseHostedConfig(
       /@resend\.dev>?$/iu.test(emailFrom)
     )
       throw new Error("PAYFLOW_EMAIL_FROM_INVALID");
-    if (new URL(base.PAYFLOW_M5_ORIGIN).protocol !== "https:")
+    const origin = new URL(base.PAYFLOW_M5_ORIGIN);
+    if (origin.protocol !== "https:" && !isLoopback(origin.hostname))
       throw new Error("PAYFLOW_EMAIL_REQUIRES_HTTPS_ORIGIN");
+  }
+  // Only for acceptance runs against a local stand-in for the provider: the real key is never sent anywhere but api.resend.com or a loopback address.
+  const resendBase = env.PAYFLOW_RESEND_BASE_URL;
+  if (resendBase !== undefined) {
+    if (!resendKey) throw new Error("PAYFLOW_RESEND_BASE_URL_NEEDS_A_SENDER");
+    const u = new URL(resendBase);
+    if (u.protocol !== "http:" || !isLoopback(u.hostname))
+      throw new Error("PAYFLOW_RESEND_BASE_URL_MUST_BE_LOOPBACK");
   }
   return {
     ...base,
     ...(resendKey && emailFrom
-      ? { email: { resendApiKey: resendKey, from: emailFrom } }
+      ? {
+          email: {
+            resendApiKey: resendKey,
+            from: emailFrom,
+            ...(resendBase ? { baseUrl: resendBase } : {}),
+          },
+        }
       : {}),
     ...(profile ? { mcpProfile: profile } : {}),
     ...(anonymous === "true" ? { mcpAnonymousVerify: true } : {}),
@@ -447,6 +464,9 @@ export function createHostedConsole(
                 emailSender: resendSender({
                   apiKey: config.email.resendApiKey,
                   from: config.email.from,
+                  ...(config.email.baseUrl
+                    ? { baseUrl: config.email.baseUrl }
+                    : {}),
                 }),
               }
             : {}),

@@ -58,8 +58,8 @@ export const ENV_CONTRACT: readonly Var[] = [
     name: "PAYFLOW_M6_DEMO_AGENT",
     need: "OPTIONAL",
     secret: false,
-    rule: 'if set it must be "true", and then PAYFLOW_M6_SIGNING_KEY becomes REQUIRED',
-    why: "enables the M6 demo shopping agent; it is currently set on payflow-public, so the signing key is needed unless this variable is removed",
+    rule: 'must be "true" for the customer app to exist at all, and then PAYFLOW_M6_SIGNING_KEY is REQUIRED',
+    why: "the hosted Gateway (every /v1 route, including the customer app, sign-in and the operator routes) is mounted only when the demo agent is configured: it supplies the signing and proof keys the Gateway is built around. Do NOT remove it to avoid needing a key, or the app answers 404. Leave the PayPal variables (PAYPAL_ENVIRONMENT, PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET) unset: the agent then has no payment provider and nothing can execute a payment",
   },
   {
     name: "PAYFLOW_M6_SIGNING_KEY",
