@@ -623,6 +623,30 @@ const chromePath = [
       expect(svc).toContain("Price not stated");
       expect(svc).not.toMatch(/undefined|\[object|NaN/u);
       expect(await axe(page)).toEqual([]);
+      // recurring: set one up against the real server, see it listed, stop it; nothing is bought
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/recurring`);
+      await page
+        .getByRole("heading", { name: "Recurring items", level: 1 })
+        .waitFor();
+      await page.getByLabel("What is it?").fill("Design tool subscription");
+      await page.getByLabel("Amount each time (GBP)").fill("49.99");
+      await page.getByLabel("Check every (days)").fill("30");
+      await page.getByRole("button", { name: "Add" }).click();
+      await page
+        .getByRole("heading", { name: "Design tool subscription", level: 3 })
+        .waitFor();
+      let rec = await page.locator("main").innerText();
+      expect(rec).toContain("£49.99");
+      expect(rec).toContain("30 days");
+      expect(rec).toContain("never buys");
+      expect(rec).not.toMatch(/undefined|\[object|NaN/u);
+      expect(await axe(page)).toEqual([]);
+      await page
+        .getByRole("button", { name: "Stop Design tool subscription" })
+        .click();
+      await page.getByText("Stopped", { exact: true }).waitFor();
+      rec = await page.locator("main").innerText();
+      expect(rec).not.toContain("Next check");
       for (const [hash, heading] of [
         ["notifications", "Notifications"],
         ["settings", "Settings"],
@@ -929,6 +953,11 @@ const chromePath = [
       expect(await page.locator("main").innerText()).not.toContain(
         "PAY SUPPLIER",
       );
+      // let the screen finish redrawing, then leave, so no request is still in flight when the database closes
+      await page
+        .getByRole("heading", { name: "Needs checking", level: 1 })
+        .waitFor();
+      await page.goto("about:blank");
       await ctx.close();
     }, 60_000);
 

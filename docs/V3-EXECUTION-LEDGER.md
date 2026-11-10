@@ -72,3 +72,4 @@ Dated addendum. Evidence levels and honest not-done lists: `docs/M51-M53-STATUS.
 - Full local regression on PostgreSQL at the last local head: 151 files passed, 2668 tests passed, 3 files and 4 tests skipped (no credentials).
 - Not delivered: no live provider, no public deployment, no notification delivery, no product-research outputs, and the milestones listed as not done in the status docs.
 - **PR #64** (M68 readiness on the Agents screen, partial M1–M90 matrix, this ledger) squash-merged as `a3cfed6`, pinned to head `c86594f`: `verify` (23:12–23:32Z), `console`, `console-e2e` green.
+- **PR #65** (Launch board slice, contractor and dispute decisions, orders in Needs checking) squash-merged as `d3e358e`, pinned to head `cfbfc60`: `verify` (23:34–23:50Z), `console`, `console-e2e` green.
