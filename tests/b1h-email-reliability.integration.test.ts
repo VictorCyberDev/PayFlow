@@ -304,6 +304,7 @@ const counting = (result: SendResult = { outcome: "SENT" }) => {
       for (const p of [
         "/v1/app/me",
         "/v1/app/agents",
+        "/v1/app/sessions",
         "/v1/admin/org/audit",
         "/v1/admin/ops/email-outbox",
       ]) {
@@ -555,7 +556,7 @@ const counting = (result: SendResult = { outcome: "SENT" }) => {
         ]);
       }
       // reading, and the side-effect-free steps, are not blocked by this rule
-      for (const p of ["/v1/app/me", "/v1/app/agents"])
+      for (const p of ["/v1/app/me", "/v1/app/sessions", "/v1/app/agents"])
         expect((await send("GET", p, { cookie })).status, p).toBe(200);
       const draft = await send("POST", "/v1/admin/org/missions", {
         cookie,
