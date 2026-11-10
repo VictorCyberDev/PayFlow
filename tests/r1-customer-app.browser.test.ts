@@ -647,6 +647,22 @@ const chromePath = [
       await page.getByText("Stopped", { exact: true }).waitFor();
       rec = await page.locator("main").innerText();
       expect(rec).not.toContain("Next check");
+      // approval rule: the owner sets it from Settings against the real server, sees it, and removes it
+      await page.goto(`${h.origin}/workspace#/settings`);
+      await page.getByRole("heading", { name: "Settings", level: 1 }).waitFor();
+      expect(await page.locator("main").innerText()).toContain(
+        "one owner can approve any mission",
+      );
+      await page.getByLabel("Needs more approvals above (amount)").fill("1000");
+      await page.getByLabel("Approvals needed from other owners").fill("2");
+      await page.getByRole("button", { name: "Save approval rule" }).click();
+      await page.getByText("need 2 approvals from other owners").waitFor();
+      expect(await page.locator("main").innerText()).toContain("above 1000.00");
+      expect(await axe(page)).toEqual([]);
+      await page
+        .getByRole("button", { name: "Remove the approval rule" })
+        .click();
+      await page.getByText("one owner can approve any mission").waitFor();
       for (const [hash, heading] of [
         ["notifications", "Notifications"],
         ["settings", "Settings"],
@@ -794,6 +810,7 @@ const chromePath = [
         .waitFor();
       await page.getByLabel("Your reason (optional)").fill("too high");
       await page.getByRole("button", { name: "Approve version 2" }).click();
+      await page.getByText("Recorded.", { exact: true }).waitFor(); // the person is told it worked
       await page.getByRole("button", { name: "Reject version 2" }).click();
       expect(posts.map((p) => p.path)).toEqual([
         `/v1/admin/org/negotiations/neg_${"b".repeat(24)}/versions/2/approve`,
@@ -1353,6 +1370,104 @@ const chromePath = [
       text = await page.locator("main").innerText();
       expect(text.match(/Not started/gu)?.length).toBe(3);
       expect(text).not.toContain("Confirmed");
+      await page.goto("about:blank");
+      await ctx.close();
+    }, 60_000);
+
+    it("a quote can be accepted from the Quotes screen; a refusal is shown in words and nothing is claimed as committed", async () => {
+      const { ctx, page } = await open();
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "qte@example.com",
+          password: "a long enough passphrase",
+          displayName: "Quin Quote",
+          organizationName: "Quote Ltd",
+        }),
+      });
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("qte@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      const mid = "msn_" + "3".repeat(24);
+      const qid = "qte_" + "2".repeat(24);
+      const posts: { path: string; body: unknown }[] = [];
+      let refuse = true;
+      const ok = (body: unknown, status = 200) => ({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+      await page.route(/\/v1\/admin\/org\//u, async (r) => {
+        const req = r.request();
+        const path = new URL(req.url()).pathname;
+        if (req.method() === "POST") {
+          posts.push({
+            path,
+            body: JSON.parse(req.postData() ?? "{}") as unknown,
+          });
+          return refuse
+            ? r.fulfill(
+                ok({ reason: "CHECKS_FAILED", detail: "OVER_WALK_AWAY" }, 422),
+              )
+            : r.fulfill(ok({}));
+        }
+        if (path === `/v1/admin/org/missions/${mid}`)
+          return r.fulfill(
+            ok({ mission: { activeContract: { currency: "GBP" } } }),
+          );
+        if (path.endsWith("/quotes"))
+          return r.fulfill(
+            ok({
+              quotes: [
+                {
+                  quoteId: qid,
+                  status: "QUOTED",
+                  totalMinor: 25000,
+                  currency: "GBP",
+                },
+              ],
+            }),
+          );
+        return r.continue();
+      });
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/quotes`);
+      await page
+        .getByRole("heading", { name: "Sourcing and quotes", level: 1 })
+        .waitFor();
+      expect(await axe(page)).toEqual([]);
+      await page
+        .getByText("Accept this quote", { exact: true })
+        .first()
+        .click();
+      await page.getByRole("button", { name: "Accept this quote" }).click();
+      await page.getByText("cannot be accepted as it stands").waitFor();
+      expect(await page.locator("main").innerText()).toContain(
+        "OVER_WALK_AWAY",
+      );
+      expect(await page.locator("main").innerText()).not.toContain(
+        "Accepted. The amount",
+      );
+      refuse = false;
+      await page
+        .getByLabel("Your reason, only if a rule needs your say-so")
+        .fill("Owner reviewed");
+      await page.getByRole("button", { name: "Accept this quote" }).click();
+      await page.getByText("No one has been paid.").waitFor();
+      expect(posts).toHaveLength(2);
+      expect(posts[0]!.path).toBe(`/v1/admin/org/quotes/${qid}/accept`);
+      expect(
+        (posts[0]!.body as { idempotencyKey: string }).idempotencyKey.length,
+      ).toBeGreaterThanOrEqual(16);
+      expect(posts[0]!.body).not.toHaveProperty("overrideReason");
+      expect(posts[1]!.body).toMatchObject({
+        overrideReason: "Owner reviewed",
+      });
+      await page
+        .getByRole("heading", { name: "Sourcing and quotes", level: 1 })
+        .waitFor();
       await page.goto("about:blank");
       await ctx.close();
     }, 60_000);
