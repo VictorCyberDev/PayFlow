@@ -4,7 +4,7 @@ Durable checkpoint, **not** a completion report. It supersedes `docs/PROGRAM-CHE
 
 ## State
 
-- `main` contains everything merged through PR #66 (`2c70ca9`). Each merge was pinned to a head whose `verify`, `console` and `console-e2e` were all green.
+- `main` contains everything merged through PR #67 (`3896ea6`). Each merge was pinned to a head whose `verify`, `console` and `console-e2e` were all green.
 - Full local regression on PostgreSQL at the last measured head: 153 files, 2680 tests passed; 3 files and 4 tests skipped for lack of credentials.
 - Migrations 055–059 exist in the repository. **None is applied to any public database.**
 
@@ -27,6 +27,10 @@ The 60-per-minute `/v1/admin` budget was shared by everyone from one address; bo
 ## Owner-gated (set aside; engineering continues around them)
 
 Removal of Neon role `svc_public_app` (needs explicit approval; not to be used or restored); a password for `svc_public_rt` and a runtime `DATABASE_URL` set by a secret-safe mechanism; a production signing key and bootstrap key; applying migrations 030–059 through the authorized release process; provider credentials for any live source (commerce, talent, workspace, services, email); a Resend sender domain; a real design partner, merchant or PSP for any external validation.
+
+## Research (internal, no customer research done)
+
+See `docs/research/README.md`: a usability test plan with no results, falsifiable hypotheses, and a builder-run heuristic review. None is customer evidence.
 
 ## Next executable steps
 
