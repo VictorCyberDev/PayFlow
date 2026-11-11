@@ -1390,6 +1390,16 @@ const chromePath = [
         .getByRole("heading", { name: "Launch board", level: 1 })
         .waitFor();
       let text = await page.locator("main").innerText();
+      // M55: the plan-run card renders on the real page. /plan-runs is not stubbed here, so it is the empty
+      // state, which is the honest read-out when a mission has no run yet.
+      expect(text).toContain("Plan run");
+      expect(text).toContain("No plan run yet");
+      expect(text).toContain("never approves anything");
+      expect(
+        await page
+          .getByRole("button", { name: "Work through the plan" })
+          .count(),
+      ).toBe(1);
       expect(text).toContain("Needs checking");
       expect(text).toContain("Checking what happened. Don't book again yet.");
       expect(text).toContain("Outside PayFlow");

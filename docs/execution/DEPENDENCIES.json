@@ -57,26 +57,26 @@
     },
     {
       "id": "M55-executor",
-      "title": "M55 — execute a mission plan as a dependency-ordered run",
-      "state": "READY",
+      "title": "M55 \u2014 execute a mission plan as a dependency-ordered run",
+      "state": "DELIVERED",
       "blocked_by": [],
       "blocks": [
         "M57-recurring-on-top",
         "M58-templates-end-to-end",
         "M60-acceptance"
       ],
-      "note": "NOT blocked by anything external. This is the largest piece of genuinely executable engineering left. See the gap statement below."
+      "note": "DELIVERED on claude/payflow-v3-m1-m90-6rh3ha: migration 065, src/missions/plan-run-service.ts, src/network/plan-run-routes.ts, wired into the hosted Gateway as the PLAN_RUN automation handler, a plan-run card with real start/cancel controls on the Launch board, and tests/m55-plan-run.integration.test.ts (8 tests, PostgreSQL + real HTTP, 2 mutants killed). See docs/M55-PLAN-RUNS.md. Still NOT provider-accepted (no specialist is connected, so every task it reaches becomes an honest handoff) and NOT hosted-accepted (nothing is deployed)."
     },
     {
       "id": "pr-84-rebase",
-      "title": "PR #84 — update onto main",
+      "title": "PR #84 \u2014 update onto main",
       "state": "READY_ON_ANOTHER_BRANCH",
       "blocked_by": [],
       "note": "Its console-e2e failure does not exist on main (verified: the test passes in ~1s where CI timed out at 30s). Its base is main's parent, before #80 fixed the customer-app mounting the test depends on. The automatic branch update is refused with a merge conflict, because both #84 and #80 edit docs/V3-EXECUTION-LEDGER.md. Resolution is a docs merge, no code change. Not done here: this session is confined to claude/payflow-v3-m1-m90-6rh3ha."
     },
     {
       "id": "pr-85-merge",
-      "title": "PR #85 — Journey B negotiation",
+      "title": "PR #85 \u2014 Journey B negotiation",
       "state": "VERIFIED_READY",
       "blocked_by": [],
       "note": "Green on its exact head, head read back and matched, and independently re-run against main here: 4/4 pass. Test-only. Merging writes to main, which is outside this session's branch directive, so it is reported ready rather than merged."
@@ -108,6 +108,7 @@
     },
     "what_is_missing": "Nothing drives that machine automatically. The only executor, LaunchRunService (migration 064), runs a flat list of at most 8 read-only searches over 2 areas (WORKSPACE, SERVICES) and never touches mission_tasks, the dependency graph, approval gates or handoffs.",
     "shape_of_the_work": "A durable PLAN_RUN job, effect NONE, that walks the ACTIVE plan to a fixpoint: PREPARED_HANDOFF and OWNER_DECISION tasks are claimed and handed off with an honest note naming what is missing; AWAITING_APPROVAL pauses and reports who must act; UNAVAILABLE is left for a member to skip or invalidate; consequential actions are never performed. It must drive the existing authorized transitions rather than write mission_tasks directly, so that no new authority path is created.",
-    "why_not_done_here": "It is a service plus routes plus tests on a slow verification cycle (the full suite is ~10 minutes locally). Starting it without finishing and verifying it would have produced exactly the half-delivered work this programme is trying to stop."
+    "why_not_done_here": "It is a service plus routes plus tests on a slow verification cycle (the full suite is ~10 minutes locally). Starting it without finishing and verifying it would have produced exactly the half-delivered work this programme is trying to stop.",
+    "status": "CLOSED for the orchestrator itself. The bridge now exists. What remains is per-domain specialists, each of which needs a commissioned provider (blocker B-5), and a deployment (B-2)."
   }
 }

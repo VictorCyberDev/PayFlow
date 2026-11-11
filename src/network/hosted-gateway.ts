@@ -35,6 +35,8 @@ import {
   LaunchRunService,
 } from "../missions/launch-run-service.js";
 import { createLaunchRunRoutes } from "./launch-run-routes.js";
+import { PLAN_RUN_KIND, PlanRunService } from "../missions/plan-run-service.js";
+import { createPlanRunRoutes } from "./plan-run-routes.js";
 import { sandboxServiceSource } from "../missions/service-market-sources.js";
 import { WorkspaceService } from "../missions/workspace-service.js";
 import {
@@ -1789,8 +1791,18 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       },
     },
   });
+  // V3 M55: drives an ACTIVE plan's dependency graph. No specialists are connected, so every task it reaches becomes an
+  // honest handoff naming what is missing; it never approves, skips, buys, hires, books, pays or contacts anyone.
+  const planRunService = new PlanRunService({
+    sql,
+    now: iso,
+    missions: missionService,
+    plans: planService,
+    automation,
+  });
   const automationHandlers: Record<string, Handler> = {
     [LAUNCH_RUN_KIND]: launchRunService.handler(),
+    [PLAN_RUN_KIND]: planRunService.handler(),
     [RECURRING_KIND]: (job) => recurringService.runCheck(job),
     BOOKING_EXPIRE: async (job) => {
       const missionId = job.payload.missionId;
@@ -1883,6 +1895,17 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   });
   const launchRunRoutes = createLaunchRunRoutes({
     service: launchRunService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+  });
+  const planRunRoutes = createPlanRunRoutes({
+    service: planRunService,
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(
@@ -4423,6 +4446,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => quorumRoutes.member(request))) ??
         (await safely(() => recurringRoutes.member(request))) ??
         (await safely(() => launchRunRoutes.member(request))) ??
+        (await safely(() => planRunRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
         (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => contractorRoutes.member(request))) ??

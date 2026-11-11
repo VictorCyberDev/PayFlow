@@ -3513,6 +3513,134 @@ const STEP_WORDS = {
   FAILED: "Failed",
 };
 const AREA_WORDS = { WORKSPACE: "Workspaces", SERVICES: "Services" };
+const PLAN_RUN_STATE_WORDS = {
+  QUEUED: "Waiting to start",
+  RUNNING: "Working through the plan",
+  WAITING_ON_PEOPLE: "Waiting for you",
+  COMPLETE: "Every step finished",
+  CANCELLED: "Cancelled",
+  FAILED: "Could not finish",
+};
+/** What each thing in the worklist is asking of you, in words. */
+const PLAN_NEEDS_WORDS = {
+  CONFIRM_THE_HANDOFF_WHEN_IT_IS_DONE: "Confirm it once it is done",
+  DECIDE_WHETHER_TO_SKIP_OR_CHANGE_THE_PLAN: "Skip it or change the plan",
+  APPROVE_OR_REJECT_THIS_TASK: "Approve or reject it",
+  GRANT_WHAT_IS_MISSING_OR_CHANGE_THE_PLAN:
+    "Grant what is missing, or change the plan",
+  LOOK_AT_THE_FAILURE_AND_RETRY_OR_SKIP:
+    "Look at what failed, then retry or skip",
+};
+/**
+ * The plan run (M55): the run works along the plan's dependency graph, and this is what came back. It never approves
+ * anything and never buys, hires, books, pays or contacts anyone, so the only thing it can hand you is a list of
+ * decisions. Starting one is a real control here, not an API-only feature.
+ */
+function planRunCard(id, run) {
+  const out = h("div");
+  const startButton = () =>
+    h("button", {
+      type: "button",
+      text: run ? "Start another run" : "Work through the plan",
+      onclick: async () => {
+        const r = await api(`/v1/admin/org/missions/${id}/plan-runs`, {
+          method: "POST",
+          body: {},
+        });
+        if (!r.ok)
+          return out.replaceChildren(
+            notice(
+              "bad",
+              r.data && r.data.reason === "NO_ACTIVE_PLAN"
+                ? "This mission has no active plan yet. Make a plan first."
+                : r.data && r.data.reason === "RUN_ALREADY_OPEN"
+                  ? "A run is already going for this mission."
+                  : "That run could not be started. Nothing was changed.",
+            ),
+          );
+        await launchBoardPage(id);
+      },
+    });
+  if (!run)
+    return h(
+      "article",
+      { class: "card" },
+      h("h2", { text: "Plan run" }),
+      h("p", {
+        class: "hint",
+        text: "No plan run yet. A run moves the plan along as far as it honestly can and then tells you exactly what is waiting for you. It never approves anything and never buys, hires, books or pays.",
+      }),
+      startButton(),
+      out,
+    );
+  return h(
+    "article",
+    { class: "card" },
+    h(
+      "div",
+      { class: "row" },
+      h("h2", { text: "Plan run" }),
+      h(
+        "span",
+        { class: "badge" },
+        glyph("dot"),
+        PLAN_RUN_STATE_WORDS[run.state] ?? run.state,
+      ),
+    ),
+    h("p", { class: "hint", text: run.notice }),
+    run.note ? h("p", { text: run.note }) : h("span"),
+    run.worklist.length
+      ? h(
+          "div",
+          {},
+          h("h3", { text: "What is waiting for you" }),
+          h(
+            "ul",
+            { class: "list" },
+            ...run.worklist.map((w) =>
+              h(
+                "li",
+                {},
+                h("strong", { text: w.taskKey }),
+                h("span", {
+                  text: ` — ${PLAN_NEEDS_WORDS[w.needs] ?? wordsOf(w.needs)}${w.detail ? `. ${w.detail}` : ""}`,
+                }),
+              ),
+            ),
+          ),
+        )
+      : h("p", {
+          class: "hint",
+          text:
+            run.state === "COMPLETE"
+              ? "Nothing is waiting for you. Every step in the plan has finished."
+              : "Nothing is waiting for you from this run.",
+        }),
+    h("a", {
+      class: "link",
+      href: `#/missions/${id}/plan`,
+      text: "Open the plan",
+    }),
+    run.state === "QUEUED" || run.state === "RUNNING"
+      ? h("button", {
+          type: "button",
+          text: "Cancel this run",
+          onclick: async () => {
+            const r = await api(`/v1/admin/org/plan-runs/${run.runId}/cancel`, {
+              method: "POST",
+              body: {},
+            });
+            if (!r.ok)
+              return out.replaceChildren(
+                notice("bad", "That run has already finished."),
+              );
+            await launchBoardPage(id);
+          },
+        })
+      : startButton(),
+    out,
+  );
+}
 /** The latest discovery run: what it looked at, what it found, and that it bought nothing. Runs are started through the API or an agent. */
 function launchRunCard(id, run) {
   if (!run)
@@ -3596,12 +3724,13 @@ async function launchBoardPage(id) {
   const c = m.data.mission.activeContract ?? m.data.mission.latestContract;
   const get = async (p) =>
     (await api(`/v1/admin/org/missions/${id}/${p}`)).data ?? {};
-  const [b, o, k, l, lr] = await Promise.all([
+  const [b, o, k, l, lr, pr] = await Promise.all([
     get("bookings"),
     get("orders"),
     get("contracts"),
     get("ledger"),
     get("launch-runs"),
+    get("plan-runs"),
   ]);
   const lines = launchLines({
     bookings: b.bookings,
@@ -3625,6 +3754,7 @@ async function launchBoardPage(id) {
     h("p", {
       text: "Where each part stands, from the records themselves. It shows what you need to do and what happens outside PayFlow.",
     }),
+    planRunCard(id, (pr.runs ?? [])[0]),
     launchRunCard(id, (lr.runs ?? [])[0]),
     lines.map((x) =>
       h(

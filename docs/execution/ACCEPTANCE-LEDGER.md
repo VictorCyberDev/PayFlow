@@ -74,3 +74,37 @@ This independently confirms #85's green CI. The borrowed file was then removed f
 - No provider acceptance. No live credential was present, and none was requested.
 - No journey A–H suite was executed as a set; A-2 and A-3 are two journeys, not the programme.
 - The M1–M90 matrix was **not** re-derived from executed evidence. It remains as `docs/M1-M90-AUDIT-MATRIX.md` has it: sourced, and honestly partial.
+
+## A-5 · M55 plan runs — the executor built and accepted this session
+
+New work, not an audit of existing work. The gap stated in `DEPENDENCIES.json` was closed: M27's dependency graph and M56's durable worker are now joined by an executor. See `docs/M55-PLAN-RUNS.md`.
+
+```
+TEST_DATABASE_URL=... npx vitest run tests/m55-plan-run.integration.test.ts
+```
+
+|        |                               |
+| ------ | ----------------------------- |
+| Result | **8 passed; exit 0** (4226ms) |
+
+| What is proven                                                                                                   |                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| A run drives the template planner's real four-task graph, hands off what nothing can do, and produces a worklist | and `mission_ledger_items`, `mission_purchase_orders`, `mission_messages` are unchanged               |
+| Confirming a handoff unblocks the layer behind it                                                                | `source-offers` goes `BLOCKED` → `READY` → `HANDED_OFF`, with `NO_CONNECTOR_COMMISSIONED` in the note |
+| The executor reports a task awaiting approval and never approves it                                              | `approvedBy` stays `null` across repeated worker passes                                               |
+| A paused mission stops it                                                                                        | records `REFUSED` / `MISSION_NOT_ACTIVE`, advances nothing                                            |
+| A replaced plan stops it                                                                                         | finishes `FAILED`, touches none of the new plan's tasks                                               |
+| Repeat passes change nothing; one open run per mission                                                           | third pass byte-identical; a second run is refused `RUN_ALREADY_OPEN`                                 |
+| Cancellation advances nothing; a finished run cannot be cancelled                                                |                                                                                                       |
+| Another organization can neither see nor cancel a run                                                            | 404 both ways                                                                                         |
+
+### Mutation check — because a test that cannot fail proves nothing
+
+| Mutant                                                                                | Outcome                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The run's own approval gate removed, so it tries to claim an `AWAITING_APPROVAL` task | **killed.** And the finding is better than the test: the task was _still_ not acted on, because `PlanService.claim` refuses anything not `READY`. The authority boundary is enforced at the authorized-transition layer, not only in the executor. |
+| The plan-version guard removed, so the run would act on a plan it was not started for | **killed** — `WAITING_ON_PEOPLE` where `FAILED` was required.                                                                                                                                                                                      |
+
+### The honest limit of this slice
+
+No specialist is connected, so **every** task the run reaches today becomes a handoff. That is the state of the product, not a shortcoming of the executor: with no provider commissioned there is no automated work to do. `PlanSpecialist` is the registration point, and a registered specialist still cannot bypass the capability check in `claim`.
