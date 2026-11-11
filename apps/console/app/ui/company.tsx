@@ -198,16 +198,17 @@ export function CompanyHome() {
         <div className="hero-copy">
           <p className="eyebrow">PAYFLOW / FINANCIAL AUTHORITY</p>
           <h1>
-            Financial authority for autonomous systems
+            Let AI buy what’s approved. Block the rest
             <span className="amber-stop">.</span>
           </h1>
           <p className="hero-deck">
-            Let agents execute financial work within exact boundaries—and prove
-            what actually happened afterward.
+            An AI can propose a purchase. Your spending rules decide whether it
+            proceeds. PayFlow can govern PayPal Sandbox execution and preserve
+            verifiable evidence of the outcome. Developer preview, sandbox only.
           </p>
           <div className="hero-ctas">
-            <Link className="company-button primary" href="/sandbox/">
-              Start in Sandbox <span aria-hidden="true">↗</span>
+            <Link className="company-button primary" href="/evidence/">
+              Inspect the evidence <span aria-hidden="true">↗</span>
             </Link>
             <Link className="company-link" href="/docs/">
               Read the docs <span aria-hidden="true">→</span>
