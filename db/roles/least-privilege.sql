@@ -59,7 +59,7 @@ BEGIN
     WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE'
       AND c.column_name NOT IN ('secret_hash', 'password_hash', 'session_hash', 'csrf_hash', 'token_hash')
       -- Account-recovery material (live reset links, recipient addresses, sign-in digests) is for the running app only.
-      AND c.table_name NOT IN ('email_outbox', 'user_tokens', 'user_sessions', 'organization_invitations')
+      AND c.table_name NOT IN ('email_outbox', 'user_tokens', 'user_sessions', 'organization_invitations', 'user_mfa', 'user_recovery_codes', 'user_mfa_challenges')
     GROUP BY c.table_name
   LOOP
     EXECUTE format('GRANT SELECT (%s) ON public.%I TO payflow_readonly', r.cols, r.table_name);

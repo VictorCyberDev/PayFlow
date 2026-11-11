@@ -456,6 +456,7 @@ export function createHostedConsole(
           ? { trustedProxyHops: config.trustedProxyHops }
           : {}),
         appOrigins: config.appOrigins ?? [config.PAYFLOW_M5_ORIGIN],
+        mfaSecretKey: keys.mfa,
         // Account email: an injected sender (tests) wins; otherwise Resend from the protected environment; otherwise none, and mail stays queued.
         ...(deps.emailSender
           ? { emailSender: deps.emailSender }

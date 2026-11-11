@@ -273,6 +273,7 @@ function authScreen(mode = "login") {
         });
         if (!l.ok)
           return msg.replaceChildren(notice("bad", reasonText(l.data?.reason)));
+        if (l.data.mfaRequired) return secondStepScreen(l.data.challenge);
         state.me = l.data;
         state.csrf = l.data.csrfToken;
         location.hash = "#/";
@@ -349,6 +350,99 @@ function authScreen(mode = "login") {
       }),
     ),
   );
+}
+
+/** The second step of signing in: a code from the authenticator app, or a recovery code. The password step has already passed. */
+function secondStepScreen(challenge) {
+  const msg = h("div");
+  let useRecovery = false;
+  const code = h("input", {
+    id: "f-code",
+    name: "code",
+    type: "text",
+    inputmode: "numeric",
+    autocomplete: "one-time-code",
+    required: true,
+    maxlength: "12",
+  });
+  const label = h("label", {
+    for: "f-code",
+    text: "Code from your authenticator app",
+  });
+  const toggle = h("button", {
+    type: "button",
+    class: "link",
+    text: "Use a recovery code instead",
+    onclick: () => {
+      useRecovery = !useRecovery;
+      label.textContent = useRecovery
+        ? "Recovery code"
+        : "Code from your authenticator app";
+      toggle.textContent = useRecovery
+        ? "Use an authenticator code instead"
+        : "Use a recovery code instead";
+      code.value = "";
+      code.focus();
+    },
+  });
+  const form = h(
+    "form",
+    {
+      class: "card",
+      onsubmit: async (e) => {
+        e.preventDefault();
+        msg.replaceChildren();
+        const r = await api("/v1/app/login/mfa", {
+          method: "POST",
+          body: useRecovery
+            ? { challenge, recoveryCode: code.value }
+            : { challenge, code: code.value },
+        });
+        if (!r.ok) {
+          return msg.replaceChildren(
+            notice(
+              "bad",
+              r.data?.reason === "MFA_UNAVAILABLE"
+                ? "Two-step sign-in is not available right now. Nothing was changed. Try again later."
+                : "That code did not work, or this sign-in expired. Check the code, or go back and sign in again.",
+            ),
+          );
+        }
+        state.me = r.data;
+        state.csrf = r.data.csrfToken;
+        location.hash = "#/";
+        render();
+      },
+    },
+    h("h1", { text: "Two-step sign-in" }),
+    h("p", { text: "Enter the code to finish signing in." }),
+    label,
+    code,
+    toggle,
+    h("button", { type: "submit", class: "btn primary", text: "Continue" }),
+    h("a", {
+      class: "link",
+      href: "#/login",
+      text: "Back to sign in",
+      onclick: () => setTimeout(render, 0),
+    }),
+    msg,
+  );
+  root.replaceChildren(
+    h(
+      "header",
+      { class: "bar" },
+      h(
+        "a",
+        { class: "brand", href: "#/", "aria-label": "PayFlow" },
+        brandMark(),
+        "PayFlow",
+      ),
+      h("span", { class: "env", text: "Sandbox" }),
+    ),
+    h("main", { id: "main", tabindex: "-1" }, form),
+  );
+  code.focus();
 }
 
 /** A page for someone who is not signed in (reset, verify). Same header as sign-in; no navigation, nothing that needs a session. */
@@ -4053,6 +4147,171 @@ async function organizationsSection() {
   );
 }
 
+/** Two-step sign-in with an authenticator app: set up (secret, then a code, then recovery codes shown once), or turn off. */
+async function mfaSection() {
+  const st = await api("/v1/app/mfa");
+  if (!st.ok)
+    return h(
+      "section",
+      { class: "card" },
+      h("h2", { text: "Two-step sign-in" }),
+      h("p", {
+        class: "hint",
+        text: "Two-step sign-in is not available on this system.",
+      }),
+    );
+  const out = h("div");
+  const pw = h("input", {
+    id: "mfa-pw",
+    type: "password",
+    autocomplete: "current-password",
+  });
+  if (st.data.enabled) {
+    const code = h("input", {
+      id: "mfa-off-code",
+      type: "text",
+      inputmode: "numeric",
+      autocomplete: "one-time-code",
+    });
+    return h(
+      "section",
+      { class: "card" },
+      h("h2", { text: "Two-step sign-in" }),
+      notice("ok", `On. ${st.data.recoveryCodesLeft} recovery codes left.`),
+      h("label", { for: "mfa-pw", text: "Password to turn it off" }),
+      pw,
+      h("label", {
+        for: "mfa-off-code",
+        text: "Code from your app (or a recovery code)",
+      }),
+      code,
+      h("button", {
+        type: "button",
+        text: "Turn off two-step sign-in",
+        onclick: async () => {
+          const v = code.value.trim();
+          const isCode = /^\d{3}\s?\d{3}$/u.test(v);
+          const r = await api("/v1/app/mfa/disable", {
+            method: "POST",
+            body: {
+              password: pw.value,
+              ...(isCode ? { code: v } : { recoveryCode: v }),
+            },
+          });
+          pw.value = "";
+          if (!r.ok)
+            return out.replaceChildren(
+              notice(
+                "bad",
+                r.status === 429
+                  ? "Too many tries. Wait a few minutes."
+                  : "The password or the code is not right.",
+              ),
+            );
+          await settingsPage();
+        },
+      }),
+      out,
+    );
+  }
+  const confirmCode = h("input", {
+    id: "mfa-code",
+    type: "text",
+    inputmode: "numeric",
+    autocomplete: "one-time-code",
+  });
+  return h(
+    "section",
+    { class: "card" },
+    h("h2", { text: "Two-step sign-in" }),
+    h("p", {
+      class: "hint",
+      text: "Off. Turning it on asks for a code from an authenticator app every time you sign in.",
+    }),
+    h("label", { for: "mfa-pw", text: "Password to set it up" }),
+    pw,
+    h("button", {
+      type: "button",
+      text: "Set up two-step sign-in",
+      onclick: async () => {
+        const r = await api("/v1/app/mfa/begin", {
+          method: "POST",
+          body: { password: pw.value },
+        });
+        pw.value = "";
+        if (!r.ok)
+          return out.replaceChildren(
+            notice(
+              "bad",
+              r.status === 429
+                ? "Too many tries. Wait a few minutes."
+                : "That password is not right.",
+            ),
+          );
+        out.replaceChildren(
+          h("p", {
+            text: "Add this key to your authenticator app (choose “enter a setup key”), then type the 6-digit code it shows.",
+          }),
+          h(
+            "p",
+            {},
+            "Setup key: ",
+            h("code", { class: "secret", text: r.data.secret }),
+          ),
+          h(
+            "p",
+            { class: "hint" },
+            "Or open this link on the device that has the app: ",
+            h("a", { href: r.data.otpauthUri, text: "add to authenticator" }),
+          ),
+          h("label", { for: "mfa-code", text: "6-digit code from the app" }),
+          confirmCode,
+          h("button", {
+            type: "button",
+            text: "Confirm and turn on",
+            onclick: async () => {
+              const e = await api("/v1/app/mfa/enable", {
+                method: "POST",
+                body: { code: confirmCode.value },
+              });
+              if (!e.ok)
+                return out.append(
+                  notice(
+                    "bad",
+                    "That code did not match. Check the code and try again.",
+                  ),
+                );
+              out.replaceChildren(
+                notice(
+                  "ok",
+                  "Two-step sign-in is on. Your other sign-ins were ended.",
+                ),
+                h("h3", { text: "Recovery codes" }),
+                h("p", {
+                  text: "Save these now. They are shown once and each works once if you lose your phone.",
+                }),
+                h(
+                  "ul",
+                  { class: "list" },
+                  ...e.data.recoveryCodes.map((c) =>
+                    h("li", {}, h("code", { class: "secret", text: c })),
+                  ),
+                ),
+                h("button", {
+                  type: "button",
+                  text: "I have saved them",
+                  onclick: () => settingsPage(),
+                }),
+              );
+            },
+          }),
+        );
+      },
+    }),
+    out,
+  );
+}
+
 /** Your own data: download it, or close the account. Both ask for the password again. */
 function dataSection() {
   const out = h("div");
@@ -4382,6 +4641,7 @@ async function settingsPage() {
     ),
     await organizationsSection(),
     await membersSection(),
+    await mfaSection(),
     dataSection(),
     await peopleSection(),
     await signInsSection(),

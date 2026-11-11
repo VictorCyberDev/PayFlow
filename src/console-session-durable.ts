@@ -31,6 +31,7 @@ export function deriveHostKeys(bootstrapKey: string) {
     csrf: derive("csrf"),
     pending: derive("pending-challenge"),
     paymentInstrument: derive("m6-payment-instrument"),
+    mfa: derive("account-mfa-secrets"),
   };
 }
 

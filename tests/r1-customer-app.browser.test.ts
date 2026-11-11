@@ -1,3 +1,4 @@
+import { hotp } from "../src/network/totp.js";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -1764,6 +1765,87 @@ const chromePath = [
       expect(again.status).toBe(401);
       await ctx.close();
     }, 90_000);
+
+    it("two-step sign-in in a real browser: set up from Settings with a code computed from the shown key, see recovery codes, sign out, then sign in through the second step", async () => {
+      const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+      const unb32 = (t: string) => {
+        let bits = 0;
+        let value = 0;
+        const out: number[] = [];
+        for (const ch of t) {
+          value = (value << 5) | B32.indexOf(ch);
+          bits += 5;
+          if (bits >= 8) {
+            out.push((value >>> (bits - 8)) & 255);
+            bits -= 8;
+          }
+        }
+        return Buffer.from(out);
+      };
+      const codeNow = (secret: Buffer) =>
+        hotp(secret, Math.floor(h.now() / 30000));
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "otp@example.com",
+          password: "a long enough passphrase",
+          displayName: "Otto Pin",
+          organizationName: "Otp Ltd",
+        }),
+      });
+      const { ctx, page } = await open();
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("otp@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await page.goto(`${h.origin}/workspace#/settings`);
+      await page.getByRole("heading", { name: "Two-step sign-in" }).waitFor();
+      await page
+        .getByLabel("Password to set it up")
+        .fill("a long enough passphrase");
+      await page
+        .getByRole("button", { name: "Set up two-step sign-in" })
+        .click();
+      await page.getByText("Setup key:").waitFor();
+      const key = (
+        await page.locator("code.secret").first().innerText()
+      ).trim();
+      expect(key).toMatch(/^[A-Z2-7]{32}$/u);
+      expect(await axe(page)).toEqual([]);
+      const secret = unb32(key);
+      await page.getByLabel("6-digit code from the app").fill("000000");
+      await page.getByRole("button", { name: "Confirm and turn on" }).click();
+      await page.getByText("That code did not match.").waitFor();
+      await page.getByLabel("6-digit code from the app").fill(codeNow(secret));
+      await page.getByRole("button", { name: "Confirm and turn on" }).click();
+      await page.getByRole("heading", { name: "Recovery codes" }).waitFor();
+      expect(await page.locator("code.secret").count()).toBe(10);
+      expect(await axe(page)).toEqual([]);
+      await page.getByRole("button", { name: "I have saved them" }).click();
+      await page.getByText("On. 10 recovery codes left.").waitFor();
+      // sign out and back in: the password is no longer enough
+      await page
+        .getByRole("button", { name: "Sign out of this browser" })
+        .click();
+      await page.getByRole("heading", { name: "Sign in" }).waitFor();
+      await page.getByLabel("Email").fill("otp@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: "Two-step sign-in" }).waitFor();
+      expect(await axe(page)).toEqual([]);
+      await page.getByLabel("Code from your authenticator app").fill("123456");
+      await page.getByRole("button", { name: "Continue" }).click();
+      await page.getByText("That code did not work").waitFor();
+      h.advance(31_000); // the code used to turn it on belongs to an earlier step
+      await page
+        .getByLabel("Code from your authenticator app")
+        .fill(codeNow(secret));
+      await page.getByRole("button", { name: "Continue" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await ctx.close();
+    }, 120_000);
 
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
