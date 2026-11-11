@@ -18,23 +18,21 @@ A test suite cannot find this, because **the test is itself an importer**. Cover
 
 ## Findings, 2026-11-11
 
-### Unreachable: nothing imports it, not even a test (1)
+### Unreachable: nothing imports it, not even a test — **none**
 
-| Module                   | Assessment                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/demo-projection.ts` | **Zero references anywhere in the repository**, including by name. It imports `OperationTraceSchema` and `AdversarialResultSchema`, so it is an earlier demo surface superseded by the current console. Needs a decision: wire it or delete it. Not deleted here — removing another author's module is the owner's call and there is no urgency, and leaving the check failing keeps the signal alive rather than silencing it. |
+`src/demo-projection.ts` was the one: zero references anywhere in the repository, including by name. It imports `OperationTraceSchema` and `AdversarialResultSchema`, so it is an earlier demo surface superseded by the console.
 
-**Consequence:** `orphan-scan.mjs` exits non-zero today, so it is **not** added to CI yet. Adding it now would make CI red for a finding nobody has decided on. It goes into CI once this one module is wired or removed — that is stated here so the omission is a decision and not an oversight.
+It is now **parked with its reason** rather than deleted or left failing. Deleting another author's module is the owner's call and there is no urgency. But leaving it to fail kept the check out of CI, and an unresolved finding that keeps CI red stops the check doing its real job — which is catching the **next** orphan, not re-reporting this one. Parking states the decision, keeps it visible in every run's output, and lets the gate start working.
 
-### Parked: unreached on purpose, reason on record (1)
+### In CI, as of 2026-11-11
 
-| Module                            | Reason                                                                                                                                                        |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/protocols/oauth-metadata.ts` | The file itself says to expose it only once the named authorization server is commissioned. Wiring it earlier would advertise a resource that does not exist. |
+```
+npm run orphan:scan
+```
 
-The allowlist is in the script, and an entry requires a reason. "Nothing imports this" is then always either a finding or a decision somebody wrote down.
+runs in the `verify` job beside `format:check`, `lint`, `typecheck`, `secret:scan` and `embed:app:check`. A module that becomes unreachable from shipping code **and** tests now fails the build. Adding one deliberately means adding it to the parked list with a reason, which is the point: "nothing imports this" becomes either a build failure or a decision somebody wrote down.
 
-### Test-only: imported by tests, by no shipping code (22 on the first scan, 21 now)
+### Test-only: imported by tests, by no shipping code (22 on the first scan, 19 now)
 
 This is the finding that changes how the later milestones should be read.
 

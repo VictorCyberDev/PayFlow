@@ -107,6 +107,10 @@ const ENTRY = [
  */
 const PARKED = new Map([
   [
+    "src/demo-projection.ts",
+    "Unreferenced anywhere, including by tests and docs: an earlier demo surface superseded by the console. Parked rather than deleted because removing another author's module is the owner's call and there is no urgency. Parked rather than left failing because an unresolved finding that keeps CI red stops the check doing its real job, which is catching the NEXT orphan.",
+  ],
+  [
     "src/protocols/oauth-metadata.ts",
     "Deliberate: the file itself says to expose it only once the named authorization server is commissioned. Wiring it earlier would advertise a resource that does not exist.",
   ],
