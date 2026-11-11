@@ -29,7 +29,7 @@ import {
 } from "./intent-model.js";
 import { PostgresTrustRepository } from "./persistence.js";
 import { ConsoleDemoAgent } from "./console-demo-agent.js";
-import { DemoShoppingAgent } from "./delegated-demo.js";
+import { DemoShoppingAgent, type DemoSigningKey } from "./delegated-demo.js";
 import { createHostedGatewayHandler } from "./network/hosted-gateway.js";
 import { resendSender, type EmailSender } from "./network/email-outbox.js";
 import type { RateLimitStore } from "./network/reliability.js";
@@ -73,12 +73,13 @@ const HostedConfigSchema = z.object({
   PAYFLOW_DEMO_ACCESS_CODE: z.string().min(16).max(256).optional(),
   PAYFLOW_M5_ORIGIN: z.string().url(),
 });
-/** M6 (optional): the demo Shopping Agent. Fails closed: when enabled, a persistent grant signing
- * key is mandatory so historical Activity can be verified by any later instance. Payment is
- * connected only when complete Sandbox credentials exist and this owner has an encrypted,
- * server-stored PayPal instrument created by the one-time payer-present bootstrap. */
-const DemoAgentSchema = z.object({
-  PAYFLOW_M6_DEMO_AGENT: z.literal("true"),
+/**
+ * The HOST's Proof/credential signing key. It belongs to the host, not to any agent: the customer
+ * application, Proof and the operator routes are mounted whenever it is present, whether or not a
+ * financial agent is. A persistent key is mandatory so historical Activity stays verifiable on any
+ * later instance.
+ */
+const HostSigningSchema = z.object({
   PAYFLOW_M6_SIGNING_KEY: z.string().min(40).max(4096),
   PAYFLOW_M6_SIGNING_KID: z
     .string()
@@ -88,6 +89,15 @@ const DemoAgentSchema = z.object({
     .string()
     .regex(/^[A-Z0-9]{13}$|^DEMOACCOUNT01$/)
     .default("DEMOACCOUNT01"),
+});
+/**
+ * FINANCIAL MODE (optional): the M6 demonstration Shopping Agent. It is a separate, explicit
+ * decision from running the application. Enabling it requires the host signing key. Payment is
+ * connected only when complete Sandbox credentials exist and this owner has an encrypted,
+ * server-stored PayPal instrument created by the one-time payer-present bootstrap.
+ */
+const FinancialModeSchema = z.object({
+  PAYFLOW_M6_DEMO_AGENT: z.literal("true"),
 });
 const isLoopback = (h: string) =>
   h === "localhost" || h === "127.0.0.1" || h === "[::1]";
@@ -116,18 +126,24 @@ export type HostedConfig = z.infer<typeof HostedConfigSchema> & {
   oauthJwksUrl?: string;
   /** Enables self-serve /v1/sandbox/start on a clearly labelled SIMULATED rail. Off by default. */
   publicSandbox?: boolean;
-  demoAgent?: z.infer<typeof DemoAgentSchema>;
+  /**
+   * The host signing key. Present => the hosted Gateway (customer application, Proof, operator
+   * routes) is mounted. Absent => no Gateway: nothing to sign Proof with.
+   */
+  hostSigning?: z.infer<typeof HostSigningSchema>;
+  /** Financial mode: mounts the M6 demonstration Shopping Agent. Requires `hostSigning`. */
+  demoAgent?: true;
   /** Raw PayPal settings; consumed only by the isolated M6 composition. Never logged. */
   paypalEnv?: Record<string, string | undefined>;
 };
 export function parseHostedConfig(
   env: Record<string, string | undefined>,
 ): HostedConfig {
-  const demoAgent =
-    env.PAYFLOW_M6_DEMO_AGENT === undefined
+  // The signing key stands on its own: the application does not need a demo financial agent to run.
+  const hostSigning =
+    env.PAYFLOW_M6_SIGNING_KEY === undefined
       ? undefined
-      : DemoAgentSchema.parse({
-          PAYFLOW_M6_DEMO_AGENT: env.PAYFLOW_M6_DEMO_AGENT,
+      : HostSigningSchema.parse({
           PAYFLOW_M6_SIGNING_KEY: env.PAYFLOW_M6_SIGNING_KEY,
           ...(env.PAYFLOW_M6_SIGNING_KID
             ? { PAYFLOW_M6_SIGNING_KID: env.PAYFLOW_M6_SIGNING_KID }
@@ -136,6 +152,15 @@ export function parseHostedConfig(
             ? { PAYPAL_EXPECTED_MERCHANT_ID: env.PAYPAL_EXPECTED_MERCHANT_ID }
             : {}),
         });
+  // Financial mode is a separate switch, and fails closed: it cannot be enabled without the key.
+  const financial =
+    env.PAYFLOW_M6_DEMO_AGENT === undefined
+      ? undefined
+      : FinancialModeSchema.parse({
+          PAYFLOW_M6_DEMO_AGENT: env.PAYFLOW_M6_DEMO_AGENT,
+        });
+  if (financial && !hostSigning)
+    throw new Error("PAYFLOW_M6_DEMO_AGENT_REQUIRES_PAYFLOW_M6_SIGNING_KEY");
   const base = HostedConfigSchema.parse({
     PAYFLOW_M5_DEMO: env.PAYFLOW_M5_DEMO,
     DATABASE_URL: env.DATABASE_URL,
@@ -249,9 +274,10 @@ export function parseHostedConfig(
     ...(cronSecret ? { cronSecret } : {}),
     ...(alertWebhookUrl ? { alertWebhookUrl } : {}),
     ...(env.PAYFLOW_PUBLIC_SANDBOX === "true" ? { publicSandbox: true } : {}),
-    ...(demoAgent
+    ...(hostSigning ? { hostSigning } : {}),
+    ...(financial
       ? {
-          demoAgent,
+          demoAgent: true as const,
           paypalEnv: {
             PAYPAL_ENVIRONMENT: env.PAYPAL_ENVIRONMENT,
             PAYPAL_CLIENT_ID: env.PAYPAL_CLIENT_ID,
@@ -352,14 +378,27 @@ export function createHostedConsole(
     },
     clock,
   );
-  let demo: DemoShoppingAgent | undefined;
-  let simulated: DemoShoppingAgent | undefined;
-  if (config.demoAgent) {
+  /**
+   * The host signing key, built once and owned by the host. The Gateway (customer application,
+   * Proof, operator routes) is mounted whenever it exists. The financial agent below is a separate,
+   * explicit decision and shares this key so one Proof history stays verifiable across both modes.
+   */
+  let signing: DemoSigningKey | undefined;
+  if (config.hostSigning) {
     const privateKey = createPrivateKey(
-      config.demoAgent.PAYFLOW_M6_SIGNING_KEY,
+      config.hostSigning.PAYFLOW_M6_SIGNING_KEY,
     );
     if (privateKey.asymmetricKeyType !== "ed25519")
       throw new Error("PAYFLOW_M6_SIGNING_KEY_INVALID");
+    signing = {
+      kid: config.hostSigning.PAYFLOW_M6_SIGNING_KID,
+      privateKey,
+      publicKey: createPublicKey(privateKey),
+    };
+  }
+  let demo: DemoShoppingAgent | undefined;
+  let simulated: DemoShoppingAgent | undefined;
+  if (config.demoAgent && signing && config.hostSigning) {
     let payment: PaymentProvider | null = null;
     let paymentReady: (() => Promise<boolean>) | undefined;
     if (deps.paymentProvider !== undefined) payment = deps.paymentProvider;
@@ -384,30 +423,26 @@ export function createHostedConsole(
       payment = stored;
       paymentReady = () => stored.connected();
     }
-    const signing = {
-      kid: config.demoAgent.PAYFLOW_M6_SIGNING_KID,
-      privateKey,
-      publicKey: createPublicKey(privateKey),
-    };
     demo = new DemoShoppingAgent({
       repo,
       provider: payment,
       ...(paymentReady ? { paymentReady } : {}),
       signing,
-      expectedPayPalMerchantId: config.demoAgent.PAYPAL_EXPECTED_MERCHANT_ID,
+      expectedPayPalMerchantId: config.hostSigning.PAYPAL_EXPECTED_MERCHANT_ID,
       clock,
     });
-    // Same merchant binding as the real rail (so one binding revision serves both); only the
-    // provider differs. Reached solely by `sbx_` organizations.
-    if (config.publicSandbox)
-      simulated = new DemoShoppingAgent({
-        repo,
-        provider: new SimulatedPaymentProvider(ownedSql),
-        signing,
-        expectedPayPalMerchantId: config.demoAgent.PAYPAL_EXPECTED_MERCHANT_ID,
-        clock,
-      });
   }
+  // The public sandbox's SIMULATED rail is its own decision: it needs no PayPal and no demonstration
+  // agent, so it is not nested in financial mode. Same merchant binding as the real rail (one
+  // binding revision serves both); only the provider differs. Reached solely by `sbx_` organizations.
+  if (config.publicSandbox && signing && config.hostSigning)
+    simulated = new DemoShoppingAgent({
+      repo,
+      provider: new SimulatedPaymentProvider(ownedSql),
+      signing,
+      expectedPayPalMerchantId: config.hostSigning.PAYPAL_EXPECTED_MERCHANT_ID,
+      clock,
+    });
   const handler = activationHttpHandler(app, {
     sample: () => hostedSample(bucketOf(clock())).text,
     controls: new ConsoleControls(repo, sessions, clock),
@@ -420,11 +455,14 @@ export function createHostedConsole(
     review: new IntentReviewService(provider, demoReviewBounds, clock),
     ...(demo ? { demoAgent: new ConsoleDemoAgent(repo, sessions, demo) } : {}),
   });
-  const gateway = demo
+  const gateway = signing
     ? createHostedGatewayHandler({
         sql: ownedSql,
         repo,
-        demo,
+        signing,
+        // Financial mode only. Without it every economic request is refused before a provider is
+        // reached, and the customer application, Proof and operator routes are unaffected.
+        ...(demo ? { demo } : {}),
         ...(deps.connectors ? { connectors: deps.connectors } : {}),
         ...(deps.channels ? { channels: deps.channels } : {}),
         ...(deps.talentSources ? { talentSources: deps.talentSources } : {}),

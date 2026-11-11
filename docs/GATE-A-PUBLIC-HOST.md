@@ -9,9 +9,20 @@ Status: 2026-11-03. Written after inspecting the Vercel team. Nothing in this fi
 | `payflow`               | production alias `payflow-one-kappa.vercel.app` | Vercel Authentication on every `*.vercel.app` host (`all_except_custom_domains`)   | not inspected (env values are never read)                           |
 | `payflow-m6-acceptance` | M6/M7 acceptance and the 2026-11-03 RC preview  | Vercel Authentication **was OFF** (anonymous 200) until 2026-11-03; now ON (`all`) | the **accepted evidence database** (Neon `br-noisy-brook-b89epb6e`) |
 
-Consequence, measured: `https://payflow-one-kappa.vercel.app/` returns 404 to an anonymous client, and so do `/verify/`, `/status/`,
-`/.well-known/security.txt`, `/sitemap.xml` and `/robots.txt`. The canonical URL in the site metadata therefore points at a host a
-stranger cannot reach. The production alias also serves the M6 build (main at `3b1b263`), not this work.
+Consequence, measured 2026-11-03: `https://payflow-one-kappa.vercel.app/` returned 404 to an anonymous client, and so did `/verify/`,
+`/status/`, `/.well-known/security.txt`, `/sitemap.xml` and `/robots.txt`.
+
+> **Superseded 2026-11-11 — re-measured, and the opposite is now true.** Anonymous requests with no cookies:
+> `https://payflow-one-kappa.vercel.app/` returns **200**, and so do `/product/`, `/verify/`, `/status/`, `/preview/` and `/pricing/`.
+> The marketing site **is** publicly accessible there, serving `main` at `01b45c4`.
+> The mechanism: `payflow-one-kappa.vercel.app` is an **added project domain**, and the project's `ssoProtection` is
+> `all_except_custom_domains`, which does not gate it. The auto-generated domains still are gated —
+> `https://payflow-start-up16.vercel.app/` and `https://payflow-git-main-start-up16.vercel.app/` both answer **302** to Vercel SSO,
+> so a customer must never be linked to one of those.
+> `https://payflow-public.vercel.app/` answers **404 DEPLOYMENT_NOT_FOUND`**: that project still has no deployment.
+The canonical-URL defect was real but inverted: the metadata pointed at `payflow-public`(the 404 origin) from the site that was
+serving. Fixed in`apps/console/lib/site.ts`; `scripts/public-readiness.mjs`now reads`SITE_URL` from there and asserts the
+> marketing metadata does not carry the application's origin.
 
 ## Topology (recommended)
 

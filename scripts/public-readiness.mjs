@@ -12,7 +12,22 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseHostedConfig } from "../src/console-hosted.ts";
 
-const CANONICAL = "https://payflow-public.vercel.app";
+/**
+ * The customer APPLICATION's origin (the hosting/m6 function on the `payflow-public` project). It is
+ * what PAYFLOW_M5_ORIGIN must be, and it is NOT the marketing site's canonical origin.
+ */
+const APP_ORIGIN = "https://payflow-public.vercel.app";
+/**
+ * The MARKETING site's canonical origin, read from the one place that defines it so this gate cannot
+ * drift from the build. Measured 2026-11-11: the marketing site serves publicly from this origin,
+ * while APP_ORIGIN has no deployment and answers 404, so the two must never be conflated.
+ */
+const MARKETING_CANONICAL = (() => {
+  const src = readFileSync("apps/console/lib/site.ts", "utf8");
+  const m = /export const SITE_URL = "([^"]+)"/u.exec(src);
+  if (!m) throw new Error("SITE_URL not found in apps/console/lib/site.ts");
+  return m[1];
+})();
 const SECRET_NAMES = [
   "DATABASE_URL",
   "PAYFLOW_GATEWAY_ADMIN_TOKEN",
@@ -30,14 +45,14 @@ const EXPECTED_CODE_REQUIRED = [
   "PAYFLOW_M5_DEMO",
   "PAYFLOW_M5_ORIGIN",
   "PAYFLOW_M5_PRINCIPAL_ID",
-  "PAYFLOW_M6_SIGNING_KEY", // required once the demo agent switch below is on
+  "PAYFLOW_M6_SIGNING_KEY", // the host key: it is what mounts the Gateway and signs Proof
 ];
-// PAYFLOW_M6_DEMO_AGENT is a switch the code does not require, but the hosted Gateway (the API this release exists
-// to expose) is mounted only when it is on, so the public design requires it.
+// PAYFLOW_M6_DEMO_AGENT is deliberately NOT here. The hosted Gateway is mounted by the host signing
+// key (see EXPECTED_CODE_REQUIRED), and the public sandbox's simulated rail needs only
+// PAYFLOW_PUBLIC_SANDBOX, so the demonstration financial agent is optional for this release.
 const PUBLIC_DESIGN_REQUIRED = [
   "CRON_SECRET",
   "PAYFLOW_GATEWAY_ADMIN_TOKEN",
-  "PAYFLOW_M6_DEMO_AGENT",
   "PAYFLOW_PUBLIC_SANDBOX",
 ];
 const PAYPAL_NAMES = [
@@ -57,7 +72,7 @@ const fake = {
   PAYFLOW_M5_PRINCIPAL_ID: "p",
   PAYFLOW_M5_AGENT_ID: "a",
   PAYFLOW_M5_BOOTSTRAP_KEY: "k".repeat(40),
-  PAYFLOW_M5_ORIGIN: CANONICAL,
+  PAYFLOW_M5_ORIGIN: APP_ORIGIN,
   PAYFLOW_M6_DEMO_AGENT: "true",
   PAYFLOW_M6_SIGNING_KEY: "s".repeat(64),
 };
@@ -181,9 +196,14 @@ for (const route of [
 if (existsSync(out + "/index.html")) {
   const home = readFileSync(out + "/index.html", "utf8");
   check(
-    "canonical and Open Graph point at the public alias",
-    home.includes(`rel="canonical" href="${CANONICAL}/"`) &&
-      home.includes(`content="${CANONICAL}/brand/social-card.png"`),
+    "canonical and Open Graph point at the marketing origin that actually serves",
+    home.includes(`rel="canonical" href="${MARKETING_CANONICAL}/"`) &&
+      home.includes(`content="${MARKETING_CANONICAL}/brand/social-card.png"`),
+  );
+  check(
+    "marketing metadata does NOT point at the customer application's origin",
+    !home.includes(APP_ORIGIN),
+    { appOrigin: APP_ORIGIN },
   );
   const robots = existsSync(out + "/robots.txt")
     ? readFileSync(out + "/robots.txt", "utf8")
@@ -192,10 +212,10 @@ if (existsSync(out + "/index.html")) {
     ? readFileSync(out + "/sitemap.xml", "utf8")
     : "";
   check(
-    "sitemap and robots use the public alias only",
-    sitemap.includes(CANONICAL) &&
-      !/payflow-one-kappa/u.test(sitemap + robots) &&
-      robots.includes(CANONICAL),
+    "sitemap and robots use the marketing origin only",
+    sitemap.includes(MARKETING_CANONICAL) &&
+      robots.includes(MARKETING_CANONICAL) &&
+      !(sitemap + robots).includes(APP_ORIGIN),
   );
 }
 
@@ -237,12 +257,22 @@ if (i > 0) {
     PAYPAL_NAMES.every((k) => !by.has(k)),
     { present: PAYPAL_NAMES.filter((k) => by.has(k)) },
   );
+  // PAYFLOW_M5_ORIGIN is the APPLICATION's own origin, not the marketing canonical. They are
+  // different hosts, and conflating them is what produced the canonical defect of 2026-11-11.
   check(
-    "the origin variable matches the canonical alias",
-    by.get("PAYFLOW_M5_ORIGIN")?.value === CANONICAL ||
+    "the origin variable is the application's own origin",
+    by.get("PAYFLOW_M5_ORIGIN")?.value === APP_ORIGIN ||
       !by.get("PAYFLOW_M5_ORIGIN")?.value,
-    {},
+    { expected: APP_ORIGIN },
   );
+  // Financial mode is no longer needed to run the app, and leaving it on a customer project arms the
+  // demonstration shopping agent for no reason. Report it rather than fail: it is the owner's switch.
+  if (by.has("PAYFLOW_M6_DEMO_AGENT"))
+    console.error(
+      "NOTE: PAYFLOW_M6_DEMO_AGENT is set on this project. Since the hosting decoupling it is only " +
+        "FINANCIAL MODE (the M6 demonstration Shopping Agent) and is not needed to serve the " +
+        "customer application. Delete it unless that agent is deliberately wanted.",
+    );
 }
 
 const failed = checks.filter((c) => !c.ok);

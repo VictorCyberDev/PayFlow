@@ -117,10 +117,13 @@ export interface ExecutingGatewayDependencies {
   readonly pauseCheck?: (clientId: string) => Promise<string | null>;
   /** Payment-time purchase-order binding for mission-governed Authorities. Absent = no mission Authority can be paid. */
   readonly binding?: ExecutionBindingService;
-  /** Labels the response with the rail behind this Authority. */
+  /**
+   * Labels the response with the rail behind this Authority. `null` when this host has no rail for
+   * it: the label then says nothing rather than naming a provider that is not mounted.
+   */
   readonly railFor?: (
     mandateId: string,
-  ) => Promise<"SIMULATED" | "PAYPAL_SANDBOX">;
+  ) => Promise<"SIMULATED" | "PAYPAL_SANDBOX" | null>;
 }
 
 const usd = (minor: number, currency: string): string =>

@@ -51,7 +51,10 @@ describe("hosted environment contract", () => {
       "DATABASE_URL",
       "PAYFLOW_M5_BOOTSTRAP_KEY",
     ]);
-    expect(r.missingCustomerApp).toEqual([]); // the app origin defaults to PAYFLOW_M5_ORIGIN, which is set
+    // The host signing key is what mounts the customer application (Proof cannot be signed without
+    // it). PAYFLOW_M6_DEMO_AGENT, which this project also has set, only adds financial mode on top,
+    // so the key is reported twice: once as the app's own requirement, once as that switch's.
+    expect(r.missingCustomerApp).toEqual(["PAYFLOW_M6_SIGNING_KEY"]);
     expect(r.missingForEnabledFeatures).toEqual([
       "PAYFLOW_M6_SIGNING_KEY",
       "CRON_SECRET",

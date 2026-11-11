@@ -84,7 +84,7 @@ Dated addendum. Evidence levels and honest not-done lists: `docs/M51-M53-STATUS.
 - **PR #73** (marketing CTA audit, Private preview page) squash-merged as `e855608`, pinned to head `ea3dd6b`. On the combined head its first `console-e2e` run failed in the customer-app "Needs checking" browser test (a 30 s heading wait, code this PR does not touch); the rerun of the failed job passed. The cause was not established and the test is recorded as intermittent.
 - **PR #74** (sign-ins list, end one/others/everywhere, Settings screen) squash-merged as `077e630`, head `b402609` (`verify`, `console`, `console-e2e` green); the merge call returned a 502 but the merge had happened.
 - Merge-pin note: for #71-#73 the merge call was made with a parameter that does not pin the head (the tool's real parameter is `expectedHeadSha`). Before each of those merges the PR head was read back and matched the head whose checks had passed (#71 `e5d1959`, #72 `ae92f76`, #73 `ea3dd6b`), so the merges were of the verified code; the pin itself was not enforced by GitHub.
-- Deployment check of #73 (Vercel deployment of `e855608`, read through the authorized fetch): the header's "Sign in" links to `/preview/`, which returns 200 with the Private-preview text and four working links. Its canonical and social-card URLs name `https://payflow-public.vercel.app`, the planned public host, which has no deployment yet; that is intended and resolves when `payflow-public` is deployed.
+- Deployment check of #73 (Vercel deployment of `e855608`, read through the authorized fetch): the header's "Sign in" links to `/preview/`, which returns 200 with the Private-preview text and four working links. Its canonical and social-card URLs name `https://payflow-public.vercel.app`, the planned public host, which has no deployment yet; that is intended and resolves when `payflow-public` is deployed. **[Superseded 2026-11-11 — this sentence was wrong: see R6-2 below. The site was already serving publicly from another origin, so its canonical pointed at a 404 from a live page.]**
 - **PR #75** (B1 hardening: migration 061, atomic token+email, send leases and crash recovery, Resend sender from the protected environment, fail-closed auth limits, unverified-account policy, read-only role grants, compiled-app acceptance run, schema fingerprint) squash-merged as `aa7a97f`, pinned with `expectedHeadSha` to `6b4c961`, whose `verify`, `console` and `console-e2e` were all green on that exact head and whose base was the then-current main `077e630`.
 - Still owner-gated: nothing is deployed to `payflow-public`; migrations 024–061 (skipping 028) are not applied to the public database; no email sender is configured, so no real email has been sent.
 - **PR #77** (B3: organization invitations and organization switching, migration 062) squash-merged as `01b45c4`, pinned with `expectedHeadSha` to `5b26d90`, whose `verify`, `console` and `console-e2e` were all green on that exact head; base was the then-current main `aa7a97f`.
@@ -93,3 +93,107 @@ Dated addendum. Evidence levels and honest not-done lists: `docs/M51-M53-STATUS.
 - **PR #79** (B5: download your data, close your account) squash-merged as `5d58fd3`, pinned with `expectedHeadSha` to `bb0f63a`, whose `verify`, `console` and `console-e2e` were all green on that exact head.
 - **PR #81** (B6: two-step sign-in with an authenticator app, migration 063) squash-merged as `5658f8a`, pinned with `expectedHeadSha` to `0f41ec7`, whose `verify`, `console` and `console-e2e` were all green on that exact head; base was the then-current main `5d58fd3`. A durable checkpoint is `docs/PROGRAM-CHECKPOINT-2026-11-11.md`.
 - **PR #82** (program checkpoint 2026-11-11 and the #81 ledger line) squash-merged as `ced2b9c`, pinned with `expectedHeadSha` to `6e2ce7d`, whose `verify`, `console` and `console-e2e` were all green on that exact head.
+
+## Hosting decoupling and the canonical origin — 2026-11-11 (R6)
+
+Two defects were found by measuring the live hosts and the real composition rather than re-reading the
+notes. Both had been recorded in this repository as intended behaviour.
+
+**R6-1. The customer application was mounted only by a fictional demo agent.**
+`src/console-hosted.ts` built the hosted Gateway as `const gateway = demo ? … : undefined`, so every
+`/v1` route — the whole customer application, sign-in included — existed only when
+`PAYFLOW_M6_DEMO_AGENT=true`. That was true, measured and documented, but it was a code defect, not a
+requirement: the real dependency is the **host signing key**, which Proof needs. Fixed by separating
+the two. `PAYFLOW_M6_SIGNING_KEY` is now the host's own key and mounts the Gateway; the demo agent is
+FINANCIAL MODE and optional; the public sandbox's simulated rail no longer depends on the demo agent
+either. With no financial agent, `delegated.attempt` refuses `PAYMENT_RAIL_NOT_CONNECTED` before a
+provider is reached, so a customer deployment cannot execute a payment by accident. Enabling financial
+mode without the key throws `PAYFLOW_M6_DEMO_AGENT_REQUIRES_PAYFLOW_M6_SIGNING_KEY`.
+
+Evidence — `tests/r6-customer-host-without-financial-mode.integration.test.ts`, 7 tests, real HTTP and
+real PostgreSQL against the real composition: signup/login/`/v1/app/me`/logout; a mission created and
+still there after a host restart; a purchase refused with `authorization_reservations` and
+`transaction_proposals` both still 0; **the identical purchase COMPLETED on the same host with
+financial mode on**, so the refusal cannot pass for the wrong reason; the sandbox rail reachable
+without the demo agent and absent when not asked for; the demo routes absent, with a positive control.
+Mutation-checked: restoring the single line `const gateway = demo` fails exactly the three decoupling
+tests and no others.
+
+Second, independent evidence — the same experiment that produced the original wrong conclusion, repeated
+on the **compiled** host (`dist/`, loaded the way `hosting/m6/api/host.ts` loads it), against a real
+PostgreSQL with all 62 migrations applied, with `PAYFLOW_M6_DEMO_AGENT` unset:
+
+| Route                   | Before (recorded) | Now | Body                                      |
+| ----------------------- | ----------------- | --- | ----------------------------------------- |
+| `POST /v1/app/signup`   | 404               | 201 | a real `userId` and `organizationId`      |
+| `POST /v1/app/login`    | 404               | 401 | `INVALID_CREDENTIALS` for an unknown user |
+| `GET /v1/app/me`        | 404               | 401 | `NOT_SIGNED_IN`                           |
+| `GET /workspace/`       | 404               | 200 | the customer app HTML                     |
+| `GET /workspace/app.js` | 404               | 200 | the customer app script                   |
+
+The signup persisted: `user_accounts`, `organizations` and `user_memberships` each hold 1 row afterwards.
+
+**R6-2. The live marketing site's canonical metadata pointed at a 404 origin.**
+The entry above says of #73 that the canonical and social-card URLs naming `payflow-public`
+"is intended and resolves when `payflow-public` is deployed". That was wrong, and so was
+`docs/GATE-A-PUBLIC-HOST.md`, which recorded `payflow-one-kappa.vercel.app` as returning 404.
+Measured 2026-11-11, anonymous requests, no cookies:
+
+| URL                                               | Result                                                           |
+| ------------------------------------------------- | ---------------------------------------------------------------- |
+| `https://payflow-one-kappa.vercel.app/`           | **200** (also `/product/ /verify/ /status/ /preview/ /pricing/`) |
+| `https://payflow-start-up16.vercel.app/`          | 302 to Vercel SSO                                                |
+| `https://payflow-git-main-start-up16.vercel.app/` | 302 to Vercel SSO                                                |
+| `https://payflow-public.vercel.app/`              | **404 DEPLOYMENT_NOT_FOUND**                                     |
+
+So the marketing site **is** publicly accessible, at `payflow-one-kappa.vercel.app`: it is an added
+project domain, which the project's `ssoProtection: all_except_custom_domains` does not gate, while the
+auto-generated domains it does gate must never be given to a customer. And the site that was serving
+declared `<link rel="canonical" href="https://payflow-public.vercel.app/">`, an `og:image` on that
+origin and every `sitemap.xml` `<loc>` on it — all 404. Fixed in `apps/console/lib/site.ts`. Verified
+in the rebuilt export: canonical, og:image, sitemap and robots all name the serving origin, no
+`payflow-public` string survives anywhere in `apps/console/out`, and the og:image now returns 200
+`image/png`. `scripts/public-readiness.mjs` had been enforcing the defect (it asserted the canonical
+equalled `payflow-public` and forbade `payflow-one-kappa`); it now reads `SITE_URL` from the one file
+that defines it and asserts the marketing metadata does **not** carry the application origin — 21
+checks, 0 failed. `apps/console/tests/canonical-origin.test.ts` guards it in CI; mutation-checked by
+restoring the old value, which fails it.
+
+Unchanged by this work: nothing is deployed to `payflow-public`; migrations 024-062 (028 skipped) are
+not applied to the public database; no email sender is configured. The decoupling removes a code
+blocker to commissioning the customer application — it does not commission it.
+
+### R6 addendum — rebased onto #81, and what that collision exposed (2026-11-11)
+
+This branch was rebased three times while open, onto #78, then #79, then #81. Each time only
+`docs/V3-EXECUTION-LEDGER.md` conflicted; `src/console-hosted.ts` and `src/network/hosted-gateway.ts`
+auto-merged. A clean auto-merge is not evidence the result works, so after the #81 rebase the combined
+tree was checked rather than assumed: `mfaSecretKey: keys.mfa` sits inside the `signing ?
+createHostedGatewayHandler({...})` block this change introduced, and B6 (8), B5 (5), hosting-m6 (6),
+TOTP (6), env-contract (4) and R6 (7) all pass together.
+
+**The collision exposed a real gap.** Every B6 test runs on `tests/helpers/host-harness.ts`, which sets
+`PAYFLOW_M6_DEMO_AGENT=true`. Two-step sign-in had therefore never been exercised on the host shape this
+change makes the supported customer deployment. `tests/r6-customer-host-without-financial-mode.integration.test.ts`
+now carries that journey end to end with no financial agent: enrol (`/v1/app/mfa/begin` with the
+password, `/v1/app/mfa/enable` with a code, ten recovery codes), then a password step that returns
+`mfaRequired` **and no cookie**, a wrong code refused, the step enrolment already spent refused as a
+replay, and only the next step accepted. The first version of that test failed on exactly that replay
+rule, which is how the rule was confirmed to work rather than merely to be documented.
+
+**Migration manifest, recomputed from source (Instruction 4).** `063_b6_mfa.sql` means the public
+database is 39 migrations behind, not 38: `024`–`063`, skipping the merchant-only `028`. #81 also changed
+`db/roles/least-privilege.sql`, so the re-grant step must use the current copy or the three new MFA
+tables stay readable by `payflow_readonly`.
+
+**Rehearsed, with a script anyone can re-run.** `scripts/migration-rehearsal.mjs` builds two local
+databases — a fresh install of all 63, and the real upgrade path (`001`–`023`, then the 39) — compares
+them object by object across columns, constraints, indexes, triggers, functions and enums, then applies
+the grants. Result, exit 0: **0 objects the upgrade has that a fresh install lacks**, fresh-only is
+exactly `merchant_challenges`, `merchant_nonces` and `merchant_proof_claims` (precisely what skipping
+`028` omits), and 12/12 grant invariants hold, including that `payflow_readonly` cannot read `user_mfa`,
+`user_recovery_codes` or `user_mfa_challenges` while `payflow_runtime` still can.
+
+Still true, and unchanged by any of this: nothing is deployed to `payflow-public`, the 39 migrations are
+not applied, no provider is commissioned, and `svc_public_app` is still `LOGIN` and still a member of
+`neon_superuser`.
