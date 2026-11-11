@@ -218,3 +218,27 @@ Rows are inserted straight into `usage_events` — the table the Gateway writes 
 ### Not done, and named
 
 Support correspondence. The help screen is a glossary and the usage screen links to it, but there is no way to send a message to a human, because no email has ever been delivered (blocker B-1). An outbox row is not a sent message and is not described as one.
+
+## A-11 · M74 — the retention policy now governs the code
+
+```
+npx vitest run tests/m74-privacy-enforcement.integration.test.ts
+```
+
+**4 tests, exit 0.** No database needed: the guard is pure.
+
+### What was wrong, and why it was quiet
+
+`src/network/privacy.ts` held `DEFAULT_RETENTION_RULES` and `deletionDecision`, stating that `IMMUTABLE_FINANCIAL_EVIDENCE` is not deletable. It was imported by a test and by **no shipping code** — one of the 22 orphans in A-12. Meanwhile `account-data.ts` closed accounts correctly, deleting only MFA secrets and anonymising the person, and never touching a financial table.
+
+So two descriptions of the same policy agreed **by luck**. That is one refactor away from disagreeing, and the disagreement would be silent: deleting financial evidence raises no error, it just destroys historical truth.
+
+### The fix
+
+Account closure now declares each table it deletes from with the data class that permits it, and `assertClosureDeletionsArePermitted` checks every one against `deletionDecision` **before the transaction opens**. Adding a financial-evidence table to that list throws at the start of the next closure instead of quietly succeeding. The list is a parameter with a default, so a test can prove the guard bites — a check over a hard-wired constant cannot.
+
+| Mutant                           | Result                                                                                                                                                                                                                             |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deletionDecision` always allows | **killed by three tests independently** — the policy assertion, the guard-bites test, and the cross-check that `deletionDecision` and `DEFAULT_RETENTION_RULES` never disagree, which named `IMMUTABLE_FINANCIAL_EVIDENCE` exactly |
+
+`privacy.ts` is no longer test-only; the orphan count fell from 21 to 20.

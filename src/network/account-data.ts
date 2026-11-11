@@ -1,12 +1,53 @@
 import { randomBytes } from "node:crypto";
 import type { Sql } from "postgres";
 import { hashPassword, verifyPassword } from "./user-auth.js";
+import { deletionDecision, type DataClass } from "./privacy.js";
 
 /**
  * B5 — a person's own data: export it, or close the account. Both need the password again, so a stolen session cookie alone cannot take the
  * data or destroy the account. Closing keeps the pseudonymous user id (the audit trail refers to it) but removes everything that identifies the
  * person: the address, the name, the password. Organization records belong to the organization and stay.
  */
+/**
+ * M74 — every table account closure removes rows from, with the data class that permits the removal.
+ *
+ * `src/network/privacy.ts` held the retention policy and governed nothing: it said that
+ * IMMUTABLE_FINANCIAL_EVIDENCE is not deletable, while this file independently happened to agree by never touching a
+ * financial table. Two descriptions that agree by luck are one refactor away from disagreeing in silence.
+ *
+ * So the policy now governs the code. Each deletion declares its class, `assertClosureDeletionsArePermitted` checks
+ * every one against `deletionDecision`, and it runs before the transaction opens. Adding a financial-evidence table to
+ * this list therefore throws at the start of the next closure instead of quietly destroying historical truth.
+ */
+const CLOSURE_DELETIONS: readonly {
+  readonly table: string;
+  readonly dataClass: DataClass;
+}[] = [
+  // The second factor goes with the account: references to secrets, never evidence of anything financial.
+  { table: "user_recovery_codes", dataClass: "SECRET_REFERENCE" },
+  { table: "user_mfa_challenges", dataClass: "SECRET_REFERENCE" },
+  { table: "user_mfa", dataClass: "SECRET_REFERENCE" },
+];
+
+/**
+ * Throws rather than deleting anything the retention policy protects. The list is a parameter so a test can prove the
+ * guard actually bites, which a check over a hard-wired constant cannot.
+ */
+export function assertClosureDeletionsArePermitted(
+  deletions: readonly {
+    table: string;
+    dataClass: DataClass;
+  }[] = CLOSURE_DELETIONS,
+): void {
+  for (const d of deletions) {
+    const verdict = deletionDecision(d.dataClass);
+    if (!verdict.allowed)
+      throw new Error(
+        `account closure would delete ${d.table}, which the retention policy protects: ${verdict.reason}`,
+      );
+  }
+}
+
 export type ExportResult =
   | { ok: true; data: Record<string, unknown> }
   | { ok: false; refusal: "WRONG_PASSWORD" };
@@ -113,6 +154,8 @@ export class AccountDataService {
       randomBytes(32).toString("base64url"),
     );
     const anon = `deleted-${randomBytes(9).toString("hex")}@deleted.invalid`;
+    // Before anything is written: the retention policy, not this file's good intentions, decides what may go.
+    assertClosureDeletionsArePermitted();
     return this.deps.sql.begin(async (tx) => {
       const mine =
         await tx`select m.member_id, m.organization_id, m.environment, m.role, o.display_name org
@@ -156,7 +199,7 @@ export class AccountDataService {
         await tx`select email from user_accounts where user_id = ${userId}`;
       await tx`update user_sessions set revoked_at = ${now} where user_id = ${userId} and revoked_at is null`;
       await tx`update user_tokens set used_at = ${now} where user_id = ${userId} and used_at is null`;
-      // the second factor goes with the account
+      // the second factor goes with the account (declared in CLOSURE_DELETIONS and checked against the policy above)
       await tx`delete from user_recovery_codes where user_id = ${userId}`;
       await tx`delete from user_mfa_challenges where user_id = ${userId}`;
       await tx`delete from user_mfa where user_id = ${userId}`;

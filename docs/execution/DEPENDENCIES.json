@@ -101,6 +101,20 @@
       "state": "DELIVERED",
       "blocked_by": [],
       "note": "DELIVERED: usageHome + usagePeriod in org-views, GET /v1/admin/org/usage on view:finance, a #/usage screen in the main navigation. 5 tests, exit 0, 1 mutant killed (removing organization scoping leaked another tenant's usage). Totals are zero on the DEVELOPER plan because no price sheet is published and no plan assignment exists in the schema; the response says so in words. docs/M59-USAGE-AND-BILLING.md. M59 support correspondence remains blocked on B-1 (no email has ever been delivered)."
+    },
+    {
+      "id": "M74-privacy-enforcement",
+      "title": "M74 \u2014 retention policy governs account closure",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "DELIVERED: account closure declares each deleted table's data class and checks it against deletionDecision before the transaction opens; privacy.ts is no longer unreachable from shipping code. 4 tests, 1 mutant killed by three tests independently. The policy and the closure code previously agreed by luck."
+    },
+    {
+      "id": "forward-traceability",
+      "title": "Forward traceability scan (mandate section 20)",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "scripts/orphan-scan.mjs. Found 1 unreachable module, 1 deliberate (parked with a reason) and 22 test-only, the last reframing M65/M69/M70/M74/M77-M81/M85/M86/M89 as built-and-unwired rather than merely PARTIAL. Caught one duplication of my own (billing.ts). Not in CI yet because it exits non-zero on demo-projection.ts, which needs an owner decision; that omission is stated in the doc. docs/execution/FORWARD-TRACEABILITY.md."
     }
   ],
   "m55_gap": {
