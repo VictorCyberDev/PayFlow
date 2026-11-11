@@ -1,6 +1,6 @@
 # Owner actions that genuinely require the owner
 
-Status: 2026-11-06. Gate A (public developer preview) is **not commissioned**. The code is merged and verified; the public project is
+Status: **re-measured 2026-11-11** (section 0 below carries today's readings; the header table and sections 1-6 are from 2026-11-06 and are corrected where section 0 says so). Gate A (public developer preview) is **not commissioned**. The code is merged and verified; the public project is
 prepared and empty. These are the only steps left, and each one needs a secret, a destructive-tool approval, or a decision.
 **No step asks you to paste a credential into chat, and none of them passes a secret through this assistant.**
 
@@ -8,29 +8,84 @@ Live state when this was written (re-verified, not assumed):
 
 | Item                                       | State                                                                                                                                                        |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `main`                                     | `325d9af9a478f68c6f488933c765fac3c38a998a`                                                                                                                   |
+| `main`                                     | ~~`325d9af9a478f68c6f488933c765fac3c38a998a`~~ — stale; see section 0 for today's SHA                                                                        |
 | `payflow-public` (Vercel)                  | no Git connection, **no deployment**; 7 non-secret variables; **none of the 5 required secrets** (see below)                                                 |
 | `payflow-m6-acceptance` (Vercel)           | Vercel Authentication ON; anonymous requests get 302. Never the public sandbox                                                                               |
-| Neon `withered-rice-68056451`              | schema = accepted schema; sandbox principal provisioned; no accepted history                                                                                 |
+| Neon `withered-rice-68056451`              | `payflow-public-sandbox`. At migrations `001`-`023`: 73 tables, 9 functions, **no account or mission schema** (section 0)                                    |
 | `svc_public_rt` (runtime login)            | `LOGIN`, not superuser, no CREATEDB/CREATEROLE/BYPASSRLS, member of `payflow_runtime`; **password not set** (login attempt: "required password")             |
 | `svc_public_app` (**privileged, exposed**) | `LOGIN`, `neon_superuser`, CREATEDB, CREATEROLE, BYPASSRLS. Cannot connect to `neondb`; **can still connect to `postgres` and `template1`**. Must be removed |
 
-## 0. What changed since this page was written (2026-11-07)
+## 0. What changed since this page was written (re-measured 2026-11-11)
 
-`main` is now `9c810b1b4ac54cf42a51b1dcdb1648a1a2424394`. Merged and verified locally only (nothing is deployed): portable credential issuance (M22), the
-published issuer directory and status (M24), the tenant delegation API (M18), shared durable merchant stores (M23), and the
-end-to-end developer journey tests. Consequences for the owner:
+Everything in this section was **measured today**, read-only, against the live Vercel projects and the live
+Neon database. Where it contradicts the rest of this page, this section is right and the older text is marked.
 
-- **Five more migrations are pending on the public Neon database** (it is still at 023; re-checked read-only today):
-  `024`–`027` and `029` for PayFlow (`028` is the merchant's own database). Apply them with the migrator role, then re-run
-  `db/roles/least-privilege.sql`, **before** the first deploy of this version. See `docs/ops/PUBLIC-DEPLOY-RUNBOOK.md` step 3.
-- **Optional, off by default:** `PAYFLOW_MCP_ANONYMOUS_VERIFY=true` (only with `PAYFLOW_MCP_PROFILE=verify-only`) and
-  `PAYFLOW_OAUTH_ISSUER` + `PAYFLOW_OAUTH_JWKS_URL`. Neither is needed for Gate A. No OAuth provider is chosen
-  (`docs/chatgpt/OAUTH-PROVIDER-EVALUATION.md`), and choosing one is a decision and an account for you.
-- **Issuer signing key:** credentials and the directory are signed by the same key as Proofs. Rotation and revocation steps are
-  in `docs/authority-credential/DIRECTORY.md`. No alert fires on `DIRECTORY_UNAVAILABLE` yet.
-- Items 1–6 below are unchanged and still owner-gated: removing `svc_public_app`, setting the `svc_public_rt` password,
-  supplying the secrets, the security contact, and the word "deploy".
+**Repository.** `main` is now `4852a2c (plus PR #80)` (this page previously said `9c810b1b`). The customer
+application no longer needs the M6 demonstration agent to run (PR #80): `PAYFLOW_M6_SIGNING_KEY` is the host's
+own key and is what mounts the Gateway, and `PAYFLOW_M6_DEMO_AGENT` is now only financial mode.
+
+**Pending migrations are no longer five — they are 38.** This page said `024`–`027` and `029`. The public
+database is still at `001`–`023`, and the repository now holds `024`–`062`. `028` is the merchant's own
+database and is **skipped**, so **38 migrations** must be applied before the first deploy.
+
+Measured on `payflow-public-sandbox` (`withered-rice-68056451`), database `neondb`, today: **73 tables, 9
+functions, and none of `user_accounts`, `user_sessions`, `missions`, `email_outbox` or
+`organization_invitations`.** So even with every secret set, a customer could not sign up: the account and
+mission schema does not exist there yet. This is a migration approval, not a code gap.
+
+**The exposed privileged role is still there.** Section 1 below is **not done**. Measured today:
+
+| Role             | LOGIN | member of         | CREATEDB | CREATEROLE | BYPASSRLS |
+| ---------------- | ----- | ----------------- | -------- | ---------- | --------- |
+| `svc_public_app` | yes   | `neon_superuser`  | yes      | yes        | yes       |
+| `svc_public_rt`  | yes   | `payflow_runtime` | no       | no         | no        |
+
+The runtime role is correctly least-privileged. The compromised one is unchanged and still needs your word
+(section 1). Nothing in this session touched either role.
+
+**Vercel `payflow-public`:** still **no deployment**, no domains. Seven non-secret variables are set and
+**all five required secrets are still absent** — confirmed by
+`node --import tsx scripts/public-readiness.mjs --envs <names.json>`, which reports 27 checks with one
+failure naming exactly `DATABASE_URL`, `PAYFLOW_M5_BOOTSTRAP_KEY`, `PAYFLOW_M6_SIGNING_KEY`, `CRON_SECRET`
+and `PAYFLOW_GATEWAY_ADMIN_TOKEN`.
+
+Two settings on that project need a decision from you:
+
+- **`PAYFLOW_M6_DEMO_AGENT=true` is set and should be deleted.** Since PR #80 it only arms the M6
+  demonstration Shopping Agent; it is not needed to serve the customer application, and without it every
+  economic request is refused `PAYMENT_RAIL_NOT_CONNECTED` before a provider is reached. Deleting it is the
+  safer default. (An earlier version of the commissioning page said it "must stay". That was true of the old
+  code and is no longer true.)
+- **Vercel Authentication is currently OFF.** Section 6 of this page used to end "Do not turn Vercel
+  Authentication on for `payflow-public`"; `docs/ops/PUBLIC-APP-COMMISSIONING.md` step 4 says to turn it
+  **on** until the acceptance passes. They contradicted each other. The commissioning page is right: the
+  first deployment should be private, acceptance run against it, and only then a decision about opening it.
+  That line in section 6 is struck.
+
+**The marketing site is public and was always reachable.** `https://payflow-one-kappa.vercel.app/` returns
+**200** anonymously on every public route. It is an added project domain, which the project's
+`ssoProtection: all_except_custom_domains` does not gate; the auto-generated `*-start-up16.vercel.app`
+domains return **302** to Vercel SSO and must never be given to a customer.
+`https://payflow-public.vercel.app/` returns **404 DEPLOYMENT_NOT_FOUND`**. Until PR #80 the live site's
+canonical tag, `og:image` and every sitemap entry pointed at that 404 origin; they now point at the origin
+that serves.
+
+### 0.1 The one approval that unblocks the database (new)
+
+Applying the 38 migrations to a database with real state is the destructive step that needs your explicit
+word. The runbook is `docs/ops/PUBLIC-DEPLOY-RUNBOOK.md` step 3. In order:
+
+1. Take a Neon **snapshot** (or branch) of `payflow-public-sandbox` / `main` and confirm it exists.
+2. Apply `024`–`062`, **skipping `028`**, in filename order, as `payflow_migrator` — never as
+   `svc_public_rt` and never as an owner or `neon_superuser` login.
+3. Re-run `db/roles/least-privilege.sql`.
+4. Re-run the fingerprint check so the result is compared with the repository, not assumed.
+5. Only then set the secrets (section 4) and deploy.
+
+Rollback is the snapshot from step 1: restore it, and the database returns to `001`–`023`.
+
+If you want me to run step 2, the sentence is "approve applying migrations 024-062 (skipping 028) to
+payflow-public-sandbox". Without it I will not write to that database.
 
 ## 1. Remove the privileged role `svc_public_app` (needs your approval)
 
@@ -104,4 +159,8 @@ Give me an address that someone actually reads (a dedicated alias is best). I wi
 I then check the variables (names, scopes and types only, never values) with `node --import tsx scripts/public-readiness.mjs --envs <names.json>`, deploy `main` once to `payflow-public` as a **production** deployment, and run the live acceptance
 described in `docs/ops/PUBLIC-DEPLOY-RUNBOOK.md`. Until a deployment exists I will not claim the public site is live, the alert channel is commissioned, or Gate A is closed.
 
-Do not turn Vercel Authentication on for `payflow-public`, and do not touch `payflow-m6-acceptance`.
+~~Do not turn Vercel Authentication on for `payflow-public`~~ — **struck 2026-11-11.** It contradicted
+`docs/ops/PUBLIC-APP-COMMISSIONING.md` step 4, which is the one to follow: commission the first deployment
+**privately** (Vercel Authentication **on**), run the acceptance against it, and only then decide about
+opening it. The project's Vercel Authentication is currently **off**, so this is a setting to change before
+the first deploy, not after. Do not touch `payflow-m6-acceptance`.
