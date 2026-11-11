@@ -24,6 +24,7 @@ import { createRecurringRoutes } from "./recurring-routes.js";
 import { EmailOutbox, type EmailSender } from "./email-outbox.js";
 import { InvitationService } from "./invitations.js";
 import { AccountDataService } from "./account-data.js";
+import { MfaService } from "./mfa.js";
 import { QuorumService } from "../missions/quorum-service.js";
 import { createQuorumRoutes } from "./quorum-routes.js";
 import { createAutomationRoutes } from "./automation-routes.js";
@@ -201,6 +202,8 @@ export interface HostedGatewayOptions {
    * configured: without one nobody could ever confirm, so requiring it would only lock everyone out. /v1/app/me says which applies.
    */
   readonly requireVerifiedEmail?: boolean;
+  /** 32-byte key that seals authenticator secrets at rest (derived from the host key). Without it two-step sign-in cannot be set up. */
+  readonly mfaSecretKey?: Buffer;
   /**
    * How many reverse proxies sit in front of this host and append to `x-forwarded-for`. The client address is the entry that
    * many positions from the RIGHT (the one the nearest trusted proxy appended); anything to its left is client-controlled and
@@ -507,7 +510,11 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     : undefined;
   const members = new MemberStore(sql);
   const emailOutbox = new EmailOutbox({ sql, now: iso });
+  const mfa = options.mfaSecretKey
+    ? new MfaService({ sql, now: iso, key: options.mfaSecretKey })
+    : undefined;
   const userAuth = new UserAuthService({
+    ...(mfa ? { mfa } : {}),
     sql,
     now: iso,
     outbox: emailOutbox,
@@ -2804,6 +2811,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           path === "/v1/app/password-reset/request" ||
           path === "/v1/app/password-reset/confirm" ||
           path === "/v1/app/invitations/preview" ||
+          path === "/v1/app/login/mfa" ||
           path === "/v1/app/email-verification/confirm")
       ) {
         // Login CSRF: an attacker's page must not be able to sign a victim in as the attacker.
@@ -2904,11 +2912,61 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           json(201, { userId: r.userId, organizationId: r.organizationId });
           return true;
         }
+        if (path === "/v1/app/login/mfa") {
+          const b2 = (body ?? {}) as {
+            challenge?: unknown;
+            code?: unknown;
+            recoveryCode?: unknown;
+          };
+          const m2 = await userAuth.completeMfaLogin(b2.challenge, {
+            code: b2.code,
+            recoveryCode: b2.recoveryCode,
+          });
+          if (!m2.ok) {
+            // One answer for a wrong code, a spent challenge and an unknown one.
+            json(m2.refusal === "MFA_UNAVAILABLE" ? 503 : 401, {
+              reason: m2.refusal,
+              recoverable: true,
+            });
+            return true;
+          }
+          const g2 = m2.grant;
+          json(
+            200,
+            {
+              user: g2.user,
+              member: {
+                organizationId: g2.member.organizationId,
+                environment: g2.member.environment,
+                role: g2.member.role,
+              },
+              csrfToken: g2.csrfToken,
+              expiresAt: g2.expiresAt,
+            },
+            {
+              "set-cookie": sessionCookie(
+                g2.sessionToken,
+                Math.floor(SESSION_ABSOLUTE_MS / 1000),
+                secureCookies,
+              ),
+            },
+          );
+          return true;
+        }
         const r = await userAuth.login(body);
         if (!r.ok) {
           json(r.refusal === "MALFORMED" ? 400 : 401, {
             reason: r.refusal,
             recoverable: true,
+          });
+          return true;
+        }
+        if ("mfaChallenge" in r) {
+          // The password was right; the second step is still owed. No session and no cookie yet.
+          json(200, {
+            mfaRequired: true,
+            challenge: r.mfaChallenge,
+            expiresInSeconds: 300,
           });
           return true;
         }
@@ -3167,6 +3225,139 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           return true;
         }
         json(405, { reason: "METHOD_NOT_ALLOWED" });
+        return true;
+      }
+      // ---- Two-step sign-in (B6): set up with an authenticator app, check status, turn off. Changing it asks for the password again.
+      if (/^\/v1\/app\/mfa(?:\/(begin|enable|disable))?$/u.test(path)) {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view || !sessionTokenIn) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        if (!mfa) {
+          json(503, { reason: "MFA_NOT_AVAILABLE" });
+          return true;
+        }
+        const action = /^\/v1\/app\/mfa\/(begin|enable|disable)$/u.exec(
+          path,
+        )?.[1];
+        if (!action) {
+          if (method !== "GET") {
+            json(405, { reason: "METHOD_NOT_ALLOWED" });
+            return true;
+          }
+          json(200, await mfa.status(view.user.userId));
+          return true;
+        }
+        if (method !== "POST") {
+          json(405, { reason: "METHOD_NOT_ALLOWED" });
+          return true;
+        }
+        let allowed = false;
+        try {
+          allowed = (
+            await enforceRateLimit(limiter, {
+              bucket: "mfa-manage",
+              subject: view.user.userId,
+              limit: 10,
+              windowSeconds: 900,
+              now: iso(),
+            })
+          ).allowed;
+        } catch {
+          allowed = false;
+        }
+        if (!allowed) {
+          json(
+            429,
+            { reason: "RATE_LIMITED", recoverable: true },
+            { "retry-after": "300" },
+          );
+          return true;
+        }
+        const b = (body ?? {}) as {
+          password?: unknown;
+          code?: unknown;
+          recoveryCode?: unknown;
+        };
+        const uid = view.user.userId;
+        const passwordOk = async () =>
+          await accountData.verifyOwnPassword(uid, b.password);
+        const endOtherSessions = async () => {
+          await sql`update user_sessions set revoked_at = ${iso()} where user_id = ${uid} and revoked_at is null and session_hash <> ${createHash("sha256").update(sessionTokenIn).digest("hex")}`;
+        };
+        const note = (a: string) =>
+          audit.append({
+            organizationId: view.member.organizationId,
+            environment: view.member.environment,
+            actorKind: "MEMBER",
+            actorId: view.member.memberId,
+            action: a,
+            subjectKind: "USER",
+            subjectId: uid,
+            detail: {},
+            occurredAt: iso(),
+          });
+        if (action === "begin") {
+          if (!(await passwordOk())) {
+            json(403, { reason: "WRONG_PASSWORD", recoverable: true });
+            return true;
+          }
+          const r = await mfa.begin(uid, view.user.email);
+          if (!r.ok) json(409, { reason: r.refusal });
+          else
+            json(200, {
+              secret: r.secret,
+              otpauthUri: r.uri,
+              note: "Add this to your authenticator app, then confirm with a code.",
+            });
+          return true;
+        }
+        if (action === "enable") {
+          const r = await mfa.enable(uid, b.code);
+          if (!r.ok) {
+            json(r.refusal === "NOT_STARTED" ? 409 : 400, {
+              reason: r.refusal,
+              recoverable: true,
+            });
+            return true;
+          }
+          // Turning it on ends every other sign-in: whoever else has the account now has to pass the second step.
+          await endOtherSessions();
+          await note("MFA_ENABLED");
+          json(200, {
+            enabled: true,
+            recoveryCodes: r.recoveryCodes,
+            note: "Save these recovery codes now. They are shown once and each works once.",
+          });
+          return true;
+        }
+        // disable: the password and a current second factor
+        if (!(await passwordOk())) {
+          json(403, { reason: "WRONG_PASSWORD", recoverable: true });
+          return true;
+        }
+        if (!(await mfa.isEnabled(uid))) {
+          json(409, { reason: "NOT_ENABLED" });
+          return true;
+        }
+        const verdict = await mfa.checkFactor(uid, {
+          code: b.code,
+          recoveryCode: b.recoveryCode,
+        });
+        if (verdict !== "OK") {
+          json(403, {
+            reason: verdict === "UNUSABLE" ? "MFA_UNAVAILABLE" : "WRONG_CODE",
+            recoverable: true,
+          });
+          return true;
+        }
+        await mfa.disable(uid);
+        await endOtherSessions();
+        await note("MFA_DISABLED");
+        json(200, { enabled: false });
         return true;
       }
       // ---- Your data (B5): export it or close the account. Both ask for the password again.

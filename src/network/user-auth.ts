@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import type { EmailOutbox, Tx } from "./email-outbox.js";
+import type { MfaService, SecondFactor } from "./mfa.js";
 import type { Member } from "./rbac.js";
 
 /**
@@ -119,7 +120,8 @@ export const LoginSchema = z
   .strict();
 
 export type SignupRefusal = "MALFORMED" | "WEAK_PASSWORD" | "EMAIL_UNAVAILABLE";
-export type LoginRefusal = "MALFORMED" | "INVALID_CREDENTIALS";
+export type LoginRefusal =
+  "MALFORMED" | "INVALID_CREDENTIALS" | "MFA_UNAVAILABLE" | "MFA_FAILED";
 
 export interface SessionGrant {
   readonly sessionToken: string;
@@ -171,6 +173,8 @@ export class UserAuthService {
        * limiter fault can never become a way to flood someone's inbox.
        */
       allowMailFor?: (email: string) => Promise<boolean>;
+      /** Second-step sign-in. Absent means a person who has turned it on cannot sign in at all (never that the step is skipped). */
+      mfa?: MfaService;
     },
   ) {}
 
@@ -218,7 +222,9 @@ export class UserAuthService {
   async login(
     raw: unknown,
   ): Promise<
-    { ok: true; grant: SessionGrant } | { ok: false; refusal: LoginRefusal }
+    | { ok: true; grant: SessionGrant }
+    | { ok: true; mfaChallenge: string }
+    | { ok: false; refusal: LoginRefusal }
   > {
     const parsed = LoginSchema.safeParse(raw);
     if (!parsed.success) return { ok: false, refusal: "MALFORMED" };
@@ -249,6 +255,57 @@ export class UserAuthService {
       order by um.created_at, m.member_id limit 1`;
     const m = memberships[0];
     if (!m) return { ok: false, refusal: "INVALID_CREDENTIALS" };
+    // A person with the second step turned on gets a challenge, not a session.
+    const [mfaRow] =
+      await sql`select 1 from user_mfa where user_id = ${String(u.user_id)} and enabled_at is not null`;
+    if (mfaRow) {
+      if (!this.deps.mfa) return { ok: false, refusal: "MFA_UNAVAILABLE" };
+      return {
+        ok: true,
+        mfaChallenge: await this.deps.mfa.createChallenge(
+          String(u.user_id),
+          String(m.member_id),
+        ),
+      };
+    }
+    return { ok: true, grant: await this.grantSession(u, m, now) };
+  }
+
+  /**
+   * The second step: a challenge from the password step plus an authenticator code or a recovery code. Each try is counted on the challenge first;
+   * five wrong tries (or five minutes) end it and the person starts again from the password.
+   */
+  async completeMfaLogin(
+    challenge: unknown,
+    factor: SecondFactor,
+  ): Promise<
+    { ok: true; grant: SessionGrant } | { ok: false; refusal: LoginRefusal }
+  > {
+    const mfa = this.deps.mfa;
+    if (!mfa) return { ok: false, refusal: "MFA_UNAVAILABLE" };
+    const t = await mfa.takeAttempt(challenge);
+    if (!t) return { ok: false, refusal: "MFA_FAILED" };
+    const verdict = await mfa.checkFactor(t.userId, factor);
+    if (verdict === "UNUSABLE")
+      return { ok: false, refusal: "MFA_UNAVAILABLE" };
+    if (verdict !== "OK") return { ok: false, refusal: "MFA_FAILED" };
+    if (!(await mfa.spend(t.hash))) return { ok: false, refusal: "MFA_FAILED" };
+    const now = this.deps.now();
+    const [u] = await this.deps
+      .sql`select * from user_accounts where user_id = ${t.userId}`;
+    const [m] = await this.deps
+      .sql`select * from organization_members where member_id = ${t.memberId} and status = 'ACTIVE'`;
+    if (!u || u.status !== "ACTIVE" || !m)
+      return { ok: false, refusal: "MFA_FAILED" };
+    return { ok: true, grant: await this.grantSession(u, m, now) };
+  }
+
+  private async grantSession(
+    u: Record<string, unknown>,
+    m: Record<string, unknown>,
+    now: string,
+  ): Promise<SessionGrant> {
+    const sql = this.deps.sql;
     const sessionToken = randomBytes(32).toString("base64url");
     const csrfToken = csrfFor(sessionToken);
     const expires = new Date(
@@ -263,24 +320,21 @@ export class UserAuthService {
           ${new Date(Date.parse(now) + SESSION_IDLE_MS).toISOString()}, ${now})`;
     });
     return {
-      ok: true,
-      grant: {
-        sessionToken,
-        csrfToken,
-        expiresAt: expires,
-        user: {
-          userId: String(u.user_id),
-          email: String(u.email),
-          displayName: String(u.display_name),
-          emailVerified: u.email_verified_at !== null,
-        },
-        member: {
-          memberId: String(m.member_id),
-          organizationId: String(m.organization_id),
-          environment: m.environment as Member["environment"],
-          displayName: String(m.display_name),
-          role: m.role as Member["role"],
-        },
+      sessionToken,
+      csrfToken,
+      expiresAt: expires,
+      user: {
+        userId: String(u.user_id),
+        email: String(u.email),
+        displayName: String(u.display_name),
+        emailVerified: u.email_verified_at !== null,
+      },
+      member: {
+        memberId: String(m.member_id),
+        organizationId: String(m.organization_id),
+        environment: m.environment as Member["environment"],
+        displayName: String(m.display_name),
+        role: m.role as Member["role"],
       },
     };
   }

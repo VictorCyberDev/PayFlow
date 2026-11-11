@@ -41,6 +41,11 @@ export class AccountDataService {
     );
   }
 
+  /** For routes that ask for the password again before a sensitive change. */
+  verifyOwnPassword(userId: string, password: unknown): Promise<boolean> {
+    return this.passwordOk(userId, password);
+  }
+
   /** Everything PayFlow holds about the person themselves. No secret, no digest, no other person's data. */
   async exportData(userId: string, password: unknown): Promise<ExportResult> {
     if (!(await this.passwordOk(userId, password)))
@@ -151,6 +156,10 @@ export class AccountDataService {
         await tx`select email from user_accounts where user_id = ${userId}`;
       await tx`update user_sessions set revoked_at = ${now} where user_id = ${userId} and revoked_at is null`;
       await tx`update user_tokens set used_at = ${now} where user_id = ${userId} and used_at is null`;
+      // the second factor goes with the account
+      await tx`delete from user_recovery_codes where user_id = ${userId}`;
+      await tx`delete from user_mfa_challenges where user_id = ${userId}`;
+      await tx`delete from user_mfa where user_id = ${userId}`;
       // Nothing addressed to the old address stays readable or usable.
       await tx`update email_outbox set state = 'FAILED', body = null, note = 'account closed', updated_at = ${now}
         where to_email = ${String(old!.email)} and state = 'QUEUED'`;
