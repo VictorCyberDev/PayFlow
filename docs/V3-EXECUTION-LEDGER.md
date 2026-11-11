@@ -197,3 +197,5 @@ exactly `merchant_challenges`, `merchant_nonces` and `merchant_proof_claims` (pr
 Still true, and unchanged by any of this: nothing is deployed to `payflow-public`, the 39 migrations are
 not applied, no provider is commissioned, and `svc_public_app` is still `LOGIN` and still a member of
 `neon_superuser`.
+
+- **PR #83** (M55 slice: launch runs, migration 064) squash-merged as `c85f7b2`, pinned with `expectedHeadSha` to `4e9df23`, whose `verify`, `console` and `console-e2e` were all green on that exact head. Its first push contained a lint failure (caught from the local lint result right after pushing and fixed in the same PR before CI finished).
