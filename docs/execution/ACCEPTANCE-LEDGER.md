@@ -262,3 +262,34 @@ TEST_DATABASE_URL=... npm test
 Three earlier attempts at this run were discarded rather than reported, and the reason matters more than the number. Twice, `npm run embed:app` was run **while the suite was executing**; the browser tests read the embedded asset, so regenerating it mid-run changed the code under test. Both runs reported a single browser failure that did not reproduce on a clean run. A fourth was killed because source still needed changing.
 
 A suite result is only evidence about a tree that stopped changing before it started. All source work now completes before verification begins, and that constraint is written into `RECOVERY-CHECKPOINT.md` so the next session does not rediscover it.
+
+## A-13 · M86 — operational key transparency
+
+```
+TEST_DATABASE_URL=... npx vitest run tests/m86-key-transparency.integration.test.ts
+```
+
+**5 tests, exit 0.**
+
+### Why this one is not a minor milestone
+
+PayFlow's whole claim is that anyone can verify a Proof offline, against the issuer's published key, without asking PayFlow for anything. That rests on knowing **which key was valid when**. `proof_signing_keys` held only each key's _current_ state, so a key quietly swapped, or a revocation quietly reversed, left nothing a verifier could find. `transparency.ts` had the chain arithmetic for exactly this and **nothing ever called it** — one of the 22 orphans in A-12.
+
+### Two corrections I had to make, both worth recording
+
+1. **The table already existed.** My first attempt created `key_transparency_log`; migration `017` had created it long ago and nothing ever wrote to it. The failing migration told me. I had checked whether the _module_ was wired and not whether its _table_ already existed — a gap in how I used my own orphan scan.
+2. **My design was per-issuer; it should be one global chain.** The existing table and the contiguous `sequence` check in `verifyTransparencyLog` both say so, and the reason is substantive: a per-issuer chain lets an issuer be the only witness to its own history, which gives away most of the property. Migration `067` is therefore an **ALTER** — widening the status vocabulary so a real key change can be recorded faithfully, requiring that only the first entry has no predecessor, and adding the append-only trigger.
+
+### What it guarantees
+
+Every key change is appended **in the same transaction as the change itself**, under the issuer's advisory lock. A log appended afterwards or on a best-effort basis can fall behind what it attests, and a log that can fall behind attests nothing. `revoke` was a bare `UPDATE`; it is now a transaction, because revocation is the entry a verifier most needs. Activation records **two** entries — the outgoing key's `RETIRED` and the incoming key's `ACTIVE` — because a log that recorded only arrivals would let a key disappear without trace.
+
+| Mutant                                                | Result                  |
+| ----------------------------------------------------- | ----------------------- |
+| The outgoing key's `RETIRED` entry no longer recorded | **killed by two tests** |
+
+That mutant also exposed a weakness in my own test: the "removed entry" check only bites when a **middle** entry is removed, and with one entry fewer it silently became a check on a valid one-element chain. The premise is now asserted (`entries` has length 3) so the test cannot go vacuous later. A mutation run that only confirms the code is a wasted run; this one corrected the test.
+
+### Still not done
+
+The log has no public HTTP surface — a transparency log nobody outside can fetch is half the property. Nothing monitors for a chain that stops verifying. And entries before this migration do not exist: the chain starts at the first key change after it, stated rather than backfilled, because backfilling a transparency log from current state would be inventing a history.

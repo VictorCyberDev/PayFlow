@@ -115,6 +115,13 @@
       "state": "DELIVERED",
       "blocked_by": [],
       "note": "scripts/orphan-scan.mjs. Found 1 unreachable module, 1 deliberate (parked with a reason) and 22 test-only, the last reframing M65/M69/M70/M74/M77-M81/M85/M86/M89 as built-and-unwired rather than merely PARTIAL. Caught one duplication of my own (billing.ts). Not in CI yet because it exits non-zero on demo-projection.ts, which needs an owner decision; that omission is stated in the doc. docs/execution/FORWARD-TRACEABILITY.md."
+    },
+    {
+      "id": "M86-key-transparency",
+      "title": "M86 \u2014 operational key transparency",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "DELIVERED: migration 067 (an ALTER - the table existed since 017 and nothing ever wrote to it), appendKeyEntry wired into SigningKeyRegistry.activate/announce/revoke in the same transaction as the key change, readKeyTransparencyLog verifying the chain on the way out. 5 tests, 1 mutant killed by two tests. One global chain across issuers, not per-issuer: a per-issuer chain lets an issuer be the only witness to its own history. Still missing a public HTTP surface and a monitor for a chain that stops verifying. docs/M86-KEY-TRANSPARENCY.md."
     }
   ],
   "m55_gap": {
