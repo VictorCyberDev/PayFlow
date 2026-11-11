@@ -22,6 +22,7 @@ import {
 } from "../missions/recurring-service.js";
 import { createRecurringRoutes } from "./recurring-routes.js";
 import { EmailOutbox, type EmailSender } from "./email-outbox.js";
+import { InvitationService } from "./invitations.js";
 import { QuorumService } from "../missions/quorum-service.js";
 import { createQuorumRoutes } from "./quorum-routes.js";
 import { createAutomationRoutes } from "./automation-routes.js";
@@ -90,7 +91,7 @@ import {
   ExecutionControls,
   PostgresRateLimitStore,
 } from "./ops-controls.js";
-import { enforceRateLimit } from "./reliability.js";
+import { enforceRateLimit, type RateLimitStore } from "./reliability.js";
 import { PostgresNetworkStore } from "./postgres-adapters.js";
 import { PortableProofIssuer } from "./portable-proof.js";
 import { ProofReader } from "./proof-read.js";
@@ -191,6 +192,13 @@ export interface HostedGatewayOptions {
   readonly cronSecret?: string;
   /** Sends the account emails queued in the outbox. Absent until the owner configures a provider and a verified sender. */
   readonly emailSender?: EmailSender;
+  /** Test seam: the rate-limit store. Production always uses PostgreSQL. */
+  readonly rateLimitStore?: RateLimitStore;
+  /**
+   * Whether an account must have confirmed its email before it can take any outward or financial action. Defaults to ON exactly when a sender is
+   * configured: without one nobody could ever confirm, so requiring it would only lock everyone out. /v1/app/me says which applies.
+   */
+  readonly requireVerifiedEmail?: boolean;
   /**
    * How many reverse proxies sit in front of this host and append to `x-forwarded-for`. The client address is the entry that
    * many positions from the RIGHT (the one the nearest trusted proxy appended); anything to its left is client-controlled and
@@ -332,7 +340,43 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   const network = new PostgresNetworkStore(sql);
   const audit = new AuditLog(sql);
   const controls = new ExecutionControls(sql);
-  const limiter = new PostgresRateLimitStore(sql);
+  const limiter: RateLimitStore =
+    options.rateLimitStore ?? new PostgresRateLimitStore(sql);
+  const verifiedEmailRequired =
+    options.requireVerifiedEmail ?? Boolean(options.emailSender);
+  /**
+   * Before the email is confirmed a person may look around, draft and compare. They may not approve, spend, contact suppliers, make bookings or
+   * orders, enrol agents or credentials, change members or connect providers. Deny by default: only the listed read-like POSTs pass.
+   */
+  const SAFE_BEFORE_VERIFY = [
+    /^\/v1\/admin\/org\/missions$/u,
+    /^\/v1\/admin\/org\/missions\/[^/]+\/(?:workspaces|services\/search|candidates\/compare|quotes\/compare|recurring|plans)$/u,
+  ];
+  const blockedUntilVerified = (
+    verified: boolean,
+    method: string,
+    path: string,
+  ): boolean =>
+    verifiedEmailRequired &&
+    !verified &&
+    method !== "GET" &&
+    path.startsWith("/v1/admin/") &&
+    !SAFE_BEFORE_VERIFY.some((r) => r.test(path));
+  // Used only when the shared limiter cannot answer: a small per-process bound so a limiter fault never becomes unmetered account actions.
+  const degraded = new Map<string, { n: number; resetAt: number }>();
+  const degradedAllows = (key: string, limit: number): boolean => {
+    const nowMs = Date.parse(iso());
+    if (degraded.size > 5000)
+      for (const [k, v] of degraded) if (v.resetAt <= nowMs) degraded.delete(k);
+    if (degraded.size > 5000) return false;
+    const cur = degraded.get(key);
+    if (!cur || cur.resetAt <= nowMs) {
+      degraded.set(key, { n: 1, resetAt: nowMs + 60_000 });
+      return true;
+    }
+    cur.n++;
+    return cur.n <= limit;
+  };
   const SANDBOX = "SANDBOX" as const;
   const ownerOf = async (credentialId: string) => {
     const r =
@@ -462,6 +506,23 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   const members = new MemberStore(sql);
   const emailOutbox = new EmailOutbox({ sql, now: iso });
   const userAuth = new UserAuthService({
+    sql,
+    now: iso,
+    outbox: emailOutbox,
+    // At most 5 recovery/verification emails an hour per address, whoever asks and from wherever. A limiter fault means no mail.
+    allowMailFor: async (email: string) =>
+      (
+        await enforceRateLimit(limiter, {
+          bucket: "mail-for",
+          subject: email,
+          limit: 5,
+          windowSeconds: 3600,
+          now: iso(),
+        })
+      ).allowed,
+    ...(options.appOrigins?.[0] ? { appBaseUrl: options.appOrigins[0] } : {}),
+  });
+  const invitations = new InvitationService({
     sql,
     now: iso,
     outbox: emailOutbox,
@@ -2214,16 +2275,27 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           20,
         );
         // Account emails: sent only when the owner has configured a sender; otherwise they stay queued and nothing is claimed.
+        const swept = await emailOutbox.sweep();
         const mail = options.emailSender
           ? await emailOutbox.drain(options.emailSender)
-          : { sent: 0, failed: 0, unknown: 0 };
+          : { sent: 0, failed: 0, unknown: 0, deferred: 0 };
         return reply(requestId, 200, {
           ...ticked,
           ...ran,
-          mail,
+          mail: {
+            ...mail,
+            ...swept,
+            senderConfigured: Boolean(options.emailSender),
+          },
           via: cronCall ? "SCHEDULER" : "OPERATOR",
         });
       }
+      // Account-email health for the operator: counts and the messages that need a person. No bodies, no tokens, masked recipients.
+      if (request.method === "GET" && op === "email-outbox")
+        return reply(requestId, 200, {
+          senderConfigured: Boolean(options.emailSender),
+          ...(await emailOutbox.summary()),
+        });
       if (request.method === "GET" && op === "alerts")
         return reply(requestId, 200, { alerts: await alerts.list() });
       // GET is accepted so a plain scheduler (cron, a hosted cron service) can call it. A tick is
@@ -2575,6 +2647,25 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
               return true;
             }
           }
+          if (blockedUntilVerified(view.user.emailVerified, method, path)) {
+            send(res, {
+              status: 403,
+              headers: {
+                "content-type": "application/json",
+                "cache-control": "no-store",
+              },
+              body: {
+                reason: "EMAIL_NOT_VERIFIED",
+                decision: "DENY",
+                effectCount: 0,
+                recoverable: true,
+                humanSummary:
+                  "Confirm your email address first. Nothing was changed and no money moved.",
+                nextAction: "CONFIRM_EMAIL",
+              },
+            });
+            return true;
+          }
           authorization = `Session ${cookieSession}`;
         }
       }
@@ -2709,6 +2800,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           path === "/v1/app/login" ||
           path === "/v1/app/password-reset/request" ||
           path === "/v1/app/password-reset/confirm" ||
+          path === "/v1/app/invitations/preview" ||
           path === "/v1/app/email-verification/confirm")
       ) {
         // Login CSRF: an attacker's page must not be able to sign a victim in as the attacker.
@@ -2726,7 +2818,14 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
             now: iso(),
           });
         } catch {
-          gate = { allowed: true, remaining: 0, resetAt: iso() };
+          // The shared limiter cannot answer. These are the actions an attacker wants unmetered (password guessing, mail flooding), so they are
+          // NOT waved through: a much tighter per-process bound applies (5 a minute per address and action), and a process that is tracking
+          // too many addresses refuses. People behind one address still get in; a guessing run does not.
+          const ok = degradedAllows(
+            `${path}|${clientAddressOf(req, options.trustedProxyHops ?? 1).slice(0, 64)}`,
+            5,
+          );
+          gate = { allowed: ok, remaining: 0, resetAt: iso() };
         }
         if (!gate.allowed) {
           json(
@@ -2736,14 +2835,34 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           );
           return true;
         }
+        if (path === "/v1/app/invitations/preview") {
+          // Holding the token is the credential. The same answer for every token that is not a live invitation.
+          const p = await invitations.preview(
+            (body as { token?: unknown } | undefined)?.token,
+          );
+          if (!p)
+            json(404, { reason: "INVALID_OR_EXPIRED", recoverable: false });
+          else json(200, p);
+          return true;
+        }
         if (path === "/v1/app/password-reset/request") {
           // The same answer whether or not the address has an account.
-          await userAuth.requestPasswordReset(
-            (body as { email?: unknown } | undefined)?.email,
-          );
+          // A failure here can only happen for a real account, so reporting it would reveal which addresses have one: it is answered
+          // exactly like success. The failure is logged by code only (no address, no token) and the person can simply ask again.
+          await userAuth
+            .requestPasswordReset(
+              (body as { email?: unknown } | undefined)?.email,
+            )
+            .catch(() => {
+              console.error(
+                JSON.stringify({ event: "PASSWORD_RESET_REQUEST_FAILED" }),
+              );
+            });
           json(202, {
             accepted: true,
             note: "If that address has an account, a reset link has been queued.",
+            // Whether the system can send email at all. It says nothing about any address, so it reveals no account.
+            emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
           });
           return true;
         }
@@ -2828,7 +2947,10 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         const queued = await userAuth.requestEmailVerification(
           view.user.userId,
         );
-        json(202, { queued });
+        json(202, {
+          queued,
+          emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
+        });
         return true;
       }
       if (method === "GET" && path === "/v1/app/me") {
@@ -2848,7 +2970,200 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           },
           csrfToken: csrfFor(sessionTokenIn),
           expiresAt: view.expiresAt,
+          emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
+          verificationRequired: verifiedEmailRequired,
         });
+        return true;
+      }
+      // ---- Invitations and organizations (B3)
+      const inviteRoute =
+        /^\/v1\/app\/invitations(?:\/(inv_[a-f0-9]{24})\/revoke|\/(accept))?$/u.exec(
+          path,
+        );
+      const orgRoute = /^\/v1\/app\/organizations(\/switch)?$/u.exec(path);
+      if (inviteRoute || orgRoute) {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view || !sessionTokenIn) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        const m = view.member;
+        const actor = {
+          memberId: m.memberId,
+          organizationId: m.organizationId,
+          environment: m.environment,
+        };
+        if (orgRoute) {
+          if (method === "GET" && !orgRoute[1]) {
+            json(200, {
+              current: m.organizationId,
+              organizations: await invitations.organizationsOf(
+                view.user.userId,
+              ),
+            });
+            return true;
+          }
+          if (method === "POST" && orgRoute[1]) {
+            const id = (body as { organizationId?: unknown } | undefined)
+              ?.organizationId;
+            const ok =
+              typeof id === "string" &&
+              (await invitations.switchOrganization(
+                sessionTokenIn,
+                view.user.userId,
+                id,
+              ));
+            if (!ok) json(404, { reason: "NOT_FOUND" });
+            else json(200, { switched: true, organizationId: id });
+            return true;
+          }
+          json(405, { reason: "METHOD_NOT_ALLOWED" });
+          return true;
+        }
+        // accept: any signed-in person; the invitation itself decides
+        if (inviteRoute![2]) {
+          if (method !== "POST") {
+            json(405, { reason: "METHOD_NOT_ALLOWED" });
+            return true;
+          }
+          const r = await invitations.accept(
+            view.user,
+            (body as { token?: unknown } | undefined)?.token,
+          );
+          if (!r.ok) {
+            json(r.refusal === "EMAIL_NOT_VERIFIED" ? 403 : 410, {
+              reason: r.refusal,
+              recoverable: true,
+            });
+            return true;
+          }
+          await audit.append({
+            organizationId: r.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: view.user.userId,
+            action: "INVITATION_ACCEPTED",
+            subjectKind: "USER",
+            subjectId: view.user.userId,
+            detail: { role: r.role, alreadyMember: r.alreadyMember },
+            occurredAt: iso(),
+          });
+          json(200, {
+            joined: true,
+            organizationId: r.organizationId,
+            role: r.role,
+            alreadyMember: r.alreadyMember,
+          });
+          return true;
+        }
+        // everything else is member management
+        if (!can(m.role, "member:manage")) {
+          json(403, {
+            reason: "PERMISSION_DENIED",
+            requiredPermission: "member:manage",
+          });
+          return true;
+        }
+        if (method === "GET" && !inviteRoute![1]) {
+          json(200, {
+            invitations: await invitations.list(actor),
+            emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
+          });
+          return true;
+        }
+        if (method === "POST" && inviteRoute![1]) {
+          const done = await invitations.revoke(actor, inviteRoute![1]);
+          if (!done) {
+            json(404, { reason: "NOT_FOUND" });
+            return true;
+          }
+          await audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action: "INVITATION_REVOKED",
+            subjectKind: "INVITATION",
+            subjectId: inviteRoute![1],
+            detail: {},
+            occurredAt: iso(),
+          });
+          json(200, { revoked: true });
+          return true;
+        }
+        if (method === "POST" && !inviteRoute![1]) {
+          if (verifiedEmailRequired && !view.user.emailVerified) {
+            json(403, {
+              reason: "EMAIL_NOT_VERIFIED",
+              recoverable: true,
+              nextAction: "CONFIRM_EMAIL",
+            });
+            return true;
+          }
+          // At most 20 invitations an hour per organization; a limiter fault means no invitation.
+          let allowed = false;
+          try {
+            allowed = (
+              await enforceRateLimit(limiter, {
+                bucket: "invite-org",
+                subject: m.organizationId,
+                limit: 20,
+                windowSeconds: 3600,
+                now: iso(),
+              })
+            ).allowed;
+          } catch {
+            allowed = false;
+          }
+          if (!allowed) {
+            json(
+              429,
+              { reason: "RATE_LIMITED", recoverable: true },
+              { "retry-after": "300" },
+            );
+            return true;
+          }
+          const [org] =
+            await sql`select display_name from organizations where id = ${m.organizationId}`;
+          const r = await invitations.create(
+            actor,
+            body,
+            String(org?.display_name ?? "your organization"),
+          );
+          if (!r.ok) {
+            json(
+              r.refusal === "ALREADY_MEMBER"
+                ? 409
+                : r.refusal === "NO_OUTBOX"
+                  ? 503
+                  : 400,
+              { reason: r.refusal, recoverable: true },
+            );
+            return true;
+          }
+          await audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action: "INVITATION_CREATED",
+            subjectKind: "INVITATION",
+            subjectId: r.invitationId,
+            // The address and the token are not written to the audit trail.
+            detail: { role: String((body as { role?: unknown }).role) },
+            occurredAt: iso(),
+          });
+          json(202, {
+            queued: true,
+            invitationId: r.invitationId,
+            expiresAt: r.expiresAt,
+            emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
+          });
+          return true;
+        }
+        json(405, { reason: "METHOD_NOT_ALLOWED" });
         return true;
       }
       // ---- Sign-ins: the person sees where they are signed in and can end the others.
@@ -3040,6 +3355,18 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           : null;
         if (!view) {
           json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        if (
+          method !== "GET" &&
+          verifiedEmailRequired &&
+          !view.user.emailVerified
+        ) {
+          json(403, {
+            reason: "EMAIL_NOT_VERIFIED",
+            recoverable: true,
+            nextAction: "CONFIRM_EMAIL",
+          });
           return true;
         }
         const m = view.member;

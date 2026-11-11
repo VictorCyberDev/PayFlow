@@ -1,0 +1,131 @@
+{
+  "at": "2026-11-10T15:21:34.102Z",
+  "what": "compiled host (separate process) + real HTTP + PostgreSQL; provider is a local stand-in, not Resend",
+  "ok": true,
+  "results": [
+    {
+      "n": 1,
+      "name": "signup queues a verification email (queued, not yet sent)",
+      "ok": true,
+      "status": 201
+    },
+    {
+      "n": 2,
+      "name": "the authorized automation run delivers it through the sender over HTTP; body erased; key sent as bearer; idempotency key = outbox id",
+      "ok": true,
+      "sent": 1
+    },
+    {
+      "n": 3,
+      "name": "the emailed link verifies the address",
+      "ok": true
+    },
+    {
+      "n": 4,
+      "name": "a replayed verification token is refused",
+      "ok": true
+    },
+    {
+      "n": 5,
+      "name": "an expired reset token is refused",
+      "ok": true
+    },
+    {
+      "n": 6,
+      "name": "forgot-password request: identical answer, says delivery is enabled, a link arrives",
+      "ok": true
+    },
+    {
+      "n": 7,
+      "name": "the reset link sets the new password",
+      "ok": true
+    },
+    {
+      "n": 8,
+      "name": "the old password is refused",
+      "ok": true
+    },
+    {
+      "n": 9,
+      "name": "the new password signs in",
+      "ok": true
+    },
+    {
+      "n": 10,
+      "name": "the session that existed before the reset no longer works",
+      "ok": true
+    },
+    {
+      "n": 11,
+      "name": "the account lists its sign-ins and marks the current one",
+      "ok": true
+    },
+    {
+      "n": 12,
+      "name": "another sign-in can be revoked and then stops working",
+      "ok": true
+    },
+    {
+      "n": 13,
+      "name": "one account cannot revoke or see another's sign-ins",
+      "ok": true
+    },
+    {
+      "n": 14,
+      "name": "a provider that never answers leaves the message UNKNOWN after the sender timeout; a later run does not send it again",
+      "ok": true,
+      "ms": 8017
+    },
+    {
+      "n": 14.1,
+      "name": "…and the unknown message is not retried",
+      "ok": true
+    },
+    {
+      "n": 15,
+      "name": "the worker is killed mid-send: the message is left SENDING with a lease, the provider was reached once",
+      "ok": true
+    },
+    {
+      "n": 16,
+      "name": "after restart the sweep marks the lost message UNKNOWN and never re-sends it",
+      "ok": true
+    },
+    {
+      "n": 16.1,
+      "name": "…and the person is not locked out: asking again issues a new link that works",
+      "ok": true
+    },
+    {
+      "n": 17,
+      "name": "ten simultaneous reset requests produce one email and one live link",
+      "ok": true,
+      "mails": 1
+    },
+    {
+      "n": 18,
+      "name": "provider rate limit defers (message stays queued); a 5xx outage makes it UNKNOWN and it is not sent again",
+      "ok": true
+    },
+    {
+      "n": 18.1,
+      "name": "the operator view shows the unknown messages with masked recipients and no bodies or tokens",
+      "ok": true
+    },
+    {
+      "n": 19,
+      "name": "an idle-expired session is refused and not listed",
+      "ok": true
+    },
+    {
+      "n": 20,
+      "name": "missing/invalid CSRF and a foreign Origin are refused; the genuine request works",
+      "ok": true
+    },
+    {
+      "n": 21,
+      "name": "the API key appears in no recorded result",
+      "ok": true
+    }
+  ]
+}

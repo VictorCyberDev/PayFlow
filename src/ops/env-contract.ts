@@ -58,8 +58,8 @@ export const ENV_CONTRACT: readonly Var[] = [
     name: "PAYFLOW_M6_DEMO_AGENT",
     need: "OPTIONAL",
     secret: false,
-    rule: 'if set it must be "true", and then PAYFLOW_M6_SIGNING_KEY becomes REQUIRED',
-    why: "enables the M6 demo shopping agent; it is currently set on payflow-public, so the signing key is needed unless this variable is removed",
+    rule: 'must be "true" for the customer app to exist at all, and then PAYFLOW_M6_SIGNING_KEY is REQUIRED',
+    why: "the hosted Gateway (every /v1 route, including the customer app, sign-in and the operator routes) is mounted only when the demo agent is configured: it supplies the signing and proof keys the Gateway is built around. Do NOT remove it to avoid needing a key, or the app answers 404. Leave the PayPal variables (PAYPAL_ENVIRONMENT, PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET) unset: the agent then has no payment provider and nothing can execute a payment",
   },
   {
     name: "PAYFLOW_M6_SIGNING_KEY",
@@ -95,6 +95,27 @@ export const ENV_CONTRACT: readonly Var[] = [
     secret: true,
     rule: "at least 32 characters",
     why: "lets the scheduler call only GET /v1/admin/ops/reconcile/tick and GET /v1/admin/ops/automation/run; needed for the crons in hosting/m6/vercel.json to work",
+  },
+  {
+    name: "PAYFLOW_RESEND_API_KEY",
+    need: "FEATURE",
+    secret: true,
+    rule: "Resend API key (re_...); set together with PAYFLOW_EMAIL_FROM and PAYFLOW_EMAIL_FROM_VERIFIED",
+    why: "lets the automation run send verification and password-reset email. Without it mail is queued and the app says delivery is not configured",
+  },
+  {
+    name: "PAYFLOW_EMAIL_FROM",
+    need: "FEATURE",
+    secret: false,
+    rule: "a sender on a domain verified with Resend, e.g. PayFlow <notices@your-domain>; never @resend.dev; requires an https PAYFLOW_M5_ORIGIN",
+    why: "the From address of account email",
+  },
+  {
+    name: "PAYFLOW_EMAIL_FROM_VERIFIED",
+    need: "FEATURE",
+    secret: false,
+    rule: 'the exact string "true": the owner attests the sending domain is verified in Resend',
+    why: "the code cannot check domain verification; startup is refused without this attestation. Enabling a sender also turns on the verified-email requirement for outward and financial actions",
   },
   {
     name: "PAYFLOW_ALERT_WEBHOOK_URL",

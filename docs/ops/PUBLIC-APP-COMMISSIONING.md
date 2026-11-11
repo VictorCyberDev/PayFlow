@@ -12,13 +12,21 @@ Two Vercel projects, on purpose:
 ## What the owner must do (one consolidated list; nothing else blocks the app)
 
 1. **Database credential.** In Neon, set a password for `svc_public_rt` (or create `svc_public_rt2` `IN ROLE payflow_runtime`); put the pooled connection string in Vercel `payflow-public` as **DATABASE_URL** (Production, Sensitive). Never an owner or `neon_superuser` role.
-2. **Secrets in Vercel `payflow-public`** (Production, Sensitive): `PAYFLOW_M5_BOOTSTRAP_KEY` (random, 32+ chars). To keep the M6 demo agent: a **new** `PAYFLOW_M6_SIGNING_KEY` (never the historical acceptance key). **Or** delete `PAYFLOW_M6_DEMO_AGENT` and the app does not need it.
+2. **Secrets in Vercel `payflow-public`** (Production, Sensitive): `PAYFLOW_M5_BOOTSTRAP_KEY` (random, 32+ chars). `PAYFLOW_M6_DEMO_AGENT=true` must stay: **the whole hosted Gateway, including the customer app, is mounted only when the demo agent is configured** (found by running the compiled host without it: every `/v1/app` route answered 404). It therefore needs a **new** `PAYFLOW_M6_SIGNING_KEY` (never the historical acceptance key). Do **not** set `PAYPAL_ENVIRONMENT`, `PAYPAL_CLIENT_ID` or `PAYPAL_CLIENT_SECRET` on this project: without them the agent has no payment provider and no payment can execute. (An earlier version of this line offered deleting the variable; that was wrong.)
 3. **Operator and scheduler** (needed for booking-expiry jobs, email sending and the two crons): `PAYFLOW_GATEWAY_ADMIN_TOKEN` and `CRON_SECRET`, each random 32+ chars.
 4. **Project settings:** Root Directory `hosting/m6`; Vercel Authentication **on** until the acceptance in "Verify" passes, then the owner decides about turning it off or attaching a domain.
 5. **Approve the migration run** (below), executed by `payflow_migrator`, after a Neon branch snapshot.
 6. **Email (optional now):** a Resend API key and a verified sender; without them mail stays queued and the app says so.
 
 `node --import tsx scripts/env-contract.mjs names.txt` lists which **names** are missing (never values). Today, for `payflow-public`, it reports missing: `DATABASE_URL`, `PAYFLOW_M5_BOOTSTRAP_KEY`, and for enabled features `PAYFLOW_M6_SIGNING_KEY`, `CRON_SECRET`. Not required, contrary to older notes: `PAYFLOW_APP_ORIGINS` (it defaults to `PAYFLOW_M5_ORIGIN`, which is set) and `PAYFLOW_GATEWAY_ADMIN_TOKEN` for member routes (it gates operator routes only). The contract is checked against the real parser by `tests/env-contract.test.ts`.
+
+## Database state: verified by catalog fingerprint (2026-11-11)
+
+The earlier conclusion "the public database is at 001-023" was inferred from table names. It is now checked against the catalog: `docs/ops/schema-fingerprint-023.json` is produced by actually applying migrations 001-023 (028 skipped) to a scratch PostgreSQL and hashing every table (column names, types, nullability), index, trigger, function, constraint and enum (697 objects). `node --import tsx scripts/schema-fingerprint.mjs sql 23 compact` prints one read-only SELECT that returns only the relations that are missing, different or unexpected.
+
+Run read-only against `payflow-public-sandbox` (Neon project `withered-rice-68056451`): **every table, index, trigger, constraint and enum matches; the 9 functions matched after comments and whitespace are ignored** (the database was built by a tool that collapsed lines and removed comments; the logic is the same - first run without that normalisation reported only those 9 functions). Nothing was written. The tests (`tests/schema-fingerprint.test.ts`) prove the committed snapshot equals a fresh 001-023 build and that a dropped index, a changed column type, an extra table and a dropped trigger are each reported.
+
+What this does **not** establish: role grants (use `scripts/verify-runtime-role.mjs` after the roles exist), backups/restore capability (take a Neon snapshot before applying anything; not done), and that the migrator role is the intended one. Migrations 024-061 (028 skipped) remain unapplied, and applying them stays an owner-authorized step.
 
 ## Database
 
