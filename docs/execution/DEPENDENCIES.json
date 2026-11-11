@@ -80,6 +80,20 @@
       "state": "VERIFIED_READY",
       "blocked_by": [],
       "note": "Green on its exact head, head read back and matched, and independently re-run against main here: 4/4 pass. Test-only. Merging writes to main, which is outside this session's branch directive, so it is reported ready rather than merged."
+    },
+    {
+      "id": "M57-recurring-on-top",
+      "title": "M57 \u2014 the owner's answer to a due renewal, pause and resume",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "DELIVERED: migration 066, decide/resume, AutomationService.resumeSchedule, routes, screen controls. 24 tests across M56/M57, 2 mutants killed. docs/M57-RECURRING-DECISIONS.md. Provider-sourced price-change detection remains blocked on B-5."
+    },
+    {
+      "id": "M58-templates-end-to-end",
+      "title": "M58 \u2014 each of the five templates leads to a working mission",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "DELIVERED, and it found a real defect: three of the five templates (workspace, brand, bookkeeping) produced a plan of clarify-requirements -> owner-decision, asking the owner to review a shortlist no task was planned to produce. templatePlan now plans workspace and professional-services discovery. 7 tests, one per template plus a drift guard against the shipped app-ui, plus an end-to-end run; mutant killed (disabling the new branches fails exactly those three). docs/M58-TEMPLATES.md."
     }
   ],
   "m55_gap": {

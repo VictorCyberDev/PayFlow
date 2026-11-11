@@ -289,6 +289,11 @@ export function templatePlan(contract: MissionContract): PlanDraft {
     (p) => p === "COMMERCE_MARKETPLACE" || p === "DIRECT_SUPPLIER",
   );
   const talent = contract.approvedProviderTypes.includes("TALENT_MARKETPLACE");
+  const workspaces =
+    contract.approvedProviderTypes.includes("WORKSPACE_PROVIDER");
+  const services = contract.approvedProviderTypes.includes(
+    "PROFESSIONAL_SERVICES",
+  );
   const tasks: PlanTask[] = [];
   const add = (
     t: Partial<PlanTask> &
@@ -357,8 +362,74 @@ export function templatePlan(contract: MissionContract): PlanDraft {
       explanation: "The contract approves a talent marketplace.",
     });
   }
+  // A mission whose only approved providers are workspaces or professional services used to get no discovery work at
+  // all: the plan went straight from "write the requirements" to "decide on the shortlist", and nothing in between ever
+  // produced a shortlist. PayFlow has the discovery for both (M51 workspaces, M54 service packages), so the planner
+  // plans it.
+  if (workspaces) {
+    add({
+      key: "find-workspaces",
+      title: "Find workspaces that fit the requirements",
+      intendedOutcome: "A source-backed list of workspaces with provenance",
+      taskType: "SOURCING",
+      requiredCapabilities: ["SEARCH", "READ"],
+      providerTypes: ["WORKSPACE_PROVIDER"],
+      assignedAgentId: holder("SEARCH"),
+      requiredEvidence: ["workspace-provenance"],
+      dependsOn: [{ key: "clarify-requirements", kind: "HARD" }],
+      explanation: "The contract approves a workspace provider.",
+    });
+    add({
+      key: "compare-workspaces",
+      title: "Compare workspaces on total cost of the stay",
+      intendedOutcome:
+        "A side-by-side comparison including deposit and cancellation terms",
+      taskType: "QUOTE_COMPARISON",
+      requiredCapabilities: ["COMPARE"],
+      assignedAgentId: holder("COMPARE"),
+      requiredEvidence: ["comparison"],
+      dependsOn: [{ key: "find-workspaces", kind: "HARD" }],
+      explanation:
+        "A monthly rate is not the cost: the deposit and the minimum term are part of it.",
+    });
+  }
+  if (services) {
+    add({
+      key: "find-services",
+      title: "Find service packages that cover the requirements",
+      intendedOutcome: "A source-backed list of packages with provenance",
+      taskType: "SOURCING",
+      requiredCapabilities: ["SEARCH", "READ"],
+      providerTypes: ["PROFESSIONAL_SERVICES"],
+      assignedAgentId: holder("SEARCH"),
+      requiredEvidence: ["service-provenance"],
+      dependsOn: [{ key: "clarify-requirements", kind: "HARD" }],
+      explanation: "The contract approves professional services.",
+    });
+    add({
+      key: "compare-services",
+      title: "Compare packages on what is actually delivered",
+      intendedOutcome:
+        "A side-by-side comparison of scope, revisions and refund terms",
+      taskType: "QUOTE_COMPARISON",
+      requiredCapabilities: ["COMPARE"],
+      assignedAgentId: holder("COMPARE"),
+      requiredEvidence: ["comparison"],
+      dependsOn: [{ key: "find-services", kind: "HARD" }],
+      explanation:
+        "Two packages at the same price can deliver very different things.",
+    });
+  }
+  // The owner decides on whatever was actually compared. Without this, a mission with only workspace or services
+  // providers asked for a decision on a shortlist no task had been planned to produce.
+  const DECIDE_AFTER = [
+    "compare-offers",
+    "source-talent",
+    "compare-workspaces",
+    "compare-services",
+  ];
   const upstream = tasks
-    .filter((t) => t.key === "compare-offers" || t.key === "source-talent")
+    .filter((t) => DECIDE_AFTER.includes(t.key))
     .map((t) => ({ key: t.key, kind: "HARD" as const }));
   add({
     key: "owner-decision",

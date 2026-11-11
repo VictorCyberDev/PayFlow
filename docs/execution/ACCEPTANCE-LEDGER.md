@@ -149,3 +149,46 @@ Chromium against the real Gateway on PostgreSQL. What the Launch board test now 
 | The plan screen's `<dl>` used `<span>` placeholders for conditional rows. A `<dl>` permits only `dt`, `dd`, `div`, so axe reported `definition-list` twice. Fixed with falsy placeholders, which `h` drops.                                                                                                                           | Rendering the page and running axe |
 
 The unit suite was green through both. That is the argument for the browser gate, stated as evidence rather than as a principle.
+
+## A-8 · M57 — the owner's answer, pause and resume
+
+```
+TEST_DATABASE_URL=... npx vitest run tests/m57-recurring.integration.test.ts tests/m57-recurring.test.ts tests/m56-automation.integration.test.ts
+```
+
+**3 files, 24 tests, exit 0.** M56 was run alongside deliberately, because `resumeSchedule` touches the scheduler every recurring feature uses.
+
+`DUE_FOR_OWNER` had been a dead end: the check said "your decision is needed" and no route, method or control existed to answer it. It now takes one answer, by unique key. Approving records intent and buys nothing — the test asserts the mission's exposure is unchanged across an approval, so the claim is checked and not merely written down. `resume` rolls the slot forward so a schedule paused for ten days does not come back reporting renewals that were due in the past.
+
+| Mutant                                  | Result                                       |
+| --------------------------------------- | -------------------------------------------- |
+| `resumeSchedule`'s roll-forward removed | **killed** — resumed slot landed in the past |
+| `decide`'s mission-active guard removed | **killed** — 200 where 409 was required      |
+
+**A method failure worth recording:** the first attempt at the roll-forward mutant **did not apply**. Prettier had reformatted the line, the pattern missed, and the suite reported a pass against unmutated code. A mutation run that cannot prove the mutant was applied proves nothing. Both mutants are now applied under an assertion that fails loudly on a miss, and that is how the kills above were obtained.
+
+## A-9 · M58 — the five templates, each driven to a working mission
+
+```
+TEST_DATABASE_URL=... npx vitest run tests/m58-templates.integration.test.ts
+```
+
+**7 tests, exit 0** (five per-template, the drift guard, one end-to-end run). Run together with `m27-mission-planning` and `m55-plan-run`, which the planner change could have disturbed: both unchanged.
+
+### The defect it found
+
+`templatePlan` branched only on commerce/direct-supplier and talent. Three of the five templates approve neither:
+
+| Template                    | Providers               | Plan produced                             |
+| --------------------------- | ----------------------- | ----------------------------------------- |
+| Find a place to work        | `WORKSPACE_PROVIDER`    | `clarify-requirements` → `owner-decision` |
+| Get a logo and brand basics | `PROFESSIONAL_SERVICES` | `clarify-requirements` → `owner-decision` |
+| Set up bookkeeping          | `PROFESSIONAL_SERVICES` | `clarify-requirements` → `owner-decision` |
+
+Each went straight from "write the requirements" to a task titled _"Owner reviews the shortlist and decides what to commit to"_ — with nothing in the plan planned to produce a shortlist. Nothing failed and nothing warned; the plan was missing its middle. PayFlow already had the discovery for both families (M51, M54); the planner simply never planned it.
+
+| Mutant                               | Result                                                                                                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Both new discovery branches disabled | **killed** — and precisely: exactly `workspace`, `brand` and `bookkeeping` fail, each reporting `planned no discovery at all: clarify-requirements,owner-decision` |
+
+That mutant is the proof the defect was real rather than a tidiness complaint.

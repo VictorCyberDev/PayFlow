@@ -1005,9 +1005,13 @@ async function missionList() {
 }
 
 /**
- * Mission templates (M58), including a Founder Launch starter pack. A template only fills in the form; it is NOT the orchestrated Founder Launch mission (M55), which does not exist yet. It never creates, approves,
- * spends or contacts anyone: the owner still reads, edits and approves, and the server checks every field again. Amounts are
- * starting points the owner is expected to change, not estimates of what anything costs.
+ * Mission templates (M58), including a Founder Launch starter pack. A template only fills in the form: it never creates,
+ * approves, spends or contacts anyone. The owner still reads, edits and approves, and the server checks every field
+ * again. Amounts are starting points the owner is expected to change, not estimates of what anything costs.
+ *
+ * Once a templated mission is approved it can be planned and then driven by a plan run (M55), which advances the plan's
+ * dependency graph as far as it honestly can and writes down what is waiting for a person. The run still buys, hires,
+ * books and pays nothing.
  */
 const TEMPLATES = [
   {
