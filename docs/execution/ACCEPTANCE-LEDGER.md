@@ -123,3 +123,29 @@ All 65 migrations applied in order into an empty database (`ON_ERROR_STOP=1` on 
 | A new open run after the previous finished | accepted                                      |
 
 This matters because it separates the two layers: the service's `RUN_ALREADY_OPEN` is a courtesy, and the partial unique index is the guarantee. A bug in the former cannot defeat the latter.
+
+## A-7 · The M55 screens in a real browser
+
+```
+TEST_DATABASE_URL=... REQUIRE_BROWSER=1 npx vitest run tests/r1-customer-app.browser.test.ts
+```
+
+|        |                                  |
+| ------ | -------------------------------- |
+| Result | **19 passed, 1 skipped; exit 0** |
+
+Chromium against the real Gateway on PostgreSQL. What the Launch board test now also asserts:
+
+- the plan-run card renders its empty state, with a working **Work through the plan** control and the notice that it never approves anything;
+- `#/missions/:id/plan` renders an approval-gated task (`Waiting for your approval`, `An agent can do this`) and a blocked one (`Waiting on something else`, `Prepared for you or a provider`);
+- the controls are really there: one **Approve this step**, two **Skip it**, and an **Evidence: supplier-list** field on the task that records evidence;
+- no `undefined` / `[object` / `NaN` leaks into the page, and **axe is clean**.
+
+### Two defects this found that the unit suite could not
+
+| Defect                                                                                                                                                                                                                                                                                                                                | How it surfaced                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| The plan-run card linked to `#/missions/:id/plan`, a route that did not exist; the router fell through to the home page in silence. Behind it: the application had **no plan screen at all** — `/plans` was never fetched, so M27's tasks were invisible to a customer and a run could say "approve this" with nowhere to approve it. | Following my own link              |
+| The plan screen's `<dl>` used `<span>` placeholders for conditional rows. A `<dl>` permits only `dt`, `dd`, `div`, so axe reported `definition-list` twice. Fixed with falsy placeholders, which `h` drops.                                                                                                                           | Rendering the page and running axe |
+
+The unit suite was green through both. That is the argument for the browser gate, stated as evidence rather than as a principle.
