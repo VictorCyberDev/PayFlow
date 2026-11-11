@@ -7,7 +7,7 @@ import {
 import { promisify } from "node:util";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import type { EmailOutbox } from "./email-outbox.js";
+import type { EmailOutbox, Tx } from "./email-outbox.js";
 import type { Member } from "./rbac.js";
 
 /**
@@ -166,6 +166,11 @@ export class UserAuthService {
       outbox?: EmailOutbox;
       /** Where links in those emails point, for example https://app.example.com */
       appBaseUrl?: string;
+      /**
+       * Asked before a recovery email is made for an address. Answering false (or throwing) makes the request a silent no-op, so a
+       * limiter fault can never become a way to flood someone's inbox.
+       */
+      allowMailFor?: (email: string) => Promise<boolean>;
     },
   ) {}
 
@@ -334,21 +339,49 @@ export class UserAuthService {
   }
 
   // ---------------------------------------------------------------------------------------------- email verification and reset
-  private async issueToken(
+  /**
+   * One transaction: take a lock for this account and purpose, retire the earlier link, store the new link's digest and queue the message that
+   * carries it. If any step fails, none of it happened and the earlier link still works. If a message for this purpose is already waiting (or one
+   * was made in the last minute) nothing new is made, so asking repeatedly cannot flood an inbox. A message whose delivery is UNKNOWN does not
+   * block a new one: the old link is retired and a new one is issued, so one lost message never locks a person out.
+   */
+  private async issueAndQueue(
     userId: string,
     email: string,
     purpose: "VERIFY_EMAIL" | "RESET_PASSWORD",
     ttlMs: number,
-  ): Promise<string> {
-    const raw = randomBytes(32).toString("base64url");
+    compose: (link: string) => { subject: string; body: string },
+    linkPath: "verify" | "reset",
+  ): Promise<"QUEUED" | "ALREADY_QUEUED"> {
+    const outbox = this.deps.outbox;
+    if (!outbox) throw new Error("NO_OUTBOX");
     const now = this.deps.now();
-    await this.deps.sql.begin(async (tx) => {
-      // One live token per purpose: asking again replaces the earlier link.
+    const expiresAt = new Date(Date.parse(now) + ttlMs).toISOString();
+    const recent = new Date(Date.parse(now) - 60_000).toISOString();
+    return this.deps.sql.begin(async (tx) => {
+      await tx`select pg_advisory_xact_lock(hashtextextended(${userId + "|" + purpose}, 0))`;
+      const waiting = await tx`select 1 from email_outbox
+        where to_email = ${email} and template = ${purpose}
+          and ((state in ('QUEUED','SENDING') and (expires_at is null or expires_at > ${now})) or created_at > ${recent}) limit 1`;
+      if (waiting.length) return "ALREADY_QUEUED" as const;
+      const raw = randomBytes(32).toString("base64url");
       await tx`update user_tokens set used_at = ${now} where user_id = ${userId} and purpose = ${purpose} and used_at is null`;
       await tx`insert into user_tokens (token_hash, user_id, purpose, email, created_at, expires_at)
-        values (${sha(raw)}, ${userId}, ${purpose}, ${email}, ${now}, ${new Date(Date.parse(now) + ttlMs).toISOString()})`;
+        values (${sha(raw)}, ${userId}, ${purpose}, ${email}, ${now}, ${expiresAt})`;
+      const m = compose(this.link(linkPath, raw));
+      await outbox.enqueue(
+        {
+          to: email,
+          template: purpose,
+          subject: m.subject,
+          body: m.body,
+          tokenHash: sha(raw),
+          expiresAt,
+        },
+        tx as unknown as Tx,
+      );
+      return "QUEUED" as const;
     });
-    return raw;
   }
   private link(path: string, token: string): string {
     const base = (this.deps.appBaseUrl ?? "").replace(/\/+$/u, "");
@@ -362,18 +395,26 @@ export class UserAuthService {
       .sql`select email, email_verified_at, status from user_accounts where user_id = ${userId}`;
     if (!u || u.status !== "ACTIVE" || u.email_verified_at || !this.deps.outbox)
       return false;
-    const token = await this.issueToken(
+    if (this.deps.allowMailFor) {
+      let ok = false;
+      try {
+        ok = await this.deps.allowMailFor(String(u.email));
+      } catch {
+        ok = false;
+      }
+      if (!ok) return false;
+    }
+    await this.issueAndQueue(
       userId,
       String(u.email),
       "VERIFY_EMAIL",
       VERIFY_TTL_MS,
+      (link) => ({
+        subject: "Confirm your PayFlow email",
+        body: `Confirm your email to finish setting up PayFlow:\n\n${link}\n\nThis link works once and expires in 24 hours. If you did not create a PayFlow account, ignore this message.`,
+      }),
+      "verify",
     );
-    await this.deps.outbox.enqueue({
-      to: String(u.email),
-      template: "VERIFY_EMAIL",
-      subject: "Confirm your PayFlow email",
-      body: `Confirm your email to finish setting up PayFlow:\n\n${this.link("verify", token)}\n\nThis link works once and expires in 24 hours. If you did not create a PayFlow account, ignore this message.`,
-    });
     return true;
   }
 
@@ -402,18 +443,28 @@ export class UserAuthService {
     const [u] = await this.deps
       .sql`select user_id, email, status from user_accounts where email = ${e.data}`;
     if (!u || u.status !== "ACTIVE") return;
-    const token = await this.issueToken(
+    const address = String(u.email);
+    // A limiter that cannot answer means no mail, with the same reply as always: nothing is revealed and nothing is sent.
+    if (this.deps.allowMailFor) {
+      let ok = false;
+      try {
+        ok = await this.deps.allowMailFor(address);
+      } catch {
+        ok = false;
+      }
+      if (!ok) return;
+    }
+    await this.issueAndQueue(
       String(u.user_id),
-      String(u.email),
+      address,
       "RESET_PASSWORD",
       RESET_TTL_MS,
+      (link) => ({
+        subject: "Reset your PayFlow password",
+        body: `Someone asked to reset the password for this PayFlow account. If it was you, choose a new one here:\n\n${link}\n\nThis link works once and expires in 30 minutes. If it was not you, ignore this message; your password has not changed.`,
+      }),
+      "reset",
     );
-    await this.deps.outbox.enqueue({
-      to: String(u.email),
-      template: "RESET_PASSWORD",
-      subject: "Reset your PayFlow password",
-      body: `Someone asked to reset the password for this PayFlow account. If it was you, choose a new one here:\n\n${this.link("reset", token)}\n\nThis link works once and expires in 30 minutes. If it was not you, ignore this message; your password has not changed.`,
-    });
   }
 
   async resetPassword(
