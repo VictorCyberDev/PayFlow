@@ -288,6 +288,38 @@ export class MemberStore {
     return rows.map(toRecord);
   }
 
+  /**
+   * Changes an active member's role. Under the same lock as revoke, so two owners demoting each other at once cannot leave the organization
+   * without an owner. Refuses to take OWNER away from the last active owner.
+   */
+  async changeRole(
+    organizationId: string,
+    environment: Member["environment"],
+    memberId: string,
+    role: Role,
+    now: string,
+  ): Promise<"CHANGED" | "UNCHANGED" | "NOT_FOUND" | "LAST_OWNER"> {
+    if (!ROLES.includes(role)) return "NOT_FOUND";
+    return this.sql.begin(async (tx) => {
+      await tx`select pg_advisory_xact_lock(hashtextextended(${"owners:" + organizationId + environment}, 3))`;
+      const rows = await tx`
+        select role, status from organization_members
+        where member_id = ${memberId} and organization_id = ${organizationId} and environment = ${environment}
+        for update`;
+      if (!rows[0] || rows[0].status !== "ACTIVE") return "NOT_FOUND";
+      if (rows[0].role === role) return "UNCHANGED";
+      if (rows[0].role === "OWNER") {
+        const owners = await tx`
+          select count(*)::int n from organization_members
+          where organization_id = ${organizationId} and environment = ${environment}
+            and role = 'OWNER' and status = 'ACTIVE' and expires_at > ${now}`;
+        if (Number(owners[0]!.n) <= 1) return "LAST_OWNER";
+      }
+      await tx`update organization_members set role = ${role} where member_id = ${memberId}`;
+      return "CHANGED";
+    });
+  }
+
   /** Refuses to revoke the last active OWNER so an organization cannot lock itself out. */
   async revoke(
     organizationId: string,

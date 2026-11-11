@@ -66,6 +66,7 @@ import {
   MemberStore,
   ROLES,
   type Member,
+  type Role,
   type Permission,
 } from "./rbac.js";
 import { SigningKeyRegistry } from "./signing-keys.js";
@@ -3164,6 +3165,171 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           return true;
         }
         json(405, { reason: "METHOD_NOT_ALLOWED" });
+        return true;
+      }
+      // ---- Members (B4): see who is in the organization, change a role, remove someone, or leave.
+      const memberRoute =
+        /^\/v1\/app\/members(?:\/(pfm_[a-f0-9]{24})\/(role|remove))?$/u.exec(
+          path,
+        );
+      if (memberRoute || path === "/v1/app/leave") {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view || !sessionTokenIn) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        const m = view.member;
+        const endMemberSessions = async (memberId: string) => {
+          await sql`update user_sessions set revoked_at = ${iso()} where member_id = ${memberId} and revoked_at is null`;
+        };
+        const record = async (
+          action: string,
+          subject: string,
+          detail: Record<string, string | number | boolean | null>,
+        ) =>
+          audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action,
+            subjectKind: "MEMBER",
+            subjectId: subject,
+            detail,
+            occurredAt: iso(),
+          });
+        // leaving: any member may leave; the last owner may not
+        if (path === "/v1/app/leave") {
+          if (method !== "POST") {
+            json(405, { reason: "METHOD_NOT_ALLOWED" });
+            return true;
+          }
+          const r = await members.revoke(
+            m.organizationId,
+            m.environment,
+            m.memberId,
+            iso(),
+          );
+          if (r !== "REVOKED") {
+            json(r === "LAST_OWNER" ? 409 : 404, {
+              reason: r,
+              hint:
+                r === "LAST_OWNER"
+                  ? "Make someone else an owner first."
+                  : undefined,
+            });
+            return true;
+          }
+          await endMemberSessions(m.memberId);
+          await record("MEMBER_LEFT", m.memberId, {});
+          json(
+            200,
+            { left: true },
+            { "set-cookie": clearedSessionCookie(secureCookies) },
+          );
+          return true;
+        }
+        const manage = can(m.role, "member:manage");
+        if (method === "GET" && !memberRoute![1]) {
+          if (!manage && !can(m.role, "view:members")) {
+            json(403, {
+              reason: "PERMISSION_DENIED",
+              requiredPermission: "view:members",
+            });
+            return true;
+          }
+          const rows =
+            await sql`select m.member_id, m.role, m.status, m.display_name, u.email, u.user_id
+            from organization_members m
+            left join user_memberships um on um.member_id = m.member_id
+            left join user_accounts u on u.user_id = um.user_id
+            where m.organization_id = ${m.organizationId} and m.environment = ${m.environment} and m.status = 'ACTIVE'
+            order by m.created_at, m.member_id`;
+          json(200, {
+            you: m.memberId,
+            canManage: manage,
+            members: rows.map((r) => ({
+              memberId: String(r.member_id),
+              name: String(r.display_name),
+              role: String(r.role),
+              // Only a person with member-management rights sees addresses; bearer-token members have none.
+              ...(manage && r.email ? { email: String(r.email) } : {}),
+              kind: r.user_id ? "PERSON" : "SERVICE",
+            })),
+          });
+          return true;
+        }
+        if (method !== "POST" || !memberRoute![1]) {
+          json(405, { reason: "METHOD_NOT_ALLOWED" });
+          return true;
+        }
+        if (!manage) {
+          json(403, {
+            reason: "PERMISSION_DENIED",
+            requiredPermission: "member:manage",
+          });
+          return true;
+        }
+        if (verifiedEmailRequired && !view.user.emailVerified) {
+          json(403, {
+            reason: "EMAIL_NOT_VERIFIED",
+            recoverable: true,
+            nextAction: "CONFIRM_EMAIL",
+          });
+          return true;
+        }
+        const target = memberRoute![1];
+        if (memberRoute![2] === "role") {
+          const role = (body as { role?: unknown } | undefined)?.role;
+          if (
+            typeof role !== "string" ||
+            !(ROLES as readonly string[]).includes(role)
+          ) {
+            json(400, { reason: "MALFORMED", recoverable: true });
+            return true;
+          }
+          const [before] =
+            await sql`select role from organization_members where member_id = ${target} and organization_id = ${m.organizationId} and environment = ${m.environment}`;
+          const r = await members.changeRole(
+            m.organizationId,
+            m.environment,
+            target,
+            role as Role,
+            iso(),
+          );
+          if (r === "CHANGED") {
+            await record("MEMBER_ROLE_CHANGED", target, {
+              from: String(before?.role),
+              to: role,
+            });
+            json(200, { changed: true, role });
+          } else if (r === "UNCHANGED") json(200, { changed: false, role });
+          else json(r === "LAST_OWNER" ? 409 : 404, { reason: r });
+          return true;
+        }
+        // remove
+        if (target === m.memberId) {
+          json(409, {
+            reason: "USE_LEAVE",
+            hint: "Use leave to remove yourself.",
+          });
+          return true;
+        }
+        const r = await members.revoke(
+          m.organizationId,
+          m.environment,
+          target,
+          iso(),
+        );
+        if (r !== "REVOKED") {
+          json(r === "LAST_OWNER" ? 409 : 404, { reason: r });
+          return true;
+        }
+        await endMemberSessions(target);
+        await record("MEMBER_REMOVED", target, {});
+        json(200, { removed: true });
         return true;
       }
       // ---- Sign-ins: the person sees where they are signed in and can end the others.
