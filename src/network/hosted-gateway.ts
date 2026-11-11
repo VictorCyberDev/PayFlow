@@ -58,7 +58,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Sql } from "postgres";
 import { FakeCommerceRanker } from "../commerce-discovery.js";
 import { DEMO_MERCHANT_ID } from "../commerce.js";
-import type { DemoShoppingAgent } from "../delegated-demo.js";
+import { StaticPublicKeyRing } from "../execution-grant.js";
+import type { DemoShoppingAgent, DemoSigningKey } from "../delegated-demo.js";
 import type { Mandate } from "../domain.js";
 import type { PostgresTrustRepository } from "../persistence.js";
 import {
@@ -184,7 +185,17 @@ import type { RestRequest, RestResponse } from "./rest.js";
 export interface HostedGatewayOptions {
   readonly sql: Sql;
   readonly repo: PostgresTrustRepository;
-  readonly demo: DemoShoppingAgent;
+  /**
+   * The host's Proof/credential signing key. It is a property of the HOST, not of any demo agent:
+   * Proof must stay verifiable on every instance, so the key outlives whichever agents are mounted.
+   */
+  readonly signing: DemoSigningKey;
+  /**
+   * The M6 demonstration Shopping Agent, i.e. FINANCIAL MODE. Absent on an ordinary customer host:
+   * the whole customer application, Proof and the operator routes still mount, and every economic
+   * request is refused PAYMENT_RAIL_NOT_CONNECTED before a provider is ever reached.
+   */
+  readonly demo?: DemoShoppingAgent;
   /** Simulated-rail agent for the public sandbox. When absent, /v1/sandbox/start is disabled. */
   readonly simulated?: DemoShoppingAgent;
   /** The owner whose Sandbox wallet pays, and the agent that acts for them. */
@@ -344,7 +355,14 @@ function appAsset(path: string): { type: string; body: Buffer } | null {
  * clearly labelled operator provisioning step for a Sandbox sample Authority.
  */
 export function createHostedGatewayHandler(options: HostedGatewayOptions) {
-  const { sql, repo, demo, clock } = options;
+  const { sql, repo, demo, signing, clock } = options;
+  /**
+   * Verification material for Proof comes from the host key, so Proof reads and traces work with no
+   * agent mounted (and historical Proof signed by the same key keeps verifying).
+   */
+  const proofKeys = new StaticPublicKeyRing(
+    new Map([[signing.kid, signing.publicKey]]),
+  );
   const iso = () => clock().toISOString();
   const store = new CredentialStore(sql);
   const network = new PostgresNetworkStore(sql);
@@ -424,15 +442,32 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
             } as const);
           return options.simulated.gatewayPort().attempt(input);
         }
+        // No financial agent on this host: refuse before any provider is reached. Fail closed, so a
+        // customer-only deployment can never execute a payment by accident.
+        if (!demo)
+          return Object.freeze({
+            status: "REFUSED",
+            code: "PAYMENT_RAIL_NOT_CONNECTED",
+            proposalId: null,
+            operationId: null,
+            askedHuman: false,
+            providerEffect: "NONE",
+          } as const);
         return demo.gatewayPort().attempt(input);
       },
     },
+    // Label only a rail this host really has. Naming PAYPAL_SANDBOX on a host with no financial
+    // agent would describe a provider that is not mounted, next to a refusal saying exactly that.
     railFor: async (mandateId) => {
       const o =
         await sql`select organization_id from authority_ownership where mandate_id = ${mandateId}`;
       return String(o[0]?.organization_id ?? "").startsWith("sbx_")
-        ? "SIMULATED"
-        : "PAYPAL_SANDBOX";
+        ? options.simulated
+          ? "SIMULATED"
+          : null
+        : demo
+          ? "PAYPAL_SANDBOX"
+          : null;
     },
     ranker: new FakeCommerceRanker(),
     now: iso,
@@ -478,12 +513,15 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       });
     },
   });
-  const proofs = new ProofReader(repo, demo.keys);
-  const key = demo.verificationKey();
+  const proofs = new ProofReader(repo, proofKeys);
+  const key = {
+    keyId: signing.kid,
+    jwk: signing.publicKey.export({ format: "jwk" }),
+  };
   const portable = new PortableProofIssuer(proofs, repo, {
     issuer: options.organizationId,
     keyId: key.keyId,
-    privateKey: demo.signingForProofs().privateKey,
+    privateKey: signing.privateKey,
   });
   const credentialIssuer = options.credentialIssuer
     ? new PortableCredentialIssuer({
@@ -494,7 +532,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         issuer: {
           id: options.credentialIssuer,
           kid: key.keyId,
-          privateKey: demo.signingForProofs().privateKey,
+          privateKey: signing.privateKey,
           publicJwk: key.jwk,
         },
       })
@@ -508,7 +546,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         issuer: options.credentialIssuer,
         signer: {
           kid: key.keyId,
-          privateKey: demo.signingForProofs().privateKey,
+          privateKey: signing.privateKey,
         },
         statusListUrl: `${options.credentialIssuer}/v1/issuer/status`,
         now: iso,
@@ -693,7 +731,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   const reconciler = new UnknownReconciler(sql, (organizationId) => {
     const lookup = organizationId.startsWith("sbx_")
       ? options.simulated?.lookupProvider()
-      : demo.lookupProvider();
+      : (demo?.lookupProvider() ?? null);
     if (!lookup) throw new Error("NO_LOOKUP_PROVIDER");
     return lookup;
   });
@@ -1516,7 +1554,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         caller.environment,
       )) !== null,
   });
-  const traceService = new OperationTraceService(repo, demo.keys);
+  const traceService = new OperationTraceService(repo, proofKeys);
   const traceReader: TraceReader = {
     read: async (proposalId) => {
       try {
