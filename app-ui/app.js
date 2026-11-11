@@ -4053,6 +4053,112 @@ async function organizationsSection() {
   );
 }
 
+/** Your own data: download it, or close the account. Both ask for the password again. */
+function dataSection() {
+  const out = h("div");
+  const pwExport = h("input", {
+    id: "data-pw",
+    type: "password",
+    autocomplete: "current-password",
+  });
+  const pwClose = h("input", {
+    id: "close-pw",
+    type: "password",
+    autocomplete: "current-password",
+  });
+  const confirmText = h("input", {
+    id: "close-confirm",
+    type: "text",
+    autocomplete: "off",
+  });
+  return h(
+    "section",
+    { class: "card" },
+    h("h2", { text: "Your data" }),
+    h("p", {
+      class: "hint",
+      text: "Download what PayFlow holds about you, or close your account. Both ask for your password again.",
+    }),
+    h("label", { for: "data-pw", text: "Password to download your data" }),
+    pwExport,
+    h("button", {
+      type: "button",
+      text: "Download my data",
+      onclick: async () => {
+        const r = await api("/v1/app/account/export", {
+          method: "POST",
+          body: { password: pwExport.value },
+        });
+        pwExport.value = "";
+        if (!r.ok)
+          return out.replaceChildren(
+            notice(
+              "bad",
+              r.status === 429
+                ? "Too many tries. Wait a few minutes."
+                : "That password is not right.",
+            ),
+          );
+        const url = URL.createObjectURL(
+          new Blob([JSON.stringify(r.data, null, 2)], {
+            type: "application/json",
+          }),
+        );
+        const a = h("a", { href: url, download: "payflow-my-data.json" });
+        document.body.append(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        out.replaceChildren(notice("ok", "Your data was downloaded."));
+      },
+    }),
+    h("h3", { text: "Close my account" }),
+    h("p", {
+      class: "hint",
+      text: "This signs you out everywhere, removes your name and email address from PayFlow, and cannot be undone. Records that belong to an organization stay with it.",
+    }),
+    h("label", { for: "close-pw", text: "Password to close the account" }),
+    pwClose,
+    h("label", {
+      for: "close-confirm",
+      text: "Type CLOSE MY ACCOUNT to confirm",
+    }),
+    confirmText,
+    h("button", {
+      type: "button",
+      text: "Close my account",
+      onclick: async () => {
+        if (!confirm("Close your account for good?")) return;
+        const r = await api("/v1/app/account/close", {
+          method: "POST",
+          body: { password: pwClose.value, confirm: confirmText.value },
+        });
+        pwClose.value = "";
+        if (!r.ok) {
+          const why = r.data?.reason;
+          return out.replaceChildren(
+            notice(
+              "bad",
+              why === "OWNS_ORGANIZATION_WITH_OTHER_MEMBERS"
+                ? `You are the only owner of ${(r.data.organizations ?? []).join(", ")}, which has other people. Make someone else an owner first.`
+                : why === "CONFIRMATION_REQUIRED"
+                  ? "Type CLOSE MY ACCOUNT exactly to confirm."
+                  : r.status === 429
+                    ? "Too many tries. Wait a few minutes."
+                    : "That password is not right.",
+            ),
+          );
+        }
+        state.me = null;
+        state.csrf = null;
+        location.hash = "#/login";
+        await render();
+      },
+    }),
+    out,
+  );
+}
+
 /** Everyone in this organization. Managers can change a role or remove someone; anyone can leave. */
 async function membersSection() {
   const out = h("div");
@@ -4276,6 +4382,7 @@ async function settingsPage() {
     ),
     await organizationsSection(),
     await membersSection(),
+    dataSection(),
     await peopleSection(),
     await signInsSection(),
     await quorumSection(),
