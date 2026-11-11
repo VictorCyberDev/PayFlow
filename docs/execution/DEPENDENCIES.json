@@ -94,6 +94,13 @@
       "state": "DELIVERED",
       "blocked_by": [],
       "note": "DELIVERED, and it found a real defect: three of the five templates (workspace, brand, bookkeeping) produced a plan of clarify-requirements -> owner-decision, asking the owner to review a shortlist no task was planned to produce. templatePlan now plans workspace and professional-services discovery. 7 tests, one per template plus a drift guard against the shipped app-ui, plus an end-to-end run; mutant killed (disabling the new branches fails exactly those three). docs/M58-TEMPLATES.md."
+    },
+    {
+      "id": "M59-usage-billing",
+      "title": "M59 \u2014 usage and billing visible to a customer",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "DELIVERED: usageHome + usagePeriod in org-views, GET /v1/admin/org/usage on view:finance, a #/usage screen in the main navigation. 5 tests, exit 0, 1 mutant killed (removing organization scoping leaked another tenant's usage). Totals are zero on the DEVELOPER plan because no price sheet is published and no plan assignment exists in the schema; the response says so in words. docs/M59-USAGE-AND-BILLING.md. M59 support correspondence remains blocked on B-1 (no email has ever been delivered)."
     }
   ],
   "m55_gap": {

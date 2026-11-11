@@ -95,6 +95,7 @@ import {
   financeHome,
   pendingDecisions,
   securityHome,
+  usageHome,
   unknownOperations,
 } from "./org-views.js";
 import {
@@ -1007,12 +1008,15 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     unknown: "view:unknown",
     funnel: "view:funnel",
     audit: "view:audit",
+    // Usage and billing is finance information, so it rides the finance permission rather than inventing a new one
+    // that would have to be threaded correctly through every role.
+    usage: "view:finance",
   };
 
   /** Organization views, approvals, members, pauses. Tenant and environment come from the MEMBER. */
   async function orgRoute(request: RestRequest): Promise<RestResponse | null> {
     const m = request.path.match(
-      /^\/v1\/admin\/(org\/(?:agents|finance|security|audit|authorities|decisions|unknown|funnel)|decisions\/([A-Za-z0-9-]{1,64})\/(approve|reject))$/u,
+      /^\/v1\/admin\/(org\/(?:agents|finance|security|audit|authorities|decisions|unknown|funnel|usage)|decisions\/([A-Za-z0-9-]{1,64})\/(approve|reject))$/u,
     );
     if (!m) return null;
     const requestId = `req_${randomUUID()}`;
@@ -1035,6 +1039,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         return ok({ agents: await agentInventory(sql, org, env, now) });
       if (view === "finance")
         return ok({ finance: await financeHome(sql, org, env, now) });
+      if (view === "usage")
+        return ok({ usage: await usageHome(sql, org, env, now) });
       if (view === "security")
         return ok({ agents: await securityHome(sql, org, env, now) });
       if (view === "authorities")

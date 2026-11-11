@@ -192,3 +192,29 @@ Each went straight from "write the requirements" to a task titled _"Owner review
 | Both new discovery branches disabled | **killed** — and precisely: exactly `workspace`, `brand` and `bookkeeping` fail, each reporting `planned no discovery at all: clarify-requirements,owner-decision` |
 
 That mutant is the proof the defect was real rather than a tidiness complaint.
+
+## A-10 · M59 — usage and billing
+
+```
+TEST_DATABASE_URL=... npx vitest run tests/m59-usage.integration.test.ts
+```
+
+**5 tests, exit 0.**
+
+### The gap
+
+`usage_events` has existed since migration `013`, the Gateway writes to it, and `buildUsageInvoice` existed to aggregate it. A customer could see none of it: `grep -c usage app-ui/app.js` returned **0**. The product metered its customers and showed them nothing.
+
+### The thing this had to get right
+
+A usage screen is the one place in a product where you can imply a debt that does not exist. `docs/PRICING-METERING.md` is explicit that the coefficients in the code are placeholders, "not a published price sheet". So the preview is built on the DEVELOPER plan, every coefficient zero, and the response states in words that the organization is not on a paid plan and no price has been agreed. There is also no plan assignment per organization anywhere in the schema, so choosing a paid plan would have meant inventing commercial state the business has not agreed.
+
+Rows are inserted straight into `usage_events` — the table the Gateway writes — rather than stubbed in front of it, so the query under test is the query that runs.
+
+| Mutant                                            | Result                                                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Organization scoping removed from the usage query | **killed** — `expected 104 to be 5`: the other tenant's 99 events leaked into this organization's total |
+
+### Not done, and named
+
+Support correspondence. The help screen is a glossary and the usage screen links to it, but there is no way to send a message to a human, because no email has ever been delivered (blocker B-1). An outbox row is not a sent message and is not described as one.

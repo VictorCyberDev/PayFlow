@@ -187,6 +187,7 @@ function shell(active, ...content) {
     ["#/checking", "Needs checking"],
     ["#/agents", "Agents"],
     ["#/notifications", "Notifications"],
+    ["#/usage", "Usage"],
     ["#/settings", "Settings"],
     ["#/help", "Help"],
   ];
@@ -5135,6 +5136,91 @@ async function settingsPage() {
     ),
   );
 }
+const METER_WORDS = {
+  GOVERNED_ACTION: "Actions PayFlow checked for you",
+  VERIFY_CALL: "Proof checks",
+  ACTIVE_AGENT: "Agents that did something",
+  ENTERPRISE_CONTROL: "Organization controls used",
+  BASE: "Being on a plan",
+};
+
+/**
+ * Usage and billing (M59). What PayFlow actually measured, and the plain statement that none of it has been charged.
+ * The amounts come from the DEVELOPER plan, whose coefficients are all zero, because no price sheet is published; a
+ * non-zero total built from placeholder numbers would read as a bill.
+ */
+async function usagePage() {
+  const r = await api("/v1/admin/org/usage");
+  if (!r.ok)
+    return shell(
+      "#/usage",
+      h("h1", { text: "Usage" }),
+      notice(
+        "bad",
+        r.status === 403
+          ? "Your role cannot see usage for this organization."
+          : "Usage is not available right now. Nothing was changed.",
+      ),
+    );
+  const u = r.data.usage;
+  const used = u.meters.filter((m) => m.lifetime > 0);
+  shell(
+    "#/usage",
+    h("h1", { text: "Usage" }),
+    h("p", { text: u.notice }),
+    notice("info", u.priceNotice),
+    h(
+      "article",
+      { class: "card" },
+      h("h2", { text: "This month" }),
+      h("p", {
+        class: "hint",
+        text: `${when(u.period.start)} to ${when(u.period.end)}`,
+      }),
+      used.length === 0
+        ? h("p", {
+            class: "hint",
+            text: "Nothing has been measured yet. Meters start counting when an agent does something PayFlow has to check.",
+          })
+        : h(
+            "dl",
+            {},
+            used.map((m) =>
+              row(
+                METER_WORDS[m.meter] ?? m.meter,
+                `${m.thisPeriod} this month · ${m.lifetime} in total`,
+              ),
+            ),
+          ),
+    ),
+    h(
+      "article",
+      { class: "card" },
+      h("h2", { text: "What it would be billed as" }),
+      h(
+        "dl",
+        {},
+        u.invoicePreview.lines.map((l) =>
+          row(
+            METER_WORDS[l.meter] ?? l.meter,
+            `${l.quantity} × ${money(l.unitAmountMinor, u.invoicePreview.currency)} = ${money(l.amountMinor, u.invoicePreview.currency)}`,
+          ),
+        ),
+        row(
+          "Total",
+          money(u.invoicePreview.totalMinor, u.invoicePreview.currency),
+        ),
+        row("Plan", u.planId),
+      ),
+      h("p", {
+        class: "hint",
+        text: "Nothing has been charged and no payment method is held. If PayFlow ever charges for this, it will say so before it does.",
+      }),
+    ),
+    h("a", { class: "link", href: "#/help", text: "Get help" }),
+  );
+}
+
 function helpPage() {
   const T = (term, text) =>
     h("div", { class: "row" }, h("dt", { text: term }), h("dd", { text }));
@@ -5225,6 +5311,7 @@ async function render() {
     if (hash === "#/checking") return await checkingPage();
     if (hash === "#/notifications") return await notificationsPage();
     if (hash === "#/settings") return await settingsPage();
+    if (hash === "#/usage") return await usagePage();
     if (hash === "#/help") return helpPage();
     const sec = /^#\/missions\/(msn_[a-f0-9]{24})\/([a-z]+)$/.exec(hash);
     if (sec && sec[2] === "proof") return await proofPage(sec[1]);
