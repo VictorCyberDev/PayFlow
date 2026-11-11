@@ -30,6 +30,11 @@ import { createQuorumRoutes } from "./quorum-routes.js";
 import { createAutomationRoutes } from "./automation-routes.js";
 import { createServiceMarketRoutes } from "./service-market-routes.js";
 import { ServiceMarketService } from "../missions/service-market-service.js";
+import {
+  LAUNCH_RUN_KIND,
+  LaunchRunService,
+} from "../missions/launch-run-service.js";
+import { createLaunchRunRoutes } from "./launch-run-routes.js";
 import { sandboxServiceSource } from "../missions/service-market-sources.js";
 import { WorkspaceService } from "../missions/workspace-service.js";
 import {
@@ -354,8 +359,9 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
    * orders, enrol agents or credentials, change members or connect providers. Deny by default: only the listed read-like POSTs pass.
    */
   const SAFE_BEFORE_VERIFY = [
+    /^\/v1\/admin\/org\/launch-runs\/lrn_[a-f0-9]{24}\/cancel$/u,
     /^\/v1\/admin\/org\/missions$/u,
-    /^\/v1\/admin\/org\/missions\/[^/]+\/(?:workspaces|services\/search|candidates\/compare|quotes\/compare|recurring|plans)$/u,
+    /^\/v1\/admin\/org\/missions\/[^/]+\/(?:workspaces|services\/search|candidates\/compare|quotes\/compare|recurring|plans|launch-runs)$/u,
   ];
   const blockedUntilVerified = (
     verified: boolean,
@@ -1718,7 +1724,35 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     automation,
     now: iso,
   });
+  const serviceMarketService = new ServiceMarketService({
+    missions: missionService,
+    sources: new Map([[sandboxServiceSource.id, sandboxServiceSource]]),
+  });
+  const launchRunService = new LaunchRunService({
+    sql,
+    now: iso,
+    missions: missionService,
+    automation,
+    // the workspace search nests its view; a launch run wants the view itself
+    workspace: {
+      search: async (c, m, b) => {
+        const r = await workspaceService.search(c, m, b);
+        return r.ok
+          ? { ok: true, value: r.value.search }
+          : { ok: false, refusal: r.refusal };
+      },
+    },
+    services: {
+      search: async (c, m, b) => {
+        const r = await serviceMarketService.search(c, m, b);
+        return r.ok
+          ? { ok: true, value: r.value }
+          : { ok: false, refusal: r.refusal };
+      },
+    },
+  });
   const automationHandlers: Record<string, Handler> = {
+    [LAUNCH_RUN_KIND]: launchRunService.handler(),
     [RECURRING_KIND]: (job) => recurringService.runCheck(job),
     BOOKING_EXPIRE: async (job) => {
       const missionId = job.payload.missionId;
@@ -1771,10 +1805,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       )) !== null,
   });
   const serviceMarketRoutes = createServiceMarketRoutes({
-    service: new ServiceMarketService({
-      missions: missionService,
-      sources: new Map([[sandboxServiceSource.id, sandboxServiceSource]]),
-    }),
+    service: serviceMarketService,
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(
@@ -1803,6 +1834,17 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   });
   const recurringRoutes = createRecurringRoutes({
     service: recurringService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+  });
+  const launchRunRoutes = createLaunchRunRoutes({
+    service: launchRunService,
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(
@@ -4342,6 +4384,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => automationRoutes.member(request))) ??
         (await safely(() => quorumRoutes.member(request))) ??
         (await safely(() => recurringRoutes.member(request))) ??
+        (await safely(() => launchRunRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
         (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => contractorRoutes.member(request))) ??

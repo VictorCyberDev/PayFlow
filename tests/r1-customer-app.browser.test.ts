@@ -1335,6 +1335,43 @@ const chromePath = [
                 : [],
             }),
           );
+        if (path.endsWith("/launch-runs"))
+          return r.fulfill(
+            ok({
+              runs: busy
+                ? [
+                    {
+                      runId: "lrn_" + "5".repeat(24),
+                      missionId: mid,
+                      state: "READY",
+                      note: "ready for your decision",
+                      createdAt: "2026-11-11T10:00:00.000Z",
+                      finishedAt: "2026-11-11T10:00:05.000Z",
+                      steps: [
+                        {
+                          position: 0,
+                          area: "WORKSPACE",
+                          state: "DONE",
+                          refusal: null,
+                          summary: { found: 5, qualified: 2 },
+                          attempts: 1,
+                        },
+                        {
+                          position: 1,
+                          area: "SERVICES",
+                          state: "REFUSED",
+                          refusal: "PROVIDER_TYPE_NOT_APPROVED",
+                          summary: null,
+                          attempts: 1,
+                        },
+                      ],
+                      notice:
+                        "A launch run only looks. Nothing was booked, bought, hired or paid and no one was contacted. What it found is for you to decide on.",
+                    },
+                  ]
+                : [],
+            }),
+          );
         if (path.endsWith("/ledger"))
           return r.fulfill(
             ok({
@@ -1360,6 +1397,11 @@ const chromePath = [
       expect(text).toContain("Search only");
       expect(text).toContain("Within budget");
       expect(text).toContain("£1,485.00");
+      expect(text).toContain("Discovery run");
+      expect(text).toContain("Ready for your decision");
+      expect(text).toContain("Workspaces · Done · 5 found, 2 meet your needs");
+      expect(text).toContain("Services · Not allowed by this mission");
+      expect(text).toContain("Nothing was booked, bought, hired or paid");
       expect(text).not.toMatch(/undefined|\[object|NaN/u);
       expect(await axe(page)).toEqual([]);
       busy = false;
@@ -1371,6 +1413,7 @@ const chromePath = [
         .waitFor();
       text = await page.locator("main").innerText();
       expect(text.match(/Not started/gu)?.length).toBe(3);
+      expect(text).toContain("No discovery run yet");
       expect(text).not.toContain("Confirmed");
       await page.goto("about:blank");
       await ctx.close();

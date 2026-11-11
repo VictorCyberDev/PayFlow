@@ -3498,6 +3498,93 @@ function launchLines(d) {
     });
   return lines;
 }
+const RUN_STATE_WORDS = {
+  QUEUED: "Waiting to start",
+  RUNNING: "Looking now",
+  READY: "Ready for your decision",
+  FAILED: "Could not finish",
+  CANCELLED: "Cancelled",
+};
+const STEP_WORDS = {
+  PENDING: "Waiting",
+  RUNNING: "Looking",
+  DONE: "Done",
+  REFUSED: "Not allowed by this mission",
+  FAILED: "Failed",
+};
+const AREA_WORDS = { WORKSPACE: "Workspaces", SERVICES: "Services" };
+/** The latest discovery run: what it looked at, what it found, and that it bought nothing. Runs are started through the API or an agent. */
+function launchRunCard(id, run) {
+  if (!run)
+    return h(
+      "article",
+      { class: "card" },
+      h("h2", { text: "Discovery run" }),
+      h("p", {
+        class: "hint",
+        text: "No discovery run yet. A run looks at workspaces and services for you in the background and never books or buys anything.",
+      }),
+    );
+  const out = h("div");
+  return h(
+    "article",
+    { class: "card" },
+    h(
+      "div",
+      { class: "row" },
+      h("h2", { text: "Discovery run" }),
+      h(
+        "span",
+        { class: "badge" },
+        glyph("dot"),
+        RUN_STATE_WORDS[run.state] ?? run.state,
+      ),
+    ),
+    h("p", { class: "hint", text: run.notice }),
+    h(
+      "ul",
+      { class: "list" },
+      ...run.steps.map((st) =>
+        h(
+          "li",
+          { class: "row" },
+          h("span", {
+            text: `${AREA_WORDS[st.area] ?? st.area} · ${STEP_WORDS[st.state] ?? st.state}${
+              st.summary
+                ? ` · ${st.summary.found} found, ${st.summary.qualified} meet your needs`
+                : ""
+            }${st.refusal ? ` · ${wordsOf(st.refusal)}` : ""}`,
+          }),
+        ),
+      ),
+    ),
+    run.state === "QUEUED" || run.state === "RUNNING"
+      ? h("button", {
+          type: "button",
+          text: "Cancel this run",
+          onclick: async () => {
+            const r = await api(
+              `/v1/admin/org/launch-runs/${run.runId}/cancel`,
+              { method: "POST", body: {} },
+            );
+            if (!r.ok)
+              return out.replaceChildren(
+                notice("bad", "That run has already finished."),
+              );
+            await launchBoardPage(id);
+          },
+        })
+      : null,
+    run.state === "READY"
+      ? h("a", {
+          class: "link",
+          href: `#/missions/${id}/workspaces`,
+          text: "Look at the results",
+        })
+      : null,
+    out,
+  );
+}
 async function launchBoardPage(id) {
   const m = await api(`/v1/admin/org/missions/${id}`);
   if (!m.ok)
@@ -3509,11 +3596,12 @@ async function launchBoardPage(id) {
   const c = m.data.mission.activeContract ?? m.data.mission.latestContract;
   const get = async (p) =>
     (await api(`/v1/admin/org/missions/${id}/${p}`)).data ?? {};
-  const [b, o, k, l] = await Promise.all([
+  const [b, o, k, l, lr] = await Promise.all([
     get("bookings"),
     get("orders"),
     get("contracts"),
     get("ledger"),
+    get("launch-runs"),
   ]);
   const lines = launchLines({
     bookings: b.bookings,
@@ -3537,6 +3625,7 @@ async function launchBoardPage(id) {
     h("p", {
       text: "Where each part stands, from the records themselves. It shows what you need to do and what happens outside PayFlow.",
     }),
+    launchRunCard(id, (lr.runs ?? [])[0]),
     lines.map((x) =>
       h(
         "article",
