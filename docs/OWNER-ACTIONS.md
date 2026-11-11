@@ -20,13 +20,13 @@ Live state when this was written (re-verified, not assumed):
 Everything in this section was **measured today**, read-only, against the live Vercel projects and the live
 Neon database. Where it contradicts the rest of this page, this section is right and the older text is marked.
 
-**Repository.** `main` is now `5658f8a` (through #81; PR #80 is open on top of it) (this page previously said `9c810b1b`). The customer
+**Repository.** `main` is now `c85f7b2` (through #83; PR #80 is open on top of it) (this page previously said `9c810b1b`). The customer
 application no longer needs the M6 demonstration agent to run (PR #80): `PAYFLOW_M6_SIGNING_KEY` is the host's
 own key and is what mounts the Gateway, and `PAYFLOW_M6_DEMO_AGENT` is now only financial mode.
 
-**Pending migrations are no longer five — they are 39.** This page said `024`–`027` and `029`. The public
-database is still at `001`–`023`, and the repository now holds `024`–`063` (`063` is B6 two-step sign-in,
-merged as #81). `028` is the merchant's own database and is **skipped**, so **39 migrations** must be
+**Pending migrations are no longer five — they are 40.** This page said `024`–`027` and `029`. The public
+database is still at `001`–`023`, and the repository now holds `024`–`064` (`063` is B6 two-step sign-in
+from #81, `064` is the M55 launch runs from #83). `028` is the merchant's own database and is **skipped**, so **40 migrations** must be
 applied before the first deploy. Recompute this from source rather than trusting a number on a page:
 
 ```bash
@@ -81,7 +81,7 @@ Applying the 38 migrations to a database with real state is the destructive step
 word. The runbook is `docs/ops/PUBLIC-DEPLOY-RUNBOOK.md` step 3. In order:
 
 1. Take a Neon **snapshot** (or branch) of `payflow-public-sandbox` / `main` and confirm it exists.
-2. Apply `024`–`063`, **skipping `028`**, in filename order, as `payflow_migrator` — never as
+2. Apply `024`–`064`, **skipping `028`**, in filename order, as `payflow_migrator` — never as
    `svc_public_rt` and never as an owner or `neon_superuser` login.
 3. Re-run `db/roles/least-privilege.sql`. Use the **current** version: #81 changed it so the three new
    MFA tables are excluded from `payflow_readonly`. Re-granting from an older copy would expose them.
@@ -89,9 +89,10 @@ word. The runbook is `docs/ops/PUBLIC-DEPLOY-RUNBOOK.md` step 3. In order:
 5. Only then set the secrets (section 4) and deploy.
 
 **This was rehearsed, not assumed.** `scripts/migration-rehearsal.mjs` runs the whole thing twice on a
-local PostgreSQL — a fresh install of all 63, and an upgrade from the real `001`–`023` baseline applying
-exactly the 39 above — then compares the two schemas object by object and applies the grants. Result
-(2026-11-11, exit 0):
+local PostgreSQL — a fresh install of all 64, and an upgrade from the real `001`–`023` baseline applying
+exactly the 40 above — then compares the two schemas object by object and applies the grants. Result
+(2026-11-11, exit 0; the script derives the list from `db/migrations/`, so it stays correct as
+migrations land — it picked `064` up on its own):
 
 | Check                                              | Result                                                                                                                                                                               |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -112,7 +113,7 @@ Rollback is the snapshot from step 1: restore it, and the database returns to `0
 
 Rollback is the snapshot from step 1: restore it, and the database returns to `001`–`023`.
 
-If you want me to run step 2, the sentence is "approve applying migrations 024-063 (skipping 028) to
+If you want me to run step 2, the sentence is "approve applying migrations 024-064 (skipping 028) to
 payflow-public-sandbox". Without it I will not write to that database.
 
 ## 1. Remove the privileged role `svc_public_app` (needs your approval)
