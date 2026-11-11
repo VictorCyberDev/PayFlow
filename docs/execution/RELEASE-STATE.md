@@ -1,0 +1,43 @@
+# Release state
+
+As observed directly on 2026-11-11 by the session on `claude/payflow-v3-m1-m90-6rh3ha`.
+
+## Merged
+
+| Item                     | Value                                                                                                                               |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `main`                   | `5cb1461d08fc82de13c7583f0d74cb954cd24f4e` ("R6: unblock the customer application and fix the live site's canonical metadata", #80) |
+| Working branch           | `claude/payflow-v3-m1-m90-6rh3ha`, created from `main`, equal to it at session start                                                |
+| Migrations in repository | `001` – `064` (`028` intentionally skipped)                                                                                         |
+| Last three merges        | #80 (R6), #83 (M55 launch-run slice), #82 (checkpoint)                                                                              |
+
+The checkpoint document says `main` is `5658f8a`. That is **stale by two merges**; the merges are in the ledger, the checkpoint's summary line was not updated. Corrected here rather than silently.
+
+## Open pull requests, reconciled against their exact heads
+
+| PR                                      | Head      | Base                          | Checks on that head                       | Assessment                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------- | --------- | ----------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #85 — Journey B negotiation             | `00813ab` | `5cb1461` (= current `main`)  | `verify` ✅ `console` ✅ `console-e2e` ✅ | Test-only (+362, one new integration file). Proves four Authority invariants through the real Gateway: an agent cannot act on rules it proposed until a person approves them; a move above the approved walk-away is refused by name; revocation stops the agent immediately; another organization can neither act nor approve. Head read back and confirmed equal to the CI head.                                                |
+| #84 — cross-domain journey + checkpoint | `2496c32` | `c85f7b2` (one behind `main`) | `verify` ✅ `console` ✅ `console-e2e` ❌ | Diff is 4 files (+497/−5): docs, `docs/evidence/customer-journey-acceptance.json`, `scripts/customer-journey-acceptance.mjs`. It does **not** touch `app-ui` or the Launch board. The failure is `tests/r1-customer-app.browser.test.ts:1391`, a 30s timeout waiting for the `Launch board` `h1`; 18 passed, 1 failed. Therefore not caused by this diff — it must be reproduced against current `main` before the PR is touched. |
+| #32 — PayPal positioning                | `327318d` | `b07857d`                     | not re-run                                | Draft, stale. Positioning/strategy, not product code. Retain; do not merge on age.                                                                                                                                                                                                                                                                                                                                                |
+| #17 — ADR-017 roadmap lock              | `e11b8c4` | `880a890`                     | not re-run                                | Draft, stale, and superseded in scope by ADR-018, which is the canonical roadmap. Retain as history.                                                                                                                                                                                                                                                                                                                              |
+
+## Deployed
+
+| Project                                          | State                                                   |
+| ------------------------------------------------ | ------------------------------------------------------- |
+| `payflow` (marketing site)                       | Deployed. "Sign in" goes to an honest `/preview/` page. |
+| `payflow-public` (customer application)          | **Nothing deployed.** See `EXTERNAL-BLOCKERS.md` B-2.   |
+| `payflow-m5-acceptance`, `payflow-m6-acceptance` | Historical acceptance environments.                     |
+
+## The distance between merged and deployed
+
+This is the single largest honesty gap in the program and it is owner-gated, not engineering-gated:
+
+- 41 migrations (`024`–`064`) exist in the repository and are applied to no public database.
+- Every feature built since `023` — account lifecycle, invitations, member management, data export, MFA, automation, recurring checks, launch runs — is merged, tested against PostgreSQL in CI, and **reachable by no customer**.
+- Consequently no milestone can honestly be marked `HOSTED_ACCEPTED` or `EXTERNAL_VALIDATED` today, whatever its local test evidence.
+
+## Rollback
+
+Each slice is a squash merge on `main`, so rollback is a revert of one commit. No deployment exists to roll back. Applying migrations to the public database is the first genuinely irreversible step, and it is gated on a snapshot.

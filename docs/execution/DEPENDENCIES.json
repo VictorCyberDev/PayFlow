@@ -1,0 +1,113 @@
+{
+  "note": "What blocks what, at the level that decides the order of work. Milestone-level status is in docs/M1-M90-AUDIT-MATRIX.md; this file holds only edges, so the two cannot drift into disagreement.",
+  "as_of": "2026-11-11",
+  "pinned_to_sha": "5cb1461d08fc82de13c7583f0d74cb954cd24f4e",
+  "nodes": [
+    {
+      "id": "db-commission",
+      "title": "Apply migrations 024-064 to the public database",
+      "state": "BLOCKED_OWNER_APPROVAL",
+      "blocker": "B-3",
+      "blocks": [
+        "hosted-deploy",
+        "hosted-acceptance",
+        "journeys-A-H-hosted",
+        "M59-billing",
+        "M60-acceptance"
+      ],
+      "note": "The public database has no `missions` table, so it predates the entire V3 product. Nothing from M26 onward can be hosted-accepted until this runs."
+    },
+    {
+      "id": "least-privilege",
+      "title": "Stop svc_public_app being usable; run as svc_public_rt",
+      "state": "BLOCKED_OWNER_APPROVAL",
+      "blocker": "B-4",
+      "blocks": ["hosted-deploy"],
+      "note": "svc_public_rt already exists and is already scoped to payflow_runtime. The remaining step is removal of the privileged role, which is irreversible."
+    },
+    {
+      "id": "hosted-deploy",
+      "title": "Deploy the customer application to payflow-public",
+      "state": "BLOCKED_OWNER_APPROVAL",
+      "blocker": "B-2",
+      "blocked_by": ["db-commission", "least-privilege"],
+      "blocks": ["hosted-acceptance", "journeys-A-H-hosted", "email-delivery"],
+      "note": "Needs Root Directory hosting/m6 and the secrets listed in EXTERNAL-BLOCKERS.md B-2."
+    },
+    {
+      "id": "email-delivery",
+      "title": "Prove a real message is delivered",
+      "state": "BLOCKED_OWNER_APPROVAL",
+      "blocker": "B-1",
+      "blocked_by": ["hosted-deploy"],
+      "blocks": ["M59-support"],
+      "note": "The durable outbox, send leases, crash recovery and the fail-closed limiter are built and proven against a stand-in. Only delivery is unproven."
+    },
+    {
+      "id": "provider-acceptance",
+      "title": "Sandbox acceptance per provider (PayPal, Channel3, Groq, talent/workspace/services)",
+      "state": "BLOCKED_EXTERNAL",
+      "blocker": "B-5",
+      "blocks": [
+        "M60-acceptance",
+        "M31-M35-real-sourcing",
+        "M36-M40-purchasing"
+      ],
+      "note": "Adapter contracts, the refusal taxonomy and the UNKNOWN path are built and tested against fictional sandbox sources. The three live suites skip themselves without credentials rather than passing vacuously."
+    },
+    {
+      "id": "M55-executor",
+      "title": "M55 — execute a mission plan as a dependency-ordered run",
+      "state": "READY",
+      "blocked_by": [],
+      "blocks": [
+        "M57-recurring-on-top",
+        "M58-templates-end-to-end",
+        "M60-acceptance"
+      ],
+      "note": "NOT blocked by anything external. This is the largest piece of genuinely executable engineering left. See the gap statement below."
+    },
+    {
+      "id": "pr-84-rebase",
+      "title": "PR #84 — update onto main",
+      "state": "READY_ON_ANOTHER_BRANCH",
+      "blocked_by": [],
+      "note": "Its console-e2e failure does not exist on main (verified: the test passes in ~1s where CI timed out at 30s). Its base is main's parent, before #80 fixed the customer-app mounting the test depends on. The automatic branch update is refused with a merge conflict, because both #84 and #80 edit docs/V3-EXECUTION-LEDGER.md. Resolution is a docs merge, no code change. Not done here: this session is confined to claude/payflow-v3-m1-m90-6rh3ha."
+    },
+    {
+      "id": "pr-85-merge",
+      "title": "PR #85 — Journey B negotiation",
+      "state": "VERIFIED_READY",
+      "blocked_by": [],
+      "note": "Green on its exact head, head read back and matched, and independently re-run against main here: 4/4 pass. Test-only. Merging writes to main, which is outside this session's branch directive, so it is reported ready rather than merged."
+    }
+  ],
+  "m55_gap": {
+    "statement": "The M55 gap is not a missing dependency graph. It is a missing bridge to the graph that already exists.",
+    "what_exists": {
+      "M27_plan_layer": "mission_plans / mission_tasks / mission_task_deps / mission_task_events, migration 031",
+      "dependency_kinds": [
+        "HARD (dependency must be COMPLETED)",
+        "CONDITIONAL (COMPLETED or SKIPPED)"
+      ],
+      "task_states": [
+        "BLOCKED",
+        "READY",
+        "AWAITING_APPROVAL",
+        "IN_PROGRESS",
+        "HANDED_OFF",
+        "COMPLETED",
+        "FAILED",
+        "SKIPPED",
+        "INVALIDATED"
+      ],
+      "readiness": ["EXECUTABLE", "PREPARED_HANDOFF", "UNAVAILABLE"],
+      "reconcile": "PlanService.reconcile already computes BLOCKED / AWAITING_APPROVAL / READY from the graph and invalidates tasks whose granted capabilities or approved provider types changed",
+      "authorized_transitions": "claim / complete / fail / handoff, each gated on caller.kind === AGENT, assignment, and a live capability check against the mission contract",
+      "durable_worker": "AutomationService with leases, SKIP LOCKED, effect NONE re-queued and effect EXTERNAL left UNKNOWN for a person to settle"
+    },
+    "what_is_missing": "Nothing drives that machine automatically. The only executor, LaunchRunService (migration 064), runs a flat list of at most 8 read-only searches over 2 areas (WORKSPACE, SERVICES) and never touches mission_tasks, the dependency graph, approval gates or handoffs.",
+    "shape_of_the_work": "A durable PLAN_RUN job, effect NONE, that walks the ACTIVE plan to a fixpoint: PREPARED_HANDOFF and OWNER_DECISION tasks are claimed and handed off with an honest note naming what is missing; AWAITING_APPROVAL pauses and reports who must act; UNAVAILABLE is left for a member to skip or invalidate; consequential actions are never performed. It must drive the existing authorized transitions rather than write mission_tasks directly, so that no new authority path is created.",
+    "why_not_done_here": "It is a service plus routes plus tests on a slow verification cycle (the full suite is ~10 minutes locally). Starting it without finishing and verifying it would have produced exactly the half-delivered work this programme is trying to stop."
+  }
+}
