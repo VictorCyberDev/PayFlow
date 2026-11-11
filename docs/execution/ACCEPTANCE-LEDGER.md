@@ -108,3 +108,18 @@ TEST_DATABASE_URL=... npx vitest run tests/m55-plan-run.integration.test.ts
 ### The honest limit of this slice
 
 No specialist is connected, so **every** task the run reaches today becomes a handoff. That is the state of the product, not a shortcoming of the executor: with no provider commissioned there is no automated work to do. `PlanSpecialist` is the registration point, and a registered specialist still cannot bypass the capability check in `claim`.
+
+## A-6 · Migration 065 and the database guarantees, verified without the service
+
+All 65 migrations applied in order into an empty database (`ON_ERROR_STOP=1` on every file): **clean, and both new tables present**. Then each guarantee was attacked with raw SQL and required to fail with its own message:
+
+| Attack                                     | Result                                        |
+| ------------------------------------------ | --------------------------------------------- |
+| A second open run for the same mission     | `duplicate key ... "plan_runs_one_open"`      |
+| `UPDATE` the action log                    | `plan run actions are append-only`            |
+| `UPDATE` a finished run                    | `a finished plan run cannot change`           |
+| `DELETE` a run                             | `plan runs are never deleted`                 |
+| `finished_at` on a non-terminal state      | `violates check constraint "plan_runs_check"` |
+| A new open run after the previous finished | accepted                                      |
+
+This matters because it separates the two layers: the service's `RUN_ALREADY_OPEN` is a courtesy, and the partial unique index is the guarantee. A bug in the former cannot defeat the latter.

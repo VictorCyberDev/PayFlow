@@ -71,3 +71,20 @@ Mutation-checked, because a test that cannot fail proves nothing:
 | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | the run's approval gate removed, so it tries to claim an `AWAITING_APPROVAL` task | **killed** — and the task was still not acted on: `claim` refused it. Defence in depth. |
 | the plan-version guard removed, so the run acts on a replaced plan                | **killed** — the run reported `WAITING_ON_PEOPLE` instead of `FAILED`                   |
+
+### Database guarantees, verified directly against PostgreSQL
+
+Independent of the service: all 65 migrations applied from scratch into an empty database, then each guarantee was
+attacked with raw SQL and had to fail with its own message.
+
+| Attack                                            | Result                                                                |
+| ------------------------------------------------- | --------------------------------------------------------------------- |
+| A second open run for the same mission            | `duplicate key value violates unique constraint "plan_runs_one_open"` |
+| `UPDATE` a row in the action log                  | `plan run actions are append-only`                                    |
+| `UPDATE` a run that has finished                  | `a finished plan run cannot change`                                   |
+| `DELETE` a run                                    | `plan runs are never deleted`                                         |
+| `finished_at` set on a non-terminal state         | `violates check constraint "plan_runs_check"`                         |
+| A new open run once the previous one has finished | accepted, as intended                                                 |
+
+The partial unique index is what makes "one open run per mission" a fact rather than a convention: the service's own
+`RUN_ALREADY_OPEN` refusal is the friendly form of that constraint, not a substitute for it.

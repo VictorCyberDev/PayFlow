@@ -3513,6 +3513,190 @@ const STEP_WORDS = {
   FAILED: "Failed",
 };
 const AREA_WORDS = { WORKSPACE: "Workspaces", SERVICES: "Services" };
+const TASK_STATE_WORDS = {
+  BLOCKED: "Waiting on something else",
+  READY: "Ready",
+  AWAITING_APPROVAL: "Waiting for your approval",
+  IN_PROGRESS: "Being worked on",
+  HANDED_OFF: "With you to do",
+  COMPLETED: "Done",
+  FAILED: "Failed",
+  SKIPPED: "Skipped",
+  INVALIDATED: "No longer applies",
+};
+const TASK_READINESS_WORDS = {
+  EXECUTABLE: "An agent can do this",
+  PREPARED_HANDOFF: "Prepared for you or a provider",
+  UNAVAILABLE: "No honest way to do this",
+};
+
+/**
+ * The plan (M27) with the controls a person needs to act on it (M55). The plan run writes down what is waiting for you;
+ * this is where you do it. Every button is an existing authorized member action: approving, confirming that a handoff was
+ * really done, or skipping. None of them moves money.
+ */
+async function planPage(id) {
+  const m = await api(`/v1/admin/org/missions/${id}`);
+  if (!m.ok)
+    return shell(
+      "#/missions",
+      h("h1", { text: "Mission not found" }),
+      notice("bad", "That mission doesn't exist, or you can't see it."),
+    );
+  const p = await api(`/v1/admin/org/missions/${id}/plans`);
+  if (!p.ok)
+    return shell(
+      "#/missions",
+      h("h1", { text: "Plan" }),
+      notice("bad", "The plan is not available to your role."),
+    );
+  const tasks = p.data.tasks ?? [];
+  const out = h("div");
+  const act = async (taskId, op, bodyObj, failWord) => {
+    const r = await api(`/v1/admin/org/tasks/${taskId}/${op}`, {
+      method: "POST",
+      body: bodyObj,
+    });
+    if (!r.ok)
+      return out.replaceChildren(
+        notice(
+          "bad",
+          r.data && r.data.reason === "MISSING_EVIDENCE"
+            ? "This step needs its evidence filled in before you can confirm it."
+            : failWord,
+        ),
+      );
+    await planPage(id);
+  };
+  const card = (t) => {
+    const refs = {};
+    const evidenceInputs = (t.requiredEvidence ?? []).map((kind) => {
+      const inputId = `ev-${t.taskId}-${kind}`.replace(/[^A-Za-z0-9-]/gu, "-");
+      refs[kind] = "";
+      return h(
+        "div",
+        {},
+        h("label", { for: inputId, text: `Evidence: ${kind}` }),
+        h("input", {
+          id: inputId,
+          type: "text",
+          oninput: (e) => {
+            refs[kind] = e.target.value;
+          },
+        }),
+      );
+    });
+    const buttons = [];
+    if (t.state === "AWAITING_APPROVAL")
+      buttons.push(
+        h("button", {
+          type: "button",
+          text: "Approve this step",
+          onclick: () =>
+            act(t.taskId, "approve", {}, "That step could not be approved."),
+        }),
+      );
+    if (["READY", "HANDED_OFF", "IN_PROGRESS"].includes(t.state))
+      buttons.push(
+        h("button", {
+          type: "button",
+          text: "I have done this",
+          onclick: () =>
+            act(
+              t.taskId,
+              "confirm-handoff",
+              {
+                summary: "Confirmed by the owner",
+                evidence: Object.entries(refs)
+                  .filter(([, v]) => v)
+                  .map(([kind, ref]) => ({ kind, ref })),
+              },
+              "That step could not be confirmed.",
+            ),
+        }),
+      );
+    if (!["COMPLETED", "FAILED", "SKIPPED", "INVALIDATED"].includes(t.state))
+      buttons.push(
+        h("button", {
+          type: "button",
+          class: "secondary",
+          text: "Skip it",
+          onclick: () =>
+            act(
+              t.taskId,
+              "skip",
+              { reason: "Skipped by the owner" },
+              "That step could not be skipped.",
+            ),
+        }),
+      );
+    return h(
+      "article",
+      { class: "card" },
+      h(
+        "div",
+        { class: "row" },
+        h("h2", { text: t.title }),
+        h(
+          "span",
+          { class: "badge" },
+          glyph("dot"),
+          TASK_STATE_WORDS[t.state] ?? t.state,
+        ),
+      ),
+      h("p", { text: t.intendedOutcome }),
+      h(
+        "dl",
+        {},
+        row("What this is for", t.explanation),
+        row(
+          "How it can be done",
+          TASK_READINESS_WORDS[t.readiness] ?? t.readiness,
+        ),
+        t.readinessReason ? row("Why", wordsOf(t.readinessReason)) : h("span"),
+        t.blockReason ? row("Waiting on", wordsOf(t.blockReason)) : h("span"),
+        t.result && t.result.handoffNote
+          ? row("What the run said", t.result.handoffNote)
+          : h("span"),
+      ),
+      evidenceInputs.length && t.state !== "COMPLETED"
+        ? h(
+            "div",
+            {},
+            h("p", {
+              class: "hint",
+              text: "This step records evidence. Fill in a reference for each before confirming it.",
+            }),
+            ...evidenceInputs,
+          )
+        : h("span"),
+      buttons.length ? h("div", { class: "row" }, ...buttons) : h("span"),
+    );
+  };
+  shell(
+    "#/missions",
+    h(
+      "div",
+      { class: "row" },
+      h("h1", { text: "Plan" }),
+      h("a", {
+        class: "link",
+        href: `#/missions/${id}/launch`,
+        text: "Back to the launch board",
+      }),
+    ),
+    h("p", {
+      text: "Every step in this mission's plan, what it is waiting on, and what you can do about it. Approving or confirming a step never moves money.",
+    }),
+    out,
+    p.data.activePlanVersion === null
+      ? notice(
+          "info",
+          "This mission has no active plan yet. A plan is proposed through the API or by an agent, and you put it in force.",
+        )
+      : h("div", {}, ...tasks.map(card)),
+  );
+}
 const PLAN_RUN_STATE_WORDS = {
   QUEUED: "Waiting to start",
   RUNNING: "Working through the plan",
@@ -4984,6 +5168,7 @@ async function render() {
     if (sec && sec[2] === "proof") return await proofPage(sec[1]);
     if (sec && sec[2] === "recurring") return await recurringPage(sec[1]);
     if (sec && sec[2] === "launch") return await launchBoardPage(sec[1]);
+    if (sec && sec[2] === "plan") return await planPage(sec[1]);
     if (sec && sec[2] === "services") return await servicesPage(sec[1]);
     if (sec && SECTIONS[sec[2]]) return await recordsPage(sec[1], sec[2]);
     const w = /^#\/missions\/(msn_[a-f0-9]{24})\/workspaces$/.exec(hash);
