@@ -4053,6 +4053,114 @@ async function organizationsSection() {
   );
 }
 
+/** Everyone in this organization. Managers can change a role or remove someone; anyone can leave. */
+async function membersSection() {
+  const out = h("div");
+  const r = await api("/v1/app/members");
+  const leave = h("button", {
+    type: "button",
+    text: "Leave this organization",
+    onclick: async () => {
+      if (
+        !confirm(
+          "Leave this organization? You will need a new invitation to come back.",
+        )
+      )
+        return;
+      const d = await api("/v1/app/leave", { method: "POST", body: {} });
+      if (!d.ok)
+        return out.replaceChildren(
+          notice(
+            "bad",
+            d.data?.reason === "LAST_OWNER"
+              ? "You are the only owner. Make someone else an owner first."
+              : "Could not leave. Nothing was changed.",
+          ),
+        );
+      state.me = null;
+      state.csrf = null;
+      location.hash = "#/login";
+      await render();
+    },
+  });
+  const rolesAll = { OWNER: "Owner", ...ROLE_WORDS };
+  const refused = (d) =>
+    out.replaceChildren(
+      notice(
+        "bad",
+        d.data?.reason === "LAST_OWNER"
+          ? "An organization must keep at least one owner."
+          : d.data?.reason === "EMAIL_NOT_VERIFIED"
+            ? "Confirm your own email address first."
+            : "That change was not made.",
+      ),
+    );
+  return h(
+    "section",
+    { class: "card" },
+    h("h2", { text: "Members" }),
+    r.ok
+      ? h(
+          "ul",
+          { class: "list" },
+          ...r.data.members.map((x) => {
+            const you = x.memberId === r.data.you;
+            const label = `${x.name}${x.email ? " · " + x.email : ""}${x.kind === "SERVICE" ? " · service" : ""}${you ? " · you" : ""}`;
+            return h(
+              "li",
+              { class: "row" },
+              h("span", { text: `${label} · ${roleWord(x.role)}` }),
+              r.data.canManage
+                ? h(
+                    "select",
+                    {
+                      "aria-label": `Role for ${x.name}`,
+                      onchange: async (e) => {
+                        const d = await api(
+                          `/v1/app/members/${x.memberId}/role`,
+                          { method: "POST", body: { role: e.target.value } },
+                        );
+                        if (!d.ok) return refused(d);
+                        await settingsPage();
+                      },
+                    },
+                    ...Object.entries(rolesAll).map(([v, t]) =>
+                      h("option", {
+                        value: v,
+                        text: t,
+                        selected: v === x.role,
+                      }),
+                    ),
+                  )
+                : null,
+              r.data.canManage && !you
+                ? h("button", {
+                    type: "button",
+                    text: `Remove ${x.name}`,
+                    onclick: async () => {
+                      if (!confirm(`Remove ${x.name} from this organization?`))
+                        return;
+                      const d = await api(
+                        `/v1/app/members/${x.memberId}/remove`,
+                        { method: "POST", body: {} },
+                      );
+                      if (!d.ok) return refused(d);
+                      await settingsPage();
+                    },
+                  })
+                : null,
+            );
+          }),
+        )
+      : h("p", {
+          class: "hint",
+          text: "Your role does not include the member list.",
+        }),
+    leave,
+    out,
+  );
+}
+
 /** Invite people into this organization. Only shown to people the server lets manage members. */
 async function peopleSection() {
   const r = await api("/v1/app/invitations");
@@ -4114,7 +4222,7 @@ async function peopleSection() {
       },
       h("label", { for: "inv-email", text: "Email address to invite" }),
       email,
-      h("label", { for: "inv-role", text: "Role" }),
+      h("label", { for: "inv-role", text: "Role to give" }),
       role,
       h("button", { type: "submit", text: "Send invitation" }),
     ),
@@ -4167,6 +4275,7 @@ async function settingsPage() {
       ),
     ),
     await organizationsSection(),
+    await membersSection(),
     await peopleSection(),
     await signInsSection(),
     await quorumSection(),

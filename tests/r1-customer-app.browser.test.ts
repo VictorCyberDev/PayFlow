@@ -1620,7 +1620,7 @@ const chromePath = [
       await owner.page
         .getByLabel("Email address to invite")
         .fill("guest@example.com");
-      await owner.page.getByLabel("Role").selectOption("APPROVER");
+      await owner.page.getByLabel("Role to give").selectOption("APPROVER");
       await owner.page.getByRole("button", { name: "Send invitation" }).click();
       await owner.page
         .getByText("guest@example.com · Approver · Waiting")
@@ -1678,6 +1678,30 @@ const chromePath = [
       await owner.page.reload();
       await owner.page
         .getByText("guest@example.com · Approver · Joined")
+        .waitFor();
+      // members: change the guest's role, see it applied, then remove them
+      await owner.page
+        .getByLabel("Role for Gus Guest")
+        .selectOption("FINANCE_ADMIN");
+      await owner.page
+        .getByText("Gus Guest · guest@example.com · Finance admin")
+        .waitFor();
+      expect(await axe(owner.page)).toEqual([]);
+      await owner.page
+        .getByRole("button", { name: "Remove Gus Guest" })
+        .click();
+      await owner.page
+        .getByText("Bea Boss · boss@example.com · you · Owner")
+        .waitFor();
+      await expect
+        .poll(async () => owner.page.locator("main").innerText())
+        .not.toContain("Gus Guest ·");
+      // the only owner cannot leave
+      await owner.page
+        .getByRole("button", { name: "Leave this organization" })
+        .click();
+      await owner.page
+        .getByText("You are the only owner. Make someone else an owner first.")
         .waitFor();
       await owner.ctx.close();
       await guest.ctx.close();
