@@ -1,5 +1,7 @@
 import type { Sql } from "postgres";
 import type { Environment } from "./ops-controls.js";
+import { buildUsageInvoice } from "./billing.js";
+import { PRICING_ARCHITECTURE } from "./metering.js";
 
 /**
  * Read-only organization projections. Every query is scoped by organization AND environment
@@ -473,24 +475,44 @@ export async function usageHome(
   }));
   const totalThisPeriod = meters.reduce((n, m) => n + m.thisPeriod, 0);
   // The DEVELOPER plan: every coefficient is zero, which is the only total this product can state truthfully today.
-  const lines = [
-    { meter: "BASE", quantity: 1, unitAmountMinor: 0, amountMinor: 0 },
-    ...meters
-      .filter((m) => m.thisPeriod > 0)
-      .map((m) => ({
-        meter: m.meter,
-        quantity: m.thisPeriod,
-        unitAmountMinor: 0,
-        amountMinor: 0,
-      })),
-  ];
+  // Built by the real invoice builder rather than by re-deriving the lines here, so there is one piece of code that
+  // knows how a PayFlow invoice is shaped. (Writing it twice is exactly what scripts/orphan-scan.mjs caught.)
+  const developer = PRICING_ARCHITECTURE.find((p) => p.id === "DEVELOPER")!;
+  const events = await sql`
+    select id, meter, quantity, occurred_at, idempotency_key
+    from usage_events
+    where organization_id = ${organizationId} and environment = ${environment}
+      and occurred_at >= ${period.start} and occurred_at < ${period.end}`;
+  const invoice = buildUsageInvoice(
+    {
+      invoiceId: `preview-${organizationId}-${period.start}`,
+      organizationId,
+      environment,
+      periodStart: period.start,
+      periodEnd: period.end,
+    },
+    developer,
+    events.map((e) => ({
+      id: String(e.id),
+      organizationId,
+      environment,
+      meter: String(e.meter) as "GOVERNED_ACTION",
+      quantity: Number(e.quantity),
+      occurredAt: new Date(e.occurred_at as string).toISOString(),
+      idempotencyKey: String(e.idempotency_key),
+    })),
+  );
   return {
     period,
     meters,
     totalThisPeriod,
     planId: "DEVELOPER",
     charged: false,
-    invoicePreview: { currency: "USD", totalMinor: 0, lines },
+    invoicePreview: {
+      currency: invoice.currency,
+      totalMinor: invoice.totalMinor,
+      lines: invoice.lines,
+    },
     notice:
       "This is what PayFlow has actually measured for you. Nothing here is estimated, and nothing here has been charged.",
     priceNotice:
