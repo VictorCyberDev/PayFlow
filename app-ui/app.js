@@ -3653,11 +3653,11 @@ async function planPage(id) {
           "How it can be done",
           TASK_READINESS_WORDS[t.readiness] ?? t.readiness,
         ),
-        t.readinessReason ? row("Why", wordsOf(t.readinessReason)) : h("span"),
-        t.blockReason ? row("Waiting on", wordsOf(t.blockReason)) : h("span"),
+        t.readinessReason ? row("Why", wordsOf(t.readinessReason)) : false,
+        t.blockReason ? row("Waiting on", wordsOf(t.blockReason)) : false,
         t.result && t.result.handoffNote
           ? row("What the run said", t.result.handoffNote)
-          : h("span"),
+          : false,
       ),
       evidenceInputs.length && t.state !== "COMPLETED"
         ? h(
@@ -3669,8 +3669,8 @@ async function planPage(id) {
             }),
             ...evidenceInputs,
           )
-        : h("span"),
-      buttons.length ? h("div", { class: "row" }, ...buttons) : h("span"),
+        : false,
+      buttons.length ? h("div", { class: "row" }, ...buttons) : false,
     );
   };
   shell(
@@ -3772,7 +3772,7 @@ function planRunCard(id, run) {
       ),
     ),
     h("p", { class: "hint", text: run.notice }),
-    run.note ? h("p", { text: run.note }) : h("span"),
+    run.note ? h("p", { text: run.note }) : false,
     run.worklist.length
       ? h(
           "div",

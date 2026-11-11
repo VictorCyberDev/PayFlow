@@ -52,6 +52,15 @@ A pass that changes nothing ends the run. `MAX_PASSES` (24) bounds a pathologica
 - The worker only runs when `/v1/admin/ops/automation/run` is called. Nothing is deployed, so nothing runs anywhere.
 - An agent cannot start a run; the routes are member-only.
 
+## The screen
+
+The run writes down what is waiting for a person. Before this slice there was nowhere to act on it: the customer application never fetched `/plans`, so M27's tasks were invisible to a customer and a run could say "approve this" with no approval control anywhere. Two screens now close that:
+
+- **On the Launch board**, a plan-run card: the run's state in words, the worklist, and real **start** and **cancel** controls. Not an API-only feature.
+- **`#/missions/:id/plan`**, the plan itself: every task with what it is for, how it can be done (`An agent can do this` / `Prepared for you or a provider` / `No honest way to do this`), what it is waiting on, and what the run said when it handed the task over. Each task carries the member actions that already existed on the Gateway and had no UI: **approve**, **I have done this** (confirm-handoff) and **skip**. A task that records evidence asks for a reference per required kind, because the API refuses the confirmation otherwise.
+
+No new authority: every button is an existing authorized member action on `/v1/admin/org/tasks/:id/:op`, and none of them moves money.
+
 ## Evidence
 
 `tests/m55-plan-run.integration.test.ts` — 8 tests, real HTTP, real Gateway, PostgreSQL, the deterministic template planner's real four-task graph:
@@ -88,3 +97,10 @@ attacked with raw SQL and had to fail with its own message.
 
 The partial unique index is what makes "one open run per mission" a fact rather than a convention: the service's own
 `RUN_ALREADY_OPEN` refusal is the friendly form of that constraint, not a substitute for it.
+
+### Two defects the real browser found, that no unit test would have
+
+1. **A dead link.** The plan-run card pointed at `#/missions/:id/plan` and no such route existed; the router would have fallen through to the home page in silence. Following my own link is what exposed it — and behind it, that the application had no plan screen at all.
+2. **Invalid markup, caught by axe.** The plan screen's `<dl>` used `<span>` as a placeholder for conditional rows. A `<dl>` permits only `dt`, `dd` and `div`, so axe reported `definition-list` violations. The `h` helper drops falsy children, so `false` is the correct placeholder; there are now no `h("span")` placeholders anywhere in the file.
+
+Both are recorded because they are the kind of thing that survives a green unit suite: the first needed the link to be followed, the second needed the page to be rendered and audited.
