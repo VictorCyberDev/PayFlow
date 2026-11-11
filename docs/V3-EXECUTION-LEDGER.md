@@ -162,3 +162,38 @@ restoring the old value, which fails it.
 Unchanged by this work: nothing is deployed to `payflow-public`; migrations 024-062 (028 skipped) are
 not applied to the public database; no email sender is configured. The decoupling removes a code
 blocker to commissioning the customer application — it does not commission it.
+
+### R6 addendum — rebased onto #81, and what that collision exposed (2026-11-11)
+
+This branch was rebased three times while open, onto #78, then #79, then #81. Each time only
+`docs/V3-EXECUTION-LEDGER.md` conflicted; `src/console-hosted.ts` and `src/network/hosted-gateway.ts`
+auto-merged. A clean auto-merge is not evidence the result works, so after the #81 rebase the combined
+tree was checked rather than assumed: `mfaSecretKey: keys.mfa` sits inside the `signing ?
+createHostedGatewayHandler({...})` block this change introduced, and B6 (8), B5 (5), hosting-m6 (6),
+TOTP (6), env-contract (4) and R6 (7) all pass together.
+
+**The collision exposed a real gap.** Every B6 test runs on `tests/helpers/host-harness.ts`, which sets
+`PAYFLOW_M6_DEMO_AGENT=true`. Two-step sign-in had therefore never been exercised on the host shape this
+change makes the supported customer deployment. `tests/r6-customer-host-without-financial-mode.integration.test.ts`
+now carries that journey end to end with no financial agent: enrol (`/v1/app/mfa/begin` with the
+password, `/v1/app/mfa/enable` with a code, ten recovery codes), then a password step that returns
+`mfaRequired` **and no cookie**, a wrong code refused, the step enrolment already spent refused as a
+replay, and only the next step accepted. The first version of that test failed on exactly that replay
+rule, which is how the rule was confirmed to work rather than merely to be documented.
+
+**Migration manifest, recomputed from source (Instruction 4).** `063_b6_mfa.sql` means the public
+database is 39 migrations behind, not 38: `024`–`063`, skipping the merchant-only `028`. #81 also changed
+`db/roles/least-privilege.sql`, so the re-grant step must use the current copy or the three new MFA
+tables stay readable by `payflow_readonly`.
+
+**Rehearsed, with a script anyone can re-run.** `scripts/migration-rehearsal.mjs` builds two local
+databases — a fresh install of all 63, and the real upgrade path (`001`–`023`, then the 39) — compares
+them object by object across columns, constraints, indexes, triggers, functions and enums, then applies
+the grants. Result, exit 0: **0 objects the upgrade has that a fresh install lacks**, fresh-only is
+exactly `merchant_challenges`, `merchant_nonces` and `merchant_proof_claims` (precisely what skipping
+`028` omits), and 12/12 grant invariants hold, including that `payflow_readonly` cannot read `user_mfa`,
+`user_recovery_codes` or `user_mfa_challenges` while `payflow_runtime` still can.
+
+Still true, and unchanged by any of this: nothing is deployed to `payflow-public`, the 39 migrations are
+not applied, no provider is commissioned, and `svc_public_app` is still `LOGIN` and still a member of
+`neon_superuser`.

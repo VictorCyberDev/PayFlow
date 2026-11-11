@@ -20,13 +20,18 @@ Live state when this was written (re-verified, not assumed):
 Everything in this section was **measured today**, read-only, against the live Vercel projects and the live
 Neon database. Where it contradicts the rest of this page, this section is right and the older text is marked.
 
-**Repository.** `main` is now `4852a2c (plus PR #80)` (this page previously said `9c810b1b`). The customer
+**Repository.** `main` is now `5658f8a` (through #81; PR #80 is open on top of it) (this page previously said `9c810b1b`). The customer
 application no longer needs the M6 demonstration agent to run (PR #80): `PAYFLOW_M6_SIGNING_KEY` is the host's
 own key and is what mounts the Gateway, and `PAYFLOW_M6_DEMO_AGENT` is now only financial mode.
 
-**Pending migrations are no longer five — they are 38.** This page said `024`–`027` and `029`. The public
-database is still at `001`–`023`, and the repository now holds `024`–`062`. `028` is the merchant's own
-database and is **skipped**, so **38 migrations** must be applied before the first deploy.
+**Pending migrations are no longer five — they are 39.** This page said `024`–`027` and `029`. The public
+database is still at `001`–`023`, and the repository now holds `024`–`063` (`063` is B6 two-step sign-in,
+merged as #81). `028` is the merchant's own database and is **skipped**, so **39 migrations** must be
+applied before the first deploy. Recompute this from source rather than trusting a number on a page:
+
+```bash
+ls db/migrations/*.sql | sed 's|.*/||' | awk -F_ '$1+0>=24 && $1+0!=28'
+```
 
 Measured on `payflow-public-sandbox` (`withered-rice-68056451`), database `neondb`, today: **73 tables, 9
 functions, and none of `user_accounts`, `user_sessions`, `missions`, `email_outbox` or
@@ -76,15 +81,38 @@ Applying the 38 migrations to a database with real state is the destructive step
 word. The runbook is `docs/ops/PUBLIC-DEPLOY-RUNBOOK.md` step 3. In order:
 
 1. Take a Neon **snapshot** (or branch) of `payflow-public-sandbox` / `main` and confirm it exists.
-2. Apply `024`–`062`, **skipping `028`**, in filename order, as `payflow_migrator` — never as
+2. Apply `024`–`063`, **skipping `028`**, in filename order, as `payflow_migrator` — never as
    `svc_public_rt` and never as an owner or `neon_superuser` login.
-3. Re-run `db/roles/least-privilege.sql`.
+3. Re-run `db/roles/least-privilege.sql`. Use the **current** version: #81 changed it so the three new
+   MFA tables are excluded from `payflow_readonly`. Re-granting from an older copy would expose them.
 4. Re-run the fingerprint check so the result is compared with the repository, not assumed.
 5. Only then set the secrets (section 4) and deploy.
 
+**This was rehearsed, not assumed.** `scripts/migration-rehearsal.mjs` runs the whole thing twice on a
+local PostgreSQL — a fresh install of all 63, and an upgrade from the real `001`–`023` baseline applying
+exactly the 39 above — then compares the two schemas object by object and applies the grants. Result
+(2026-11-11, exit 0):
+
+| Check                                              | Result                                                                                                                                                                               |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Fresh install `001`–`063`                          | 63 files applied                                                                                                                                                                     |
+| Upgrade `001`–`023` then `024`–`063` skip `028`    | 23 + 39 files applied                                                                                                                                                                |
+| Objects the upgrade has that a fresh install lacks | **0** — in columns, constraints, indexes, triggers, functions and enums                                                                                                              |
+| Objects only a fresh install has                   | exactly `merchant_challenges`, `merchant_nonces`, `merchant_proof_claims` — i.e. precisely what skipping `028` omits, and nothing else                                               |
+| Schema size reached                                | 1477 columns, 1101 constraints, 342 indexes, 72 triggers, 44 functions, 11 enums                                                                                                     |
+| `least-privilege.sql` after the upgrade            | applied; **12/12** grant invariants hold, including that `payflow_readonly` cannot read `user_mfa`, `user_recovery_codes` or `user_mfa_challenges` while `payflow_runtime` still can |
+
+Re-run it yourself with:
+
+```bash
+PGBASE=postgres://<user>:<password>@localhost:5432 node --import tsx scripts/migration-rehearsal.mjs
+```
+
 Rollback is the snapshot from step 1: restore it, and the database returns to `001`–`023`.
 
-If you want me to run step 2, the sentence is "approve applying migrations 024-062 (skipping 028) to
+Rollback is the snapshot from step 1: restore it, and the database returns to `001`–`023`.
+
+If you want me to run step 2, the sentence is "approve applying migrations 024-063 (skipping 028) to
 payflow-public-sandbox". Without it I will not write to that database.
 
 ## 1. Remove the privileged role `svc_public_app` (needs your approval)

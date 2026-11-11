@@ -20,6 +20,7 @@ import {
 } from "../src/console-hosted.js";
 import { PayFlowClient } from "../packages/sdk-typescript/src/index.js";
 import { VerticalProvider } from "./m4-vertical-fixture.js";
+import { hotp } from "../src/network/totp.js";
 
 /**
  * R6: the customer application does not depend on the M6 demonstration financial agent.
@@ -201,7 +202,7 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       owner.reset();
       await truncateTenantData(
         repo.sql,
-        "replay_keys,agent_credentials,organizations,organization_agents,principals,evidence_events,commerce_merchant_bindings,proof_signing_keys,rate_limit_windows,email_outbox,user_tokens,user_sessions,user_memberships,user_accounts,missions,mission_versions,mission_agent_grants,mission_transitions",
+        "replay_keys,agent_credentials,organizations,organization_agents,principals,evidence_events,commerce_merchant_bindings,proof_signing_keys,rate_limit_windows,email_outbox,user_tokens,user_sessions,user_memberships,user_accounts,user_mfa,user_recovery_codes,user_mfa_challenges,missions,mission_versions,mission_agent_grants,mission_transitions",
       );
       provider = new VerticalProvider();
       provider.payer = false;
@@ -322,6 +323,90 @@ const pem = generateKeyPairSync("ed25519").privateKey.export({
       expect(
         (await send("POST", "/v1/sandbox/start", { body: {} })).status,
       ).toBe(404);
+    });
+
+    it("two-step sign-in works on a customer host with no financial agent", async () => {
+      // Every B6 test runs on the shared harness, which sets PAYFLOW_M6_DEMO_AGENT=true. MFA had
+      // therefore never been exercised on the deployment shape this change makes the supported one,
+      // where the MFA key comes from the host bootstrap key and no financial agent is mounted.
+      const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+      const unb32 = (t: string) => {
+        let bits = 0;
+        let value = 0;
+        const out: number[] = [];
+        for (const ch of t) {
+          value = (value << 5) | B32.indexOf(ch);
+          bits += 5;
+          if (bits >= 8) {
+            out.push((value >>> (bits - 8)) & 255);
+            bits -= 8;
+          }
+        }
+        return Buffer.from(out);
+      };
+      // A step is accepted once, so enrolment and the sign-in below must use different steps. The
+      // clock is fixed here, so the sign-in uses the next step, which is inside the accepted window.
+      const codeFor = (secret: Buffer, stepOffset = 0) =>
+        hotp(secret, Math.floor(clock().getTime() / 30000) + stepOffset);
+
+      const me = await customer();
+      const begun = await send("POST", "/v1/app/mfa/begin", {
+        cookie: me.cookie,
+        csrf: me.csrf,
+        body: { password: PASSWORD },
+      });
+      // Not 503: the MFA key is derived from the host bootstrap key, which this host has.
+      expect(begun.status, JSON.stringify(await begun.clone().json())).toBe(
+        200,
+      );
+      const secret = unb32(((await begun.json()) as { secret: string }).secret);
+      const enabled = await send("POST", "/v1/app/mfa/enable", {
+        cookie: me.cookie,
+        csrf: me.csrf,
+        body: { code: codeFor(secret) },
+      });
+      expect(enabled.status).toBe(200);
+      expect(
+        ((await enabled.json()) as { recoveryCodes: string[] }).recoveryCodes,
+      ).toHaveLength(10);
+
+      // The password alone is now not enough, and it hands back no session cookie.
+      const first = await send("POST", "/v1/app/login", {
+        body: { email: me.email, password: PASSWORD },
+      });
+      expect(first.status).toBe(200);
+      const step = (await first.json()) as {
+        mfaRequired?: boolean;
+        challenge?: string;
+      };
+      expect(step.mfaRequired).toBe(true);
+      expect(first.headers.get("set-cookie")).toBeNull();
+
+      // A wrong code does not finish it.
+      expect(
+        (
+          await send("POST", "/v1/app/login/mfa", {
+            body: { challenge: step.challenge, code: "000000" },
+          })
+        ).status,
+      ).toBe(401);
+      // Nor does replaying the step that enrolment already spent, even though it is a real code for
+      // a currently-valid step. (This is what the first version of this test got wrong.)
+      expect(
+        (
+          await send("POST", "/v1/app/login/mfa", {
+            body: { challenge: step.challenge, code: codeFor(secret) },
+          })
+        ).status,
+      ).toBe(401);
+      const second = await send("POST", "/v1/app/login/mfa", {
+        body: { challenge: step.challenge, code: codeFor(secret, 1) },
+      });
+      expect(second.status, JSON.stringify(await second.clone().json())).toBe(
+        200,
+      );
+      const cookie = second.headers.get("set-cookie")!.split(";")[0]!;
+      expect((await send("GET", "/v1/app/me", { cookie })).status).toBe(200);
     });
 
     it("fails closed: financial mode cannot be enabled without the host signing key", () => {
