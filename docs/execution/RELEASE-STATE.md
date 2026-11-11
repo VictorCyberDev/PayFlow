@@ -24,12 +24,24 @@ The checkpoint document says `main` is `5658f8a`. That is **stale by two merges*
 
 ## Built in this session, on `claude/payflow-v3-m1-m90-6rh3ha`
 
-| Slice                                  | Evidence                                                                                                                                                                                                                                                                                                          |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Execution registry (`docs/execution/`) | verified state, five proven blockers, the M55 gap located                                                                                                                                                                                                                                                         |
-| **M55 plan runs — the plan executor**  | migration `065`; `plan-run-service.ts`; `plan-run-routes.ts`; `PLAN_RUN` handler wired into the hosted Gateway; a plan-run card with start and cancel controls on the Launch board; `tests/m55-plan-run.integration.test.ts` — 8 tests, PostgreSQL + real HTTP, exit 0; 2 mutants killed; `docs/M55-PLAN-RUNS.md` |
+Nine commits, none merged to `main`. Every slice has its own suite green and at least one killed mutant; the evidence is in `ACCEPTANCE-LEDGER.md` A-1..A-11.
 
-Neither is merged to `main`; both are on the working branch, which is where this session is directed to push.
+| Slice                         | What it closed                                                                                                                                                                    | Evidence                                                                          |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Execution registry            | No process layer existed: no record of what was running, what was proven blocked, or how to resume                                                                                | A-1..A-4; five proven blockers                                                    |
+| **M55 plan executor**         | M27 had the dependency graph and M56 the durable worker; **nothing drove them**. The only executor ran a flat list of 8 read-only searches and never touched a task, edge or gate | migration `065`; 8 tests; 2 mutants; 6 DB guarantees attacked with raw SQL        |
+| **M55 plan screen**           | The run said "approve this" and there was **nowhere to approve it** — the app never fetched `/plans`, so M27's tasks were invisible to a customer                                 | browser suite, axe clean; 2 defects found by rendering                            |
+| **M57 answer, pause, resume** | `DUE_FOR_OWNER` was a dead end: no route, method or control existed to answer it. `stop` had no `resume`                                                                          | migration `066`; 24 tests across M56/M57; 2 mutants                               |
+| **M58 template defect**       | **Three of the five templates planned no work at all** — straight from "write the requirements" to "review the shortlist", with nothing planned to produce a shortlist            | 7 tests, one per template plus a drift guard; mutant killed precisely those three |
+| **M59 usage and billing**     | `usage_events` was written since migration `013` and a customer could see **none of it** (`grep -c usage app-ui/app.js` = 0)                                                      | 5 tests; mutant killed (removing org scoping leaked another tenant's usage)       |
+| **Forward traceability**      | Nothing checked whether code is _reachable_. Found 1 unreachable module, 1 deliberate, and 22 test-only                                                                           | `scripts/orphan-scan.mjs`; `FORWARD-TRACEABILITY.md`                              |
+| **M74 policy enforcement**    | `privacy.ts` said financial evidence is undeletable and governed nothing; closure agreed **by luck**                                                                              | 4 tests; mutant killed by three tests independently                               |
+
+### The finding that most changes how the roadmap should be read
+
+The orphan scan showed that for **M65, M69, M70, M74, M77, M78, M79, M80, M81, M85, M86 and M89** the code exists, is unit-tested, and **is not reachable from the running product**. The matrix called most of them `PARTIAL`; this is the concrete reason, and a sharper statement. A module with a passing test and no importer is not a milestone partly delivered — it is a milestone's parts, machined and left on the bench. A test suite cannot report it, because the test is itself the importer: that is exactly how `src/missions/fx.ts` came to be a complete, correct, tested, dead FX converter.
+
+M74 was the first of those twelve to be wired, as a demonstration that the rest can be.
 
 ## Deployed
 
