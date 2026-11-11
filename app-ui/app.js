@@ -1,6 +1,6 @@
 // PayFlow customer app. No framework, no inline script, no innerHTML: every value from the server is placed with textContent.
 const root = document.getElementById("root");
-const state = { me: null, csrf: null, template: null };
+const state = { me: null, csrf: null, template: null, pendingInvite: null };
 
 /** Element builder. Strings become text nodes (never HTML). */
 function h(tag, props, ...kids) {
@@ -504,6 +504,115 @@ async function verifyScreen(token) {
           : "This link has expired or was already used. Sign in and ask for a new one.",
       ),
       h("a", { class: "btn primary", href: "#/", text: "Continue" }),
+    ),
+  );
+}
+
+const ROLE_WORDS = {
+  FINANCE_ADMIN: "Finance admin",
+  SECURITY_ADMIN: "Security admin",
+  DEVELOPER: "Developer",
+  APPROVER: "Approver",
+  AUDITOR: "Auditor",
+  VIEWER: "Viewer",
+};
+const roleWord = (r) =>
+  r === "OWNER" ? "Owner" : (ROLE_WORDS[r] ?? wordsOf(r));
+/** The page an invitation link opens. The link's secret is kept in memory only, so it survives signing in but not closing the tab. */
+async function inviteScreen(token) {
+  const t = token || state.pendingInvite;
+  const bad = (text) =>
+    publicPage(
+      h(
+        "div",
+        { class: "card" },
+        h("h1", { text: "That invitation did not work" }),
+        notice("bad", text),
+        h("a", { class: "btn primary", href: "#/", text: "Continue" }),
+      ),
+    );
+  if (!t)
+    return bad(
+      "This invitation link is missing its code. Open the link from your email again.",
+    );
+  const p = await api("/v1/app/invitations/preview", {
+    method: "POST",
+    body: { token: t },
+  });
+  if (!p.ok) {
+    state.pendingInvite = null;
+    return bad(
+      "This invitation has expired, was withdrawn or was already used. Ask the person who invited you to send a new one.",
+    );
+  }
+  state.pendingInvite = t;
+  if (!state.me) {
+    const me = await api("/v1/app/me");
+    if (me.ok) {
+      state.me = me.data;
+      state.csrf = me.data.csrfToken;
+    }
+  }
+  const out = h("div");
+  const who = `${p.data.organizationName} as ${ROLE_WORDS[p.data.role] ?? p.data.role}`;
+  publicPage(
+    h(
+      "div",
+      { class: "card" },
+      h("h1", { text: "You are invited" }),
+      h("p", { text: `Join ${who}.` }),
+      h("p", {
+        class: "hint",
+        text: `Sent to ${p.data.emailHint}. You must be signed in with that address, and it must be confirmed.`,
+      }),
+      state.me
+        ? h("button", {
+            type: "button",
+            class: "btn primary",
+            text: "Accept invitation",
+            onclick: async () => {
+              const r = await api("/v1/app/invitations/accept", {
+                method: "POST",
+                body: { token: t },
+              });
+              if (!r.ok) {
+                return out.replaceChildren(
+                  notice(
+                    "bad",
+                    r.data?.reason === "EMAIL_NOT_VERIFIED"
+                      ? "Confirm your email address first (check for the confirmation message), then accept again."
+                      : "This invitation is not for the address you are signed in with, or it has expired or been used. Sign out and sign in with the address it was sent to.",
+                  ),
+                );
+              }
+              state.pendingInvite = null;
+              await api("/v1/app/organizations/switch", {
+                method: "POST",
+                body: { organizationId: r.data.organizationId },
+              });
+              state.me = null;
+              location.hash = "#/";
+              await render();
+            },
+          })
+        : h(
+            "div",
+            {},
+            h("a", { class: "btn primary", href: "#/login", text: "Sign in" }),
+            " ",
+            h("a", {
+              class: "btn",
+              href: "#/signup",
+              text: "Create an account",
+            }),
+          ),
+      state.me
+        ? h("p", {
+            class: "hint",
+            text: `Signed in as ${state.me.user.email}.`,
+          })
+        : null,
+      out,
     ),
   );
 }
@@ -3905,6 +4014,142 @@ async function signInsSection() {
     out,
   );
 }
+/** Organizations the person belongs to, with a switch when there is more than one. */
+async function organizationsSection() {
+  const r = await api("/v1/app/organizations");
+  if (!r.ok || r.data.organizations.length < 2) return null;
+  return h(
+    "section",
+    { class: "card" },
+    h("h2", { text: "Your organizations" }),
+    h(
+      "ul",
+      { class: "list" },
+      ...r.data.organizations.map((o) =>
+        h(
+          "li",
+          { class: "row" },
+          h("span", {
+            text: `${o.name} · ${roleWord(o.role)}${o.organizationId === r.data.current ? " · current" : ""}`,
+          }),
+          o.organizationId === r.data.current
+            ? null
+            : h("button", {
+                type: "button",
+                text: `Switch to ${o.name}`,
+                onclick: async () => {
+                  await api("/v1/app/organizations/switch", {
+                    method: "POST",
+                    body: { organizationId: o.organizationId },
+                  });
+                  state.me = null;
+                  location.hash = "#/";
+                  await render();
+                },
+              }),
+        ),
+      ),
+    ),
+  );
+}
+
+/** Invite people into this organization. Only shown to people the server lets manage members. */
+async function peopleSection() {
+  const r = await api("/v1/app/invitations");
+  if (!r.ok) return null;
+  const out = h("div");
+  const email = h("input", {
+    id: "inv-email",
+    type: "email",
+    autocomplete: "off",
+    required: true,
+  });
+  const role = h(
+    "select",
+    { id: "inv-role" },
+    ...Object.entries(ROLE_WORDS).map(([v, t]) =>
+      h("option", { value: v, text: t }),
+    ),
+  );
+  const stateWords = {
+    OPEN: "Waiting",
+    ACCEPTED: "Joined",
+    REVOKED: "Withdrawn",
+    EXPIRED: "Expired",
+  };
+  return h(
+    "section",
+    { class: "card" },
+    h("h2", { text: "People" }),
+    r.data.emailDelivery === "ENABLED"
+      ? null
+      : notice(
+          "warn",
+          "Email sending is not switched on for this system yet. An invitation is saved, but no email will arrive.",
+        ),
+    h(
+      "form",
+      {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          const d = await api("/v1/app/invitations", {
+            method: "POST",
+            body: { email: email.value, role: role.value },
+          });
+          if (!d.ok)
+            return out.replaceChildren(
+              notice(
+                "bad",
+                d.data?.reason === "ALREADY_MEMBER"
+                  ? "That person is already in this organization."
+                  : d.data?.reason === "EMAIL_NOT_VERIFIED"
+                    ? "Confirm your own email address before inviting people."
+                    : d.data?.reason === "RATE_LIMITED"
+                      ? "Too many invitations just now. Try again later."
+                      : "Check the email address and role, then try again.",
+              ),
+            );
+          await settingsPage();
+        },
+      },
+      h("label", { for: "inv-email", text: "Email address to invite" }),
+      email,
+      h("label", { for: "inv-role", text: "Role" }),
+      role,
+      h("button", { type: "submit", text: "Send invitation" }),
+    ),
+    r.data.invitations.length
+      ? h(
+          "ul",
+          { class: "list" },
+          ...r.data.invitations.map((i) =>
+            h(
+              "li",
+              { class: "row" },
+              h("span", {
+                text: `${i.email} · ${ROLE_WORDS[i.role] ?? i.role} · ${stateWords[i.state]}`,
+              }),
+              i.state === "OPEN"
+                ? h("button", {
+                    type: "button",
+                    text: `Withdraw invitation to ${i.email}`,
+                    onclick: async () => {
+                      await api(
+                        `/v1/app/invitations/${i.invitationId}/revoke`,
+                        { method: "POST", body: {} },
+                      );
+                      await settingsPage();
+                    },
+                  })
+                : null,
+            ),
+          ),
+        )
+      : h("p", { class: "hint", text: "No invitations yet." }),
+    out,
+  );
+}
+
 async function settingsPage() {
   shell(
     "#/settings",
@@ -3921,6 +4166,8 @@ async function settingsPage() {
         row("Environment", "Sandbox. No real money moves."),
       ),
     ),
+    await organizationsSection(),
+    await peopleSection(),
     await signInsSection(),
     await quorumSection(),
     h(
@@ -4015,6 +4262,7 @@ async function render() {
   if (hash.startsWith("#/forgot")) return forgotScreen();
   if (hash.startsWith("#/reset")) return resetScreen(hashToken(hash));
   if (hash.startsWith("#/verify")) return await verifyScreen(hashToken(hash));
+  if (hash.startsWith("#/invite")) return await inviteScreen(hashToken(hash));
   if (!state.me) {
     const me = await api("/v1/app/me");
     if (me.ok) {
@@ -4023,6 +4271,8 @@ async function render() {
     }
   }
   if (!state.me) return authScreen(hash === "#/signup" ? "signup" : "login");
+  if (state.pendingInvite && (hash === "#/" || hash === ""))
+    return await inviteScreen(state.pendingInvite);
   if (hash === "#/signup" || hash === "#/login")
     return void (location.hash = "#/");
   try {

@@ -22,6 +22,7 @@ import {
 } from "../missions/recurring-service.js";
 import { createRecurringRoutes } from "./recurring-routes.js";
 import { EmailOutbox, type EmailSender } from "./email-outbox.js";
+import { InvitationService } from "./invitations.js";
 import { QuorumService } from "../missions/quorum-service.js";
 import { createQuorumRoutes } from "./quorum-routes.js";
 import { createAutomationRoutes } from "./automation-routes.js";
@@ -519,6 +520,12 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           now: iso(),
         })
       ).allowed,
+    ...(options.appOrigins?.[0] ? { appBaseUrl: options.appOrigins[0] } : {}),
+  });
+  const invitations = new InvitationService({
+    sql,
+    now: iso,
+    outbox: emailOutbox,
     ...(options.appOrigins?.[0] ? { appBaseUrl: options.appOrigins[0] } : {}),
   });
   const secureCookies = options.secureCookies ?? true;
@@ -2793,6 +2800,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           path === "/v1/app/login" ||
           path === "/v1/app/password-reset/request" ||
           path === "/v1/app/password-reset/confirm" ||
+          path === "/v1/app/invitations/preview" ||
           path === "/v1/app/email-verification/confirm")
       ) {
         // Login CSRF: an attacker's page must not be able to sign a victim in as the attacker.
@@ -2825,6 +2833,16 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
             { reason: "RATE_LIMITED", recoverable: true },
             { "retry-after": "60" },
           );
+          return true;
+        }
+        if (path === "/v1/app/invitations/preview") {
+          // Holding the token is the credential. The same answer for every token that is not a live invitation.
+          const p = await invitations.preview(
+            (body as { token?: unknown } | undefined)?.token,
+          );
+          if (!p)
+            json(404, { reason: "INVALID_OR_EXPIRED", recoverable: false });
+          else json(200, p);
           return true;
         }
         if (path === "/v1/app/password-reset/request") {
@@ -2955,6 +2973,197 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
           verificationRequired: verifiedEmailRequired,
         });
+        return true;
+      }
+      // ---- Invitations and organizations (B3)
+      const inviteRoute =
+        /^\/v1\/app\/invitations(?:\/(inv_[a-f0-9]{24})\/revoke|\/(accept))?$/u.exec(
+          path,
+        );
+      const orgRoute = /^\/v1\/app\/organizations(\/switch)?$/u.exec(path);
+      if (inviteRoute || orgRoute) {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view || !sessionTokenIn) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        const m = view.member;
+        const actor = {
+          memberId: m.memberId,
+          organizationId: m.organizationId,
+          environment: m.environment,
+        };
+        if (orgRoute) {
+          if (method === "GET" && !orgRoute[1]) {
+            json(200, {
+              current: m.organizationId,
+              organizations: await invitations.organizationsOf(
+                view.user.userId,
+              ),
+            });
+            return true;
+          }
+          if (method === "POST" && orgRoute[1]) {
+            const id = (body as { organizationId?: unknown } | undefined)
+              ?.organizationId;
+            const ok =
+              typeof id === "string" &&
+              (await invitations.switchOrganization(
+                sessionTokenIn,
+                view.user.userId,
+                id,
+              ));
+            if (!ok) json(404, { reason: "NOT_FOUND" });
+            else json(200, { switched: true, organizationId: id });
+            return true;
+          }
+          json(405, { reason: "METHOD_NOT_ALLOWED" });
+          return true;
+        }
+        // accept: any signed-in person; the invitation itself decides
+        if (inviteRoute![2]) {
+          if (method !== "POST") {
+            json(405, { reason: "METHOD_NOT_ALLOWED" });
+            return true;
+          }
+          const r = await invitations.accept(
+            view.user,
+            (body as { token?: unknown } | undefined)?.token,
+          );
+          if (!r.ok) {
+            json(r.refusal === "EMAIL_NOT_VERIFIED" ? 403 : 410, {
+              reason: r.refusal,
+              recoverable: true,
+            });
+            return true;
+          }
+          await audit.append({
+            organizationId: r.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: view.user.userId,
+            action: "INVITATION_ACCEPTED",
+            subjectKind: "USER",
+            subjectId: view.user.userId,
+            detail: { role: r.role, alreadyMember: r.alreadyMember },
+            occurredAt: iso(),
+          });
+          json(200, {
+            joined: true,
+            organizationId: r.organizationId,
+            role: r.role,
+            alreadyMember: r.alreadyMember,
+          });
+          return true;
+        }
+        // everything else is member management
+        if (!can(m.role, "member:manage")) {
+          json(403, {
+            reason: "PERMISSION_DENIED",
+            requiredPermission: "member:manage",
+          });
+          return true;
+        }
+        if (method === "GET" && !inviteRoute![1]) {
+          json(200, {
+            invitations: await invitations.list(actor),
+            emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
+          });
+          return true;
+        }
+        if (method === "POST" && inviteRoute![1]) {
+          const done = await invitations.revoke(actor, inviteRoute![1]);
+          if (!done) {
+            json(404, { reason: "NOT_FOUND" });
+            return true;
+          }
+          await audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action: "INVITATION_REVOKED",
+            subjectKind: "INVITATION",
+            subjectId: inviteRoute![1],
+            detail: {},
+            occurredAt: iso(),
+          });
+          json(200, { revoked: true });
+          return true;
+        }
+        if (method === "POST" && !inviteRoute![1]) {
+          if (verifiedEmailRequired && !view.user.emailVerified) {
+            json(403, {
+              reason: "EMAIL_NOT_VERIFIED",
+              recoverable: true,
+              nextAction: "CONFIRM_EMAIL",
+            });
+            return true;
+          }
+          // At most 20 invitations an hour per organization; a limiter fault means no invitation.
+          let allowed = false;
+          try {
+            allowed = (
+              await enforceRateLimit(limiter, {
+                bucket: "invite-org",
+                subject: m.organizationId,
+                limit: 20,
+                windowSeconds: 3600,
+                now: iso(),
+              })
+            ).allowed;
+          } catch {
+            allowed = false;
+          }
+          if (!allowed) {
+            json(
+              429,
+              { reason: "RATE_LIMITED", recoverable: true },
+              { "retry-after": "300" },
+            );
+            return true;
+          }
+          const [org] =
+            await sql`select display_name from organizations where id = ${m.organizationId}`;
+          const r = await invitations.create(
+            actor,
+            body,
+            String(org?.display_name ?? "your organization"),
+          );
+          if (!r.ok) {
+            json(
+              r.refusal === "ALREADY_MEMBER"
+                ? 409
+                : r.refusal === "NO_OUTBOX"
+                  ? 503
+                  : 400,
+              { reason: r.refusal, recoverable: true },
+            );
+            return true;
+          }
+          await audit.append({
+            organizationId: m.organizationId,
+            environment: m.environment,
+            actorKind: "MEMBER",
+            actorId: m.memberId,
+            action: "INVITATION_CREATED",
+            subjectKind: "INVITATION",
+            subjectId: r.invitationId,
+            // The address and the token are not written to the audit trail.
+            detail: { role: String((body as { role?: unknown }).role) },
+            occurredAt: iso(),
+          });
+          json(202, {
+            queued: true,
+            invitationId: r.invitationId,
+            expiresAt: r.expiresAt,
+            emailDelivery: options.emailSender ? "ENABLED" : "NOT_CONFIGURED",
+          });
+          return true;
+        }
+        json(405, { reason: "METHOD_NOT_ALLOWED" });
         return true;
       }
       // ---- Sign-ins: the person sees where they are signed in and can end the others.

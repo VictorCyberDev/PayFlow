@@ -56,3 +56,14 @@ Bearer-token routes (agents, member keys) are unaffected: they are not browser a
 2. Put `PAYFLOW_RESEND_API_KEY`, `PAYFLOW_EMAIL_FROM` and `PAYFLOW_EMAIL_FROM_VERIFIED=true` into the **payflow-public** project's protected environment through the Vercel dashboard (not the repository, not chat).
 3. Ensure `CRON_SECRET` is set so the scheduled `automation/run` drains the outbox, and that `PAYFLOW_M5_ORIGIN` is the https address of the app.
 4. After deployment, run one controlled test message to an address you own and confirm receipt. Until that is done the status is **delivery unproven**.
+
+## Invitations and organizations (B3, migration 062)
+
+- **Who can invite:** only a member the server lets manage members (`member:manage`: OWNER today). The inviter's own email must be confirmed when email delivery is configured. At most 20 invitations an hour per organization; if the limiter cannot answer, no invitation is made. An invitation can never grant OWNER (database check and schema).
+- **What an invitation is:** one row per (organization, address) while open; inviting again withdraws the earlier one in the same transaction and queues a new email (template `INVITE`, 7 days). The token is random, stored only as a digest, and carried in the URL fragment of the emailed link; the page removes it from the address bar and keeps it in memory only.
+- **Who can accept:** the signed-in account whose address **equals** the invited address, **and** that address must be confirmed. Every other case (unknown, used, withdrawn, expired, or someone else's link) is the same `410 INVALID_OR_EXPIRED`, so a wrong holder learns nothing; only the right address with an unconfirmed email is told to confirm. Acceptance is one transaction under a row lock: four simultaneous accepts make exactly one member.
+- **Preview:** `POST /v1/app/invitations/preview {token}` (public, Origin-checked, rate-limited) shows the organization name, the role and a masked address; nothing else.
+- **After joining:** the person belongs to two or more organizations. `GET /v1/app/organizations` lists them and `POST /v1/app/organizations/switch` re-binds the **current session** to one of the person's own memberships (it cannot reach anyone else's). The role in force is the role in the organization currently selected.
+- **Audit:** created / revoked / accepted are recorded with the role only; the address and the token are never written to the audit trail.
+- **Database:** `organization_invitations` is excluded from `payflow_readonly` entirely; finished invitations are immutable and none can be deleted.
+- **Not covered:** changing an existing member's role, removing a member, and transferring ownership are not built; a member cannot yet leave an organization. Invitation email delivery is as unproven as all email until the owner supplies a Resend key and verified sender.

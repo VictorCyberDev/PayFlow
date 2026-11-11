@@ -31,6 +31,7 @@ interface Loc {
 }
 interface Page {
   goto(u: string): Promise<unknown>;
+  reload(): Promise<unknown>;
   url(): string;
   getByLabel(n: string, o?: { exact?: boolean }): Loc;
   getByRole(r: string, o?: { name?: string | RegExp; level?: number }): Loc;
@@ -1587,6 +1588,100 @@ const chromePath = [
       await page.getByRole("heading", { name: "Sign in" }).waitFor();
       await ctx.close();
     }, 90_000);
+
+    it("invitations in a real browser: the owner invites from Settings, the guest follows the link signed out, signs in, is told to confirm the address, then joins and can switch", async () => {
+      const mk = async (email: string, name: string, org: string) =>
+        fetch(`${h.origin}/v1/app/signup`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: h.origin },
+          body: JSON.stringify({
+            email,
+            password: "a long enough passphrase",
+            displayName: name,
+            organizationName: org,
+          }),
+        });
+      await mk("boss@example.com", "Bea Boss", "Boss Ltd");
+      await mk("guest@example.com", "Gus Guest", "Guest Ltd");
+      await h.repo
+        .sql`update user_accounts set email_verified_at = now() where email = 'boss@example.com'`;
+      const owner = await open();
+      await owner.page.goto(`${h.origin}/workspace`);
+      await owner.page.getByLabel("Email").fill("boss@example.com");
+      await owner.page.getByLabel("Password").fill("a long enough passphrase");
+      await owner.page.getByRole("button", { name: "Sign in" }).click();
+      await owner.page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await owner.page.goto(`${h.origin}/workspace#/settings`);
+      await owner.page.getByRole("heading", { name: "People" }).waitFor();
+      expect(await owner.page.locator("main").innerText()).toContain(
+        "Email sending is not switched on",
+      );
+      expect(await axe(owner.page)).toEqual([]);
+      await owner.page
+        .getByLabel("Email address to invite")
+        .fill("guest@example.com");
+      await owner.page.getByLabel("Role").selectOption("APPROVER");
+      await owner.page.getByRole("button", { name: "Send invitation" }).click();
+      await owner.page
+        .getByText("guest@example.com · Approver · Waiting")
+        .waitFor();
+      const [msg] = await h.repo
+        .sql`select body from email_outbox where template = 'INVITE' order by created_at desc limit 1`;
+      const token = /token=([A-Za-z0-9_-]+)/u.exec(String(msg!.body))![1]!;
+
+      const guest = await open();
+      await guest.page.goto(`${h.origin}/workspace#/invite?token=${token}`);
+      await guest.page
+        .getByRole("heading", { name: "You are invited" })
+        .waitFor();
+      const card = await guest.page.locator("main, body").first().innerText();
+      expect(card).toContain("Boss Ltd as Approver");
+      expect(card).toContain("g***@");
+      expect(card).not.toContain("guest@example.com");
+      expect(guest.page.url()).not.toContain(token); // the secret leaves the address bar
+      expect(await axe(guest.page)).toEqual([]);
+      await guest.page.getByRole("link", { name: "Sign in" }).click();
+      await guest.page.getByLabel("Email").fill("guest@example.com");
+      await guest.page.getByLabel("Password").fill("a long enough passphrase");
+      await guest.page.getByRole("button", { name: "Sign in" }).click();
+      // signing in returns to the invitation
+      await guest.page
+        .getByRole("button", { name: "Accept invitation" })
+        .click();
+      await guest.page.getByText("Confirm your email address first").waitFor();
+      await h.repo
+        .sql`update user_accounts set email_verified_at = now() where email = 'guest@example.com'`;
+      await guest.page
+        .getByRole("button", { name: "Accept invitation" })
+        .click();
+      await guest.page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await guest.page.goto(`${h.origin}/workspace#/settings`);
+      await guest.page
+        .getByRole("heading", { name: "Your organizations" })
+        .waitFor();
+      expect(await guest.page.locator("main").innerText()).toContain(
+        "Boss Ltd · Approver · current",
+      );
+      expect(await axe(guest.page)).toEqual([]);
+      await guest.page
+        .getByRole("button", { name: "Switch to Guest Ltd" })
+        .click();
+      await guest.page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await guest.page.goto(`${h.origin}/workspace#/settings`);
+      await guest.page.getByText("Guest Ltd · Owner · current").waitFor();
+      // the link cannot be used twice
+      await guest.page.goto(`${h.origin}/workspace#/invite?token=${token}`);
+      await guest.page
+        .getByRole("heading", { name: "That invitation did not work" })
+        .waitFor();
+      // the owner sees it as joined
+      await owner.page.reload();
+      await owner.page
+        .getByText("guest@example.com · Approver · Joined")
+        .waitFor();
+      await owner.ctx.close();
+      await guest.ctx.close();
+    }, 120_000);
 
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
