@@ -104,7 +104,7 @@ export class LaunchRunService {
         area: String(s.area),
         state: String(s.state),
         refusal: (s.refusal as string | null) ?? null,
-        summary: s.summary ?? null,
+        summary: (s.summary as unknown) ?? null,
         attempts: Number(s.attempts),
       })),
       notice: LAUNCH_NOTICE,
