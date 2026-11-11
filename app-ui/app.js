@@ -4090,33 +4090,66 @@ async function recurringPage(id) {
               ),
               s.active ? row("Next check", when(s.nextCheck)) : null,
             ),
+            h("div", { class: "actions" }, [
+              h("button", {
+                type: "button",
+                text: s.active ? `Stop ${s.label}` : `Start ${s.label} again`,
+                onclick: async () => {
+                  const x = await api(
+                    `/v1/admin/org/missions/${id}/recurring/${s.scheduleId}/${s.active ? "stop" : "resume"}`,
+                    { method: "POST", body: {} },
+                  );
+                  if (!x.ok)
+                    return out.replaceChildren(
+                      notice(
+                        "bad",
+                        x.data?.reason === "MISSION_NOT_ACTIVE"
+                          ? "Only an active mission can check recurring items."
+                          : reasonText(x.data?.reason),
+                      ),
+                    );
+                  await recurringPage(id);
+                },
+              }),
+            ]),
             s.active
-              ? h("div", { class: "actions" }, [
-                  h("button", {
-                    type: "button",
-                    text: `Stop ${s.label}`,
-                    onclick: async () => {
-                      const x = await api(
-                        `/v1/admin/org/missions/${id}/recurring/${s.scheduleId}/stop`,
-                        { method: "POST", body: {} },
-                      );
-                      if (!x.ok)
-                        return out.replaceChildren(
-                          notice("bad", reasonText(x.data?.reason)),
-                        );
-                      await recurringPage(id);
-                    },
-                  }),
-                ])
-              : null,
+              ? null
+              : h("p", {
+                  class: "hint",
+                  text: "Starting it again checks from now on. The time it was stopped for is not caught up.",
+                }),
           ),
         ),
     form,
     h("h2", { text: "What was checked" }),
+    d.awaitingYouCount
+      ? notice(
+          "info",
+          `${d.awaitingYouCount} renewal${d.awaitingYouCount === 1 ? "" : "s"} ${d.awaitingYouCount === 1 ? "is" : "are"} waiting for your answer. Nothing is bought until you say so, and saying yes does not buy it either — it goes through the normal approval.`,
+        )
+      : null,
     d.checks.length === 0
       ? h("p", { class: "hint", text: "Nothing has come due yet." })
-      : d.checks.map((k) =>
-          h(
+      : d.checks.map((k) => {
+          const answer = async (how) => {
+            const x = await api(
+              `/v1/admin/org/recurring-checks/${k.checkId}/${how}`,
+              { method: "POST", body: {} },
+            );
+            if (!x.ok)
+              return out.replaceChildren(
+                notice(
+                  "bad",
+                  x.data?.reason === "ALREADY_DECIDED"
+                    ? "That renewal has already been answered."
+                    : x.data?.reason === "MISSION_NOT_ACTIVE"
+                      ? "Only an active mission can have its renewals answered."
+                      : reasonText(x.data?.reason),
+                ),
+              );
+            await recurringPage(id);
+          };
+          return h(
             "article",
             { class: "card" },
             h("h3", {
@@ -4124,8 +4157,33 @@ async function recurringPage(id) {
             }),
             h("p", { text: RECURRING_WORDS[k.outcome] ?? "Checked." }),
             h("p", { class: "hint", text: `For ${when(k.slot)}` }),
-          ),
-        ),
+            k.decision
+              ? h("p", {
+                  text:
+                    k.decision === "APPROVED"
+                      ? "You said yes to this one. It was not bought here; it goes through the normal approval."
+                      : "You said no to this one. Nothing was bought.",
+                })
+              : null,
+            k.awaitingYou
+              ? h(
+                  "div",
+                  { class: "actions" },
+                  h("button", {
+                    class: "primary",
+                    type: "button",
+                    text: "Yes, renew it",
+                    onclick: () => answer("approve"),
+                  }),
+                  h("button", {
+                    type: "button",
+                    text: "No, skip it",
+                    onclick: () => answer("decline"),
+                  }),
+                )
+              : null,
+          );
+        }),
   );
 }
 /** Proof: the append-only record of every change to this mission's budget. It is read from the ledger's history, not summarised. */
