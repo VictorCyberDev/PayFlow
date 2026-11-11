@@ -20,6 +20,14 @@ Two Vercel projects, on purpose:
 
 `node --import tsx scripts/env-contract.mjs names.txt` lists which **names** are missing (never values). Today, for `payflow-public`, it reports missing: `DATABASE_URL`, `PAYFLOW_M5_BOOTSTRAP_KEY`, and for enabled features `PAYFLOW_M6_SIGNING_KEY`, `CRON_SECRET`. Not required, contrary to older notes: `PAYFLOW_APP_ORIGINS` (it defaults to `PAYFLOW_M5_ORIGIN`, which is set) and `PAYFLOW_GATEWAY_ADMIN_TOKEN` for member routes (it gates operator routes only). The contract is checked against the real parser by `tests/env-contract.test.ts`.
 
+## Database state: verified by catalog fingerprint (2026-11-11)
+
+The earlier conclusion "the public database is at 001-023" was inferred from table names. It is now checked against the catalog: `docs/ops/schema-fingerprint-023.json` is produced by actually applying migrations 001-023 (028 skipped) to a scratch PostgreSQL and hashing every table (column names, types, nullability), index, trigger, function, constraint and enum (697 objects). `node --import tsx scripts/schema-fingerprint.mjs sql 23 compact` prints one read-only SELECT that returns only the relations that are missing, different or unexpected.
+
+Run read-only against `payflow-public-sandbox` (Neon project `withered-rice-68056451`): **every table, index, trigger, constraint and enum matches; the 9 functions matched after comments and whitespace are ignored** (the database was built by a tool that collapsed lines and removed comments; the logic is the same - first run without that normalisation reported only those 9 functions). Nothing was written. The tests (`tests/schema-fingerprint.test.ts`) prove the committed snapshot equals a fresh 001-023 build and that a dropped index, a changed column type, an extra table and a dropped trigger are each reported.
+
+What this does **not** establish: role grants (use `scripts/verify-runtime-role.mjs` after the roles exist), backups/restore capability (take a Neon snapshot before applying anything; not done), and that the migrator role is the intended one. Migrations 024-061 (028 skipped) remain unapplied, and applying them stays an owner-authorized step.
+
 ## Database
 
 - Target: Neon project `withered-rice-68056451` (`payflow-public-sandbox`), default branch. Application database only; the merchant environment is separate.
