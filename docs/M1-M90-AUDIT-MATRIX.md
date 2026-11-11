@@ -100,3 +100,31 @@ Generated from the repository's own records so that every row traces to a source
 | M88 | Federated verification                                 | PARTIAL                                                                                    | legacy M53 per earlier audit, not re-run                                                                                                                                                                              | Bind federation to durable trusted issuer registry, bounded network fetches and remote peer negative tests.                                                                                                                                                                                    |
 | M89 | External issuer interoperability                       | PARTIAL                                                                                    | legacy M54 per earlier audit, not re-run                                                                                                                                                                              | Commission independently controlled external issuer and verify signed assertions with issuer-bound keys/revocation.                                                                                                                                                                            |
 | M90 | Machine-to-machine Authority                           | PARTIAL                                                                                    | legacy M55 per earlier audit, not re-run                                                                                                                                                                              | Bind machine budgets/velocity to atomic durable execution accounting, not supplied counter values.                                                                                                                                                                                             |
+
+---
+
+## Verified qualifier added 2026-11-11 — reachability
+
+The rows above for the network and assurance milestones mostly read "legacy M*nn* per earlier audit, not re-run". That is an inherited claim. A forward-traceability scan (`scripts/orphan-scan.mjs`, recorded in `docs/execution/FORWARD-TRACEABILITY.md`) establishes something _measured_ about them, which qualifies every one of those rows:
+
+**Their code is imported by tests and by no shipping code. It is not reachable from the running product.**
+
+| Milestone                              | Module                                                                                                                              |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| M69 Org policy packs                   | `src/network/policy-packs.ts`                                                                                                       |
+| M70 ERP/AP connectors                  | `src/network/enterprise-connectors.ts` (the CSV **export** half _is_ wired, via `ledger-routes.ts` and a customer download control) |
+| M74 Privacy enforcement                | `src/network/privacy.ts`                                                                                                            |
+| M77 PSP integration readiness          | `src/network/pilots.ts`                                                                                                             |
+| M78 Verification economics             | `src/network/economics.ts`                                                                                                          |
+| M79 Platform-embedded Authority        | `src/network/embedded.ts`, `src/network/embedded-profiles.ts`                                                                       |
+| M80 Network abuse intelligence         | `src/network/abuse-intelligence.ts`                                                                                                 |
+| M81 Public schema                      | `src/network/public-authority.ts`                                                                                                   |
+| M85/M86 Multi-region, key transparency | `src/network/region.ts`, `src/network/transparency.ts`                                                                              |
+| M89 External issuer interoperability   | `src/network/directory.ts`                                                                                                          |
+| M65 Multi-currency / FX                | `src/missions/fx.ts`                                                                                                                |
+
+Why this matters more than the word "PARTIAL": a module with a passing unit test and no importer is not a milestone partly delivered. It is a milestone's parts, machined and left on the bench. The test suite cannot report it, because the test is itself the importer — which is precisely how `src/missions/fx.ts` came to be a complete, correct, tested, dead FX converter.
+
+So for these rows, read `PARTIAL` as **"built and tested in isolation; not wired into the product"**, and treat wiring as outstanding work rather than as a finishing touch. Three of the listed modules additionally depend on something external (a rate source for FX, an ERP for connectors, a PSP for pilots), which is blocker B-5 and is tracked in `docs/execution/EXTERNAL-BLOCKERS.md`.
+
+This qualifier does **not** re-verify the rows' functional claims. It states one measured property of them and nothing more.
