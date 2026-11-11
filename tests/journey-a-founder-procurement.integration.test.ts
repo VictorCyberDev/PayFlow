@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import { describe, expect, it } from "vitest";
 import { hostHarness } from "./helpers/host-harness.js";
 
@@ -85,9 +85,13 @@ const st = (minor: number) => ({ basis: "STATED" as const, minor });
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-    const ok = async (r: Response, expected: number) => {
+    /** Asserts the status (printing the body when it is not what we expected) and returns the body. */
+    const ok = async (
+      r: Response,
+      expected: number,
+    ): Promise<Record<string, any>> => {
       expect(r.status, await r.clone().text()).toBe(expected);
-      return (await r.json()) as any;
+      return (await r.json()) as Record<string, any>;
     };
     /** The agent pays with its own credential, over the wire shape the SDK sends. */
     const pay = (
