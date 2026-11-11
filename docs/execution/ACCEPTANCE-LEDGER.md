@@ -301,3 +301,34 @@ The test fetches it with no credential, no cookie and no header — exactly what
 ### Still not done
 
 Nothing monitors for a chain that stops verifying; detection happens when someone reads. And entries before this migration do not exist: the chain starts at the first key change after it, stated rather than backfilled, because backfilling a transparency log from current state would be inventing a history.
+
+## A-14 · Forward traceability, done properly: 23 modules the product never reaches
+
+The first version of the scan asked "does anything import this?". That is not the question. `verify-rest.ts` imports `public-verify.ts`, so `public-verify.ts` had an importer and looked live — while `verify-rest.ts` was itself reached by nothing but a test. **A cluster of dead modules importing one another reports as live.**
+
+The scan now walks the import graph from the roots the product actually enters through — entry points, plus any `src` module imported from outside `src` — and reports everything the walk never reaches.
+
+|                              |        |
+| ---------------------------- | ------ |
+| Files under `src/`           | 242    |
+| Unreachable from the product | **23** |
+
+Four were invisible to the has-an-importer check:
+
+| Module                      | Hidden by                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `public-verify.ts`          | `verify-rest.ts`, itself dead                                                                                 |
+| `federation.ts`             | `global-network.ts`, itself dead                                                                              |
+| `payment.ts`                | `service.ts`, itself dead                                                                                     |
+| `adversarial-projection.ts` | `demo-projection.ts` — **which I had parked an hour earlier**, so my own parking decision hid a second orphan |
+
+### Validated against reality in both directions
+
+A dead-code detector that flags live code is worse than no detector, because the first false positive teaches everyone to ignore it. So it was tested for false positives as deliberately as for true ones:
+
+- each of the four was traced by hand to confirm its only importers are dead modules and tests;
+- `org-views`, `plan-service`, `key-transparency` and `hosted-gateway` — all demonstrably live — were confirmed **absent** from the list.
+
+### Reported, not failed
+
+The build still fails only on a module nothing imports at all. Twenty-three findings needing per-module judgement would produce a gate people switch off, and a check that gets switched off protects nothing. The CI gate catches the _next_ orphan; this list is for a person to work through.

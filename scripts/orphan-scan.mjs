@@ -129,6 +129,41 @@ for (const f of srcFiles) {
     testOnly.push({ file: f, tests: i.test.length });
 }
 
+/**
+ * Direct reachability is not enough, and `verify-rest.ts` is why it is not. It imports `public-verify.ts`, so
+ * `public-verify.ts` has an importer and looks reachable — but `verify-rest.ts` is itself reached by nothing except a
+ * test. A cluster of modules that import one another, and which the product never enters, is dead code that a
+ * has-an-importer check reports as live.
+ *
+ * So: walk the import graph from the ROOTS the product actually enters through — the entry points, plus any src module
+ * imported from outside src (a script, the API, the hosting handler, a package) — and everything in src/ the walk
+ * never reaches is unreachable from the product, however many dead modules import it.
+ */
+const srcImports = new Map(srcFiles.map((f) => [f, []]));
+for (const [file, body] of text) {
+  if (!file.startsWith("src/")) continue;
+  for (const m of body.matchAll(IMPORT)) {
+    const target = resolveSpec(file, m[1] ?? m[2] ?? "");
+    if (target && srcImports.has(target) && target !== file)
+      srcImports.get(file).push(target);
+  }
+}
+const roots = srcFiles.filter(
+  (f) => ENTRY.some((r) => r.test(f)) || importersOf.get(f).other.length > 0,
+);
+const live = new Set();
+const queue = [...roots];
+while (queue.length) {
+  const f = queue.shift();
+  if (live.has(f)) continue;
+  live.add(f);
+  for (const next of srcImports.get(f) ?? [])
+    if (!live.has(next)) queue.push(next);
+}
+const unreachableFromProduct = srcFiles.filter(
+  (f) => !live.has(f) && !PARKED.has(f),
+);
+
 const out = [];
 out.push(`Scanned ${srcFiles.length} files under src/.`);
 if (unreachable.length) {
@@ -158,7 +193,17 @@ if (parked.length) {
   );
   for (const f of parked) out.push(`  ${f}`, `      ${PARKED.get(f)}`);
 }
-if (!unreachable.length && !testOnly.length) out.push("", "No orphans found.");
+if (unreachableFromProduct.length) {
+  out.push(
+    "",
+    `UNREACHABLE FROM THE PRODUCT \u2014 the import walk from every entry point never arrives here (${unreachableFromProduct.length}):`,
+    "  Reported, not failed: this set needs judgement per module, and a check that fails on all of it would be",
+    "  switched off rather than acted on. The build fails only on a module nothing imports at all.",
+  );
+  for (const f of unreachableFromProduct) out.push(`  ${f}`);
+}
+if (!unreachable.length && !testOnly.length && !unreachableFromProduct.length)
+  out.push("", "No orphans found.");
 console.log(out.join("\n"));
 // Fail only on the unambiguous case.
 process.exit(unreachable.length ? 1 : 0);

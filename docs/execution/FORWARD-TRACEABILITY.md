@@ -32,6 +32,27 @@ npm run orphan:scan
 
 runs in the `verify` job beside `format:check`, `lint`, `typecheck`, `secret:scan` and `embed:app:check`. A module that becomes unreachable from shipping code **and** tests now fails the build. Adding one deliberately means adding it to the parked list with a reason, which is the point: "nothing imports this" becomes either a build failure or a decision somebody wrote down.
 
+### Unreachable from the product (transitively): 23
+
+Direct reachability is not enough, and `verify-rest.ts` is why. It imports `public-verify.ts`, so `public-verify.ts` has an importer and looks live — but `verify-rest.ts` is itself reached by nothing except a test. **A cluster of modules that import one another, and which the product never enters, is dead code that a has-an-importer check reports as live.**
+
+So the scan now walks the import graph from the roots the product actually enters through — the entry points, plus any `src` module imported from outside `src` — and reports everything the walk never reaches. That is **23 modules, out of 242 under `src/`**: nearly one file in ten.
+
+Four of them are invisible to the direct check, which is the point of the change:
+
+| Module                          | Hidden by                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------- |
+| `src/network/public-verify.ts`  | `verify-rest.ts`, itself dead                                                         |
+| `src/network/federation.ts`     | `global-network.ts`, itself dead                                                      |
+| `src/payment.ts`                | `service.ts`, itself dead                                                             |
+| `src/adversarial-projection.ts` | `demo-projection.ts` — which I had just **parked**, so parking one module hid another |
+
+That last one is worth stating plainly: my own parking decision concealed a second orphan from the direct check. The transitive walk is what surfaced it.
+
+**Validated in both directions before being believed.** Each of the four was checked by hand (`payment.ts` is imported only by `service.ts` and a test; `federation.ts` only by `global-network.ts` and tests; `adversarial-projection.ts` only by `demo-projection.ts` and tests), and four known-live modules — `org-views`, `plan-service`, `key-transparency`, `hosted-gateway` — were confirmed **absent** from the list. A dead-code detector that flags live code is worse than none, so it was tested for false positives as deliberately as for true ones.
+
+**Reported, not failed.** The build still fails only on a module nothing imports at all. Twenty-three findings that need judgement per module would make a gate people switch off rather than act on, and a check that gets switched off protects nothing.
+
 ### Test-only: imported by tests, by no shipping code (22 on the first scan, 19 now)
 
 This is the finding that changes how the later milestones should be read.
