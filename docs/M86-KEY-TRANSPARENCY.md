@@ -60,9 +60,10 @@ and, when it does not verify:
 3. **a tampered entry is detected, and so is a removed one, and so is a reordered one** — the database refuses all three, so detection is checked against the verifier directly, which is what a reader would compute if a stored entry had been changed by any route at all
 4. one chain carries every issuer, interleaved in the order the changes actually happened, each entry still naming its own issuer so a reader can filter without trusting the filter
 5. private key material never reaches the log — the registry refuses a JWK containing `d`, and what is stored is a 64-character digest, not a key
+6. **the log is public**: fetched with no credential, no cookie and no header — exactly what an outside verifier has — the chain arrives whole and `verifyTransparencyLog` passes **on the reader's side**, not merely on ours; and the public document contains no `"d":` field and none of the key material, only digests
 
 ## Still not done
 
-- The log has no public HTTP surface yet. It is readable through `readKeyTransparencyLog`, and publishing it is the obvious next step — a transparency log nobody outside can fetch is only half the property.
+- ~~No public HTTP surface.~~ **Done:** `GET /v1/transparency/keys`, unauthenticated, like `/v1/keys`. A transparency log only its issuer can read proves nothing to anyone who might doubt the issuer, so publishing it was not an extra — it was the missing half of the property. It fails closed like the key document: if the log cannot be read it serves `TRANSPARENCY_LOG_UNAVAILABLE` rather than a possibly-incomplete log, because a short log invites the reader to conclude a key change never happened.
 - No monitor watches for a chain that stops verifying. Detection currently happens when someone reads.
 - Entries before this migration do not exist: the chain starts from the first key change after it. That is stated rather than backfilled, because backfilling a transparency log from current state would be inventing a history.

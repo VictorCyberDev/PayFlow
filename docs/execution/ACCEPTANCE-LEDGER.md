@@ -290,6 +290,14 @@ Every key change is appended **in the same transaction as the change itself**, u
 
 That mutant also exposed a weakness in my own test: the "removed entry" check only bites when a **middle** entry is removed, and with one entry fewer it silently became a check on a valid one-element chain. The premise is now asserted (`entries` has length 3) so the test cannot go vacuous later. A mutation run that only confirms the code is a wasted run; this one corrected the test.
 
+### Then finished, rather than left on the list
+
+The first version of this entry said the log had no public HTTP surface, and that a transparency log nobody outside can fetch is half the property. Leaving that on a "still not done" list would have been describing the gap instead of closing it, so it is closed: **`GET /v1/transparency/keys`**, unauthenticated, like `/v1/keys`.
+
+The test fetches it with no credential, no cookie and no header — exactly what an outside verifier has — and checks that `verifyTransparencyLog` passes **on the reader's side**, not merely on ours. It also asserts the public document carries no `"d":` field and none of the key material, only 64-character digests. It fails closed like the key document: `TRANSPARENCY_LOG_UNAVAILABLE` rather than a possibly-incomplete log, because a short log invites the reader to conclude a key change never happened.
+
+**6 tests, exit 0.**
+
 ### Still not done
 
-The log has no public HTTP surface — a transparency log nobody outside can fetch is half the property. Nothing monitors for a chain that stops verifying. And entries before this migration do not exist: the chain starts at the first key change after it, stated rather than backfilled, because backfilling a transparency log from current state would be inventing a history.
+Nothing monitors for a chain that stops verifying; detection happens when someone reads. And entries before this migration do not exist: the chain starts at the first key change after it, stated rather than backfilled, because backfilling a transparency log from current state would be inventing a history.

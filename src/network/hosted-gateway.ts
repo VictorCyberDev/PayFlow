@@ -35,6 +35,7 @@ import {
   LaunchRunService,
 } from "../missions/launch-run-service.js";
 import { createLaunchRunRoutes } from "./launch-run-routes.js";
+import { readKeyTransparencyLog } from "./key-transparency.js";
 import { PLAN_RUN_KIND, PlanRunService } from "../missions/plan-run-service.js";
 import { createPlanRunRoutes } from "./plan-run-routes.js";
 import { sandboxServiceSource } from "../missions/service-market-sources.js";
@@ -609,6 +610,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         keys: await registry.published(options.organizationId),
       };
     },
+    // Public, like /v1/keys: a transparency log only its issuer can read proves nothing to anyone who doubts it.
+    keyTransparencyLog: () => readKeyTransparencyLog(sql),
     authenticate: (authorization) => store.authenticate(authorization, iso()),
     readProof: (access, id) => proofs.read(access, id, iso()),
   });

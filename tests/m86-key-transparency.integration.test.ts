@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call */
 import { describe, expect, it, beforeEach } from "vitest";
 import { hostHarness } from "./helpers/host-harness.js";
 import { SigningKeyRegistry } from "../src/network/signing-keys.js";
@@ -114,6 +114,34 @@ const jwk = (x: string) => ({ kty: "OKP", crv: "Ed25519", x });
     expect(log.entries[1]!.previousHash).toBe(log.entries[0]!.entryHash);
     // Each entry still names its own issuer, so a reader can filter without trusting the filter.
     expect(log.entries.filter((e) => e.issuer === other)).toHaveLength(1);
+  });
+
+  it("the log is public: anyone can fetch it, unauthenticated, and check the chain themselves", async () => {
+    await registry.activate(ISSUER, "k-one", jwk("BBB"), NOW);
+    await registry.activate(ISSUER, "k-two", jwk("CCC"), NOW);
+
+    // No credential, no cookie, no header: exactly what an outside verifier has.
+    const r = await fetch(h.origin + "/v1/transparency/keys");
+    expect(r.status, await r.clone().text()).toBe(200);
+    const doc = await r.json();
+
+    // The chain arrives whole and verifies on the reader's side, not merely on ours.
+    expect(doc.intact).toBe(true);
+    expect(verifyTransparencyLog(doc.entries)).toBe(true);
+    expect(doc.entries.map((e: any) => `${e.keyId}:${e.status}`)).toEqual([
+      "k-one:ACTIVE",
+      "k-one:RETIRED",
+      "k-two:ACTIVE",
+    ]);
+    expect(doc.notice).toMatch(/the chain is the evidence/u);
+
+    // What a public document must NOT contain: any key material, and any private JWK field.
+    const body = JSON.stringify(doc);
+    expect(body).not.toMatch(/"d"\s*:/u);
+    expect(body).not.toMatch(/BBB|CCC/u);
+    // Only digests identify the keys.
+    for (const e of doc.entries)
+      expect(e.publicKeyDigest).toMatch(/^[a-f0-9]{64}$/u);
   });
 
   it("private key material never reaches the log", async () => {

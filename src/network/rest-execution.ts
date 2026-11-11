@@ -13,6 +13,11 @@ export interface ExecutingRestDependencies {
   ): Promise<object | "NOT_ISSUABLE" | null>;
   /** Public verification keys. Public by design: they verify, they cannot sign. */
   publicKeys?(): object | Promise<object>;
+  /**
+   * The key transparency log. Public by design, and for the same reason the keys are: a log only an issuer can read
+   * proves nothing to anyone who might doubt the issuer. It contains digests and public key ids, never key material.
+   */
+  keyTransparencyLog?(): object | Promise<object>;
   readProof?(
     access: ExternalAgentAccess,
     proposalId: string,
@@ -63,6 +68,29 @@ export function createExecutingRestHandler(
           recoverable: false,
           humanSummary:
             "Verification keys are unavailable. No Proof can be trusted until this is fixed.",
+          nextAction: "CONTACT_THE_OPERATOR",
+        });
+      }
+    }
+    if (
+      request.method === "GET" &&
+      request.path === "/v1/transparency/keys" &&
+      deps.keyTransparencyLog
+    ) {
+      try {
+        return json(200, requestId, {
+          requestId,
+          ...(await deps.keyTransparencyLog()),
+        });
+      } catch {
+        // Fail closed, like the key document: saying nothing is honest, while serving a log that may be
+        // incomplete invites someone to conclude a key change never happened.
+        return json(500, requestId, {
+          requestId,
+          reason: "TRANSPARENCY_LOG_UNAVAILABLE",
+          recoverable: false,
+          humanSummary:
+            "The key transparency log cannot be read, so no claim about which key was valid when can be checked right now.",
           nextAction: "CONTACT_THE_OPERATOR",
         });
       }
