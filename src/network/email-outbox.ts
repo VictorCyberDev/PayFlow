@@ -44,7 +44,7 @@ export class EmailOutbox {
   async enqueue(
     m: {
       to: string;
-      template: "VERIFY_EMAIL" | "RESET_PASSWORD";
+      template: "VERIFY_EMAIL" | "RESET_PASSWORD" | "INVITE";
       subject: string;
       body: string;
       /** SHA-256 hex digest of the token the body carries (never the token). */
