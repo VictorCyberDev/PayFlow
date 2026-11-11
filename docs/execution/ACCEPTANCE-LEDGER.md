@@ -242,3 +242,23 @@ Account closure now declares each table it deletes from with the data class that
 | `deletionDecision` always allows | **killed by three tests independently** — the policy assertion, the guard-bites test, and the cross-check that `deletionDecision` and `DEFAULT_RETENTION_RULES` never disagree, which named `IMMUTABLE_FINANCIAL_EVIDENCE` exactly |
 
 `privacy.ts` is no longer test-only; the orphan count fell from 21 to 20.
+
+## A-12 · The whole suite, once, with every slice in place
+
+```
+TEST_DATABASE_URL=... npm test
+```
+
+|            | Session baseline (`5cb1461`) | After this session's work   |
+| ---------- | ---------------------------- | --------------------------- |
+| Test files | 166 passed, 6 skipped        | **171 passed, 5 skipped**   |
+| Tests      | 2750 passed, 31 skipped      | **2798 passed, 12 skipped** |
+| Exit       | 0                            | **0**                       |
+
+**+5 files, +48 tests, zero regressions.** Everything built this session is in place: the M55 executor and its two screens, M57's answer and resume, M58's planner fix, M59's usage view (now going through `buildUsageInvoice`), and M74's retention guard.
+
+### A method note on how this number was obtained
+
+Three earlier attempts at this run were discarded rather than reported, and the reason matters more than the number. Twice, `npm run embed:app` was run **while the suite was executing**; the browser tests read the embedded asset, so regenerating it mid-run changed the code under test. Both runs reported a single browser failure that did not reproduce on a clean run. A fourth was killed because source still needed changing.
+
+A suite result is only evidence about a tree that stopped changing before it started. All source work now completes before verification begins, and that constraint is written into `RECOVERY-CHECKPOINT.md` so the next session does not rediscover it.
