@@ -1707,6 +1707,64 @@ const chromePath = [
       await guest.ctx.close();
     }, 120_000);
 
+    it("your data in a real browser: download needs the right password, closing needs the typed confirmation, and a closed account cannot sign in", async () => {
+      await fetch(`${h.origin}/v1/app/signup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "leaver@example.com",
+          password: "a long enough passphrase",
+          displayName: "Lee Aver",
+          organizationName: "Solo Ltd",
+        }),
+      });
+      const { ctx, page } = await open();
+      await page.goto(`${h.origin}/workspace`);
+      await page.getByLabel("Email").fill("leaver@example.com");
+      await page.getByLabel("Password").fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("heading", { name: /Welcome/u }).waitFor();
+      await page.goto(`${h.origin}/workspace#/settings`);
+      await page.getByRole("heading", { name: "Your data" }).waitFor();
+      expect(await axe(page)).toEqual([]);
+      await page
+        .getByLabel("Password to download your data")
+        .fill("not my password");
+      await page.getByRole("button", { name: "Download my data" }).click();
+      await page.getByText("That password is not right.").waitFor();
+      await page
+        .getByLabel("Password to download your data")
+        .fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Download my data" }).click();
+      await page.getByText("Your data was downloaded.").waitFor();
+      // closing: the typed confirmation is required
+      await page
+        .getByLabel("Password to close the account")
+        .fill("a long enough passphrase");
+      await page.getByRole("button", { name: "Close my account" }).click();
+      await page
+        .getByText("Type CLOSE MY ACCOUNT exactly to confirm.")
+        .waitFor();
+      await page
+        .getByLabel("Password to close the account")
+        .fill("a long enough passphrase");
+      await page
+        .getByLabel("Type CLOSE MY ACCOUNT to confirm")
+        .fill("CLOSE MY ACCOUNT");
+      await page.getByRole("button", { name: "Close my account" }).click();
+      await page.getByRole("heading", { name: "Sign in" }).waitFor();
+      const again = await fetch(`${h.origin}/v1/app/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: h.origin },
+        body: JSON.stringify({
+          email: "leaver@example.com",
+          password: "a long enough passphrase",
+        }),
+      });
+      expect(again.status).toBe(401);
+      await ctx.close();
+    }, 90_000);
+
     it("hostile text from the server is shown as text and never runs", async () => {
       const { ctx, page } = await open();
       await page.goto(`${h.origin}/workspace`);

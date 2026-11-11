@@ -23,6 +23,7 @@ import {
 import { createRecurringRoutes } from "./recurring-routes.js";
 import { EmailOutbox, type EmailSender } from "./email-outbox.js";
 import { InvitationService } from "./invitations.js";
+import { AccountDataService } from "./account-data.js";
 import { QuorumService } from "../missions/quorum-service.js";
 import { createQuorumRoutes } from "./quorum-routes.js";
 import { createAutomationRoutes } from "./automation-routes.js";
@@ -529,6 +530,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     outbox: emailOutbox,
     ...(options.appOrigins?.[0] ? { appBaseUrl: options.appOrigins[0] } : {}),
   });
+  const accountData = new AccountDataService({ sql, now: iso });
   const secureCookies = options.secureCookies ?? true;
   const alerts = new AlertEngine(sql);
   // The active key is registered once; older keys stay published so historical Proof still
@@ -3165,6 +3167,106 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
           return true;
         }
         json(405, { reason: "METHOD_NOT_ALLOWED" });
+        return true;
+      }
+      // ---- Your data (B5): export it or close the account. Both ask for the password again.
+      if (
+        path === "/v1/app/account/export" ||
+        path === "/v1/app/account/close"
+      ) {
+        const view = sessionTokenIn
+          ? await userAuth.authenticate(sessionTokenIn)
+          : null;
+        if (!view || !sessionTokenIn) {
+          json(401, { reason: "NOT_SIGNED_IN", recoverable: true });
+          return true;
+        }
+        if (method !== "POST") {
+          json(405, { reason: "METHOD_NOT_ALLOWED" });
+          return true;
+        }
+        // Password guessing through these routes counts like password guessing at sign-in: a small bound per account.
+        let allowed = false;
+        try {
+          allowed = (
+            await enforceRateLimit(limiter, {
+              bucket: "account-data",
+              subject: view.user.userId,
+              limit: 5,
+              windowSeconds: 900,
+              now: iso(),
+            })
+          ).allowed;
+        } catch {
+          allowed = false;
+        }
+        if (!allowed) {
+          json(
+            429,
+            { reason: "RATE_LIMITED", recoverable: true },
+            { "retry-after": "300" },
+          );
+          return true;
+        }
+        const b = (body ?? {}) as { password?: unknown; confirm?: unknown };
+        if (path === "/v1/app/account/export") {
+          const r = await accountData.exportData(view.user.userId, b.password);
+          if (!r.ok) {
+            json(403, { reason: r.refusal, recoverable: true });
+            return true;
+          }
+          await audit.append({
+            organizationId: view.member.organizationId,
+            environment: view.member.environment,
+            actorKind: "MEMBER",
+            actorId: view.member.memberId,
+            action: "ACCOUNT_DATA_EXPORTED",
+            subjectKind: "USER",
+            subjectId: view.user.userId,
+            detail: {},
+            occurredAt: iso(),
+          });
+          json(200, r.data, {
+            "content-disposition":
+              'attachment; filename="payflow-my-data.json"',
+          });
+          return true;
+        }
+        if (b.confirm !== "CLOSE MY ACCOUNT") {
+          json(400, {
+            reason: "CONFIRMATION_REQUIRED",
+            hint: 'Send confirm: "CLOSE MY ACCOUNT".',
+          });
+          return true;
+        }
+        const r = await accountData.closeAccount(view.user.userId, b.password);
+        if (!r.ok) {
+          json(r.refusal === "WRONG_PASSWORD" ? 403 : 409, {
+            reason: r.refusal,
+            ...(r.organizations ? { organizations: r.organizations } : {}),
+            recoverable: true,
+          });
+          return true;
+        }
+        await audit.append({
+          organizationId: view.member.organizationId,
+          environment: view.member.environment,
+          actorKind: "MEMBER",
+          actorId: view.member.memberId,
+          action: "ACCOUNT_CLOSED",
+          subjectKind: "USER",
+          subjectId: view.user.userId,
+          detail: {
+            organizationsLeft: r.organizationsLeft,
+            organizationsOrphaned: r.organizationsOrphaned,
+          },
+          occurredAt: iso(),
+        });
+        json(
+          200,
+          { closed: true, ...r },
+          { "set-cookie": clearedSessionCookie(secureCookies) },
+        );
         return true;
       }
       // ---- Members (B4): see who is in the organization, change a role, remove someone, or leave.
