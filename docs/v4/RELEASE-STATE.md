@@ -25,4 +25,9 @@
 
 1. **Merge.** CI must be green on the exact head first.
 2. **Deployment protection (E-1).** `payflow-public` is set to `ssoProtection: all`, so _every_ address including `payflow-public.vercel.app` answers 302 to a Vercel login. Until that is changed, no judge, founder or customer can open this work. The sibling `payflow` project uses `all_except_custom_domains`, which is why `payflow-one-kappa.vercel.app` serves anonymously. This is a one-field settings change and it makes a site public, so it was not made here.
-3. **Which project is the product.** Two projects build this repository. `site.ts` currently points canonical metadata at `payflow-one-kappa.vercel.app`. That should be settled before anything is marketed.
+3. **Which project is the product.** Two projects build this repository, and they do **not** build the same thing:
+
+   - `payflow` builds from the repository root, uses the root `vercel.json`, and serves `payflow-one-kappa.vercel.app` — the address the public can actually open, and the one `site.ts` already names as canonical. **The V4 work lands here.**
+   - `payflow-public` builds from `hosting/m6`. That config rewrites `/api/(.*)` to the M6 acceptance host, so no root-level function can ever be reached on it, and that host currently answers `503 UNAVAILABLE` because its own configuration is missing.
+
+   So "deploy to `payflow-public`" and "ship the product" are not the same action. This should be settled before anything is marketed.
