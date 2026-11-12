@@ -1,0 +1,754 @@
+/*
+ * PayFlow V4 — the Flow consumer design system.
+ *
+ * Scoped under .flow so the V4 consumer surfaces (/, /try/, /partner/) can carry this identity while the existing console
+ * and marketing surfaces keep theirs until they are migrated. That boundary is deliberate and documented in
+ * docs/v4/BRAND-FLOW.md; it is not two products left running by accident.
+ *
+ * Fonts come from globals.css, which already self-hosts them, so the CSP stays 'self' and nothing new is downloaded.
+ */
+
+.flow {
+  /* Palette. Contrast ratios against --ivory / --ink are computed in docs/v4/BRAND-FLOW.md and asserted in tests. */
+  --blue: #2457ff;
+  --blue-deep: #1739b8;
+  --coral: #ff7049;
+  --alert: #c43c17; /* the text-safe coral; plain --coral is 2.4:1 and is graphics only */
+  --lime: #d5f779;
+  --ivory: #faf8f2;
+  --ink: #111a32;
+
+  --bg: var(--ivory);
+  --panel: #ffffff;
+  --text: var(--ink);
+  --text-2: #44506e;
+  --text-3: #5d6a89;
+  --line: rgba(17, 26, 50, 0.14);
+  --line-strong: rgba(17, 26, 50, 0.28);
+  --accent: var(--blue);
+  --accent-text: #ffffff;
+  --wash: rgba(36, 87, 255, 0.07);
+
+  /* Motion grammar. Named durations bound to state, per docs/v4/WILLIE-EXPERIENCE-TRANSFER.md §2. */
+  --t-settle: 220ms;
+  --t-move: 320ms;
+  --t-arrive: 460ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+  --r: 14px;
+  --r-s: 10px;
+  --gut: 16px;
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (prefers-color-scheme: dark) {
+  .flow {
+    --bg: #0b1222;
+    --panel: #141d33;
+    --text: #f4f3ee;
+    --text-2: #b9c2d8;
+    --text-3: #9aa5c0;
+    --line: rgba(244, 243, 238, 0.16);
+    --line-strong: rgba(244, 243, 238, 0.32);
+    --accent: #7d9bff;
+    --accent-text: #0b1222;
+    --alert: #ff9472;
+    --wash: rgba(125, 155, 255, 0.12);
+    color-scheme: dark;
+  }
+}
+
+.flow *,
+.flow *::before,
+.flow *::after {
+  box-sizing: border-box;
+}
+.flow :focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---------------------------------------------------------------------- type */
+.flow h1,
+.flow h2,
+.flow h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+.flow h1 {
+  font-size: clamp(2.4rem, 8.5vw, 4.6rem);
+  letter-spacing: -0.035em;
+}
+.flow h2 {
+  font-size: clamp(1.6rem, 4.6vw, 2.5rem);
+}
+.flow h3 {
+  font-size: clamp(1.12rem, 2.6vw, 1.35rem);
+  letter-spacing: -0.012em;
+}
+.flow p {
+  margin: 0;
+  text-wrap: pretty;
+}
+.flow .lede {
+  font-size: clamp(1.06rem, 2.6vw, 1.3rem);
+  color: var(--text-2);
+  max-width: 34em;
+}
+.flow .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0;
+}
+.flow .mono {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+
+/* ------------------------------------------------------------------- layout */
+.flow__main {
+  flex: 1;
+}
+.flow .wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-inline: var(--gut);
+}
+.flow .band {
+  padding-block: clamp(44px, 9vw, 92px);
+}
+.flow .band + .band {
+  border-top: 1px solid var(--line);
+}
+.flow .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: flex-start;
+}
+.flow .grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) {
+  .flow .grid--2 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .flow .grid--3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ------------------------------------------------------------------ controls */
+.flow .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 26px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform var(--t-settle) var(--ease),
+    background var(--t-settle) var(--ease);
+}
+.flow .btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: var(--blue-deep);
+}
+@media (prefers-color-scheme: dark) {
+  .flow .btn:hover:not(:disabled) {
+    background: #9db4ff;
+  }
+}
+.flow .btn:disabled {
+  background: var(--line);
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+.flow .btn--ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+.flow .btn--ghost:hover:not(:disabled) {
+  background: var(--wash);
+}
+.flow .btn--small {
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 0.94rem;
+}
+.flow .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.flow .field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.flow .field label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.flow textarea,
+.flow input[type="text"],
+.flow input[type="number"],
+.flow select {
+  width: 100%;
+  min-height: 52px;
+  padding: 14px 16px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+.flow textarea {
+  min-height: 128px;
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------- cards */
+.flow .card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+a.card {
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color var(--t-settle) var(--ease),
+    transform var(--t-settle) var(--ease);
+}
+a.card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+a.card h3 {
+  color: var(--text);
+}
+a.card .card__go {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.flow .card h3 {
+  font-family: var(--font-ui);
+  font-weight: 650;
+}
+.flow .card p {
+  color: var(--text-2);
+  font-size: 0.97rem;
+}
+.flow .card--decision {
+  border-left: 4px solid var(--coral);
+}
+.flow .card--done {
+  border-left: 4px solid var(--blue);
+}
+
+/* --------------------------------------------------- evidence class chips */
+.flow .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: transparent;
+}
+.flow .chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.flow .chip--simulated {
+  color: var(--alert);
+  border-color: currentColor;
+}
+.flow .chip--proposed {
+  color: var(--accent);
+  border-color: currentColor;
+}
+.flow .chip--observed {
+  color: var(--text-2);
+}
+.flow .chip--decision {
+  color: var(--alert);
+  border-color: currentColor;
+}
+
+.flow .banner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line-strong);
+  background: var(--wash);
+  font-size: 0.95rem;
+  color: var(--text-2);
+}
+.flow .banner strong {
+  color: var(--text);
+}
+.flow .banner--sim {
+  border-color: var(--alert);
+  background: color-mix(in srgb, var(--alert) 9%, transparent);
+}
+
+/* ---------------------------------------------------------- the Flow object */
+/*
+ * One line that reads as progress. Every state is legible from its static form and its label alone; motion only makes the
+ * transition readable, and reduced motion removes all of it without removing meaning.
+ */
+.flow-object {
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  overflow: visible;
+}
+.flow-object__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 520;
+  stroke-dashoffset: 0;
+  transition:
+    stroke var(--t-move) var(--ease),
+    stroke-width var(--t-move) var(--ease),
+    stroke-dashoffset var(--t-arrive) var(--ease);
+}
+.flow-object__node {
+  fill: var(--accent);
+  transition:
+    fill var(--t-move) var(--ease),
+    r var(--t-arrive) var(--ease);
+}
+.flow-object__halo {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  opacity: 0;
+  transition: opacity var(--t-move) var(--ease);
+}
+
+/* ready — a thin, complete line, at rest */
+.flow-object[data-state="ready"] .flow-object__line {
+  stroke-width: 2;
+  opacity: 0.6;
+}
+/* listening / planning / searching / comparing / negotiating — the line is drawing itself */
+.flow-object[data-state="listening"] .flow-object__line,
+.flow-object[data-state="planning"] .flow-object__line,
+.flow-object[data-state="searching"] .flow-object__line,
+.flow-object[data-state="comparing"] .flow-object__line,
+.flow-object[data-state="negotiating"] .flow-object__line,
+.flow-object[data-state="executing"] .flow-object__line {
+  animation: flow-draw 2.4s var(--ease) infinite;
+}
+.flow-object[data-state="listening"] .flow-object__halo,
+.flow-object[data-state="planning"] .flow-object__halo,
+.flow-object[data-state="searching"] .flow-object__halo {
+  opacity: 0.45;
+  animation: flow-pulse 2.4s var(--ease) infinite;
+}
+/* deciding — the line STOPS. This is the state that must read instantly, so it uses the text-safe red (4.94:1 on ivory,
+   8.66:1 on the dark background) rather than plain coral, which is 2.58:1 and fails WCAG 1.4.11 for a meaningful graphic. */
+.flow-object[data-state="deciding"] .flow-object__line {
+  stroke: var(--alert);
+  stroke-width: 4;
+  animation: none;
+}
+.flow-object[data-state="deciding"] .flow-object__node {
+  fill: var(--alert);
+}
+/* confirmed — thick, settled, complete */
+.flow-object[data-state="confirmed"] .flow-object__line {
+  stroke-width: 5;
+  animation: none;
+}
+/* paused */
+.flow-object[data-state="paused"] .flow-object__line {
+  stroke: var(--text-3);
+  stroke-width: 2;
+  opacity: 0.5;
+  animation: none;
+}
+/* unverified — the line is broken, because the truth is not known */
+.flow-object[data-state="unverified"] .flow-object__line {
+  stroke: var(--text-3);
+  stroke-dasharray: 10 12;
+  animation: none;
+}
+.flow-object[data-state="unverified"] .flow-object__node {
+  fill: var(--text-3);
+}
+
+@keyframes flow-draw {
+  0% {
+    stroke-dashoffset: 520;
+  }
+  60%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes flow-pulse {
+  0%,
+  100% {
+    opacity: 0.18;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ------------------------------------------------------------- chrome */
+.flow__bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding-inline: var(--gut);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.flow__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 1.12rem;
+  letter-spacing: -0.02em;
+  margin-right: auto;
+  min-width: 0;
+}
+.flow__nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.flow__nav a {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 550;
+}
+.flow__nav a:hover,
+.flow__nav a[aria-current="page"] {
+  background: var(--wash);
+  color: var(--text);
+}
+@media (max-width: 420px) {
+  .flow__nav a {
+    padding: 0 6px;
+    font-size: 0.85rem;
+  }
+  .flow__brand {
+    font-size: 1rem;
+    gap: 7px;
+  }
+}
+.flow__nav .flow__nav-more {
+  display: none;
+}
+@media (min-width: 640px) {
+  .flow__nav .flow__nav-more {
+    display: inline-flex;
+  }
+}
+.flow__foot {
+  border-top: 1px solid var(--line);
+  padding-block: 32px;
+  color: var(--text-3);
+  font-size: 0.9rem;
+}
+.flow__foot nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 12px;
+}
+.flow__foot a {
+  color: var(--text-2);
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+}
+.flow .skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.flow .skip-link:focus {
+  left: var(--gut);
+  top: 8px;
+  z-index: 50;
+  padding: 10px 14px;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: var(--r-s);
+}
+
+/* ----------------------------------------------------------------- hero */
+.flow__hero {
+  display: grid;
+  gap: 28px;
+  align-items: center;
+  padding-block: clamp(40px, 8vw, 80px);
+}
+@media (min-width: 900px) {
+  .flow__hero {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 48px;
+  }
+}
+.flow__hero h1 .quiet {
+  display: block;
+  color: var(--text-3);
+}
+
+.flow .steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+  counter-reset: step;
+}
+.flow .steps li {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.flow .steps li::before {
+  counter-increment: step;
+  content: counter(step);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  color: var(--text-3);
+}
+.flow .steps strong {
+  display: block;
+}
+.flow .steps span {
+  color: var(--text-2);
+  font-size: 0.97rem;
+}
+
+/* ------------------------------------------------------- conversation */
+.flow .thread {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.flow .turn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 44em;
+}
+.flow .turn--founder {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.flow .turn__body {
+  padding: 14px 18px;
+  border-radius: var(--r);
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.flow .turn--founder .turn__body {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: transparent;
+}
+.flow .turn__who {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.flow .ledger {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--line);
+}
+.flow .ledger__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 13px 16px;
+  background: var(--panel);
+}
+.flow .ledger__row dt {
+  color: var(--text-2);
+  font-size: 0.95rem;
+  margin: 0;
+}
+.flow .ledger__row dd {
+  margin: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.flow .ledger__row--total dd {
+  font-size: 1.15rem;
+}
+
+#demo-stage {
+  scroll-margin-top: 76px;
+}
+.flow .quiet-note {
+  color: var(--text-3);
+  font-size: 0.88rem;
+  max-width: 44em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow *,
+  .flow *::before,
+  .flow *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .flow .btn:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* The demo's hero is an orientation strip, not a billboard: every step must be reachable without a long scroll. */
+.flow .flow__hero--demo {
+  padding-block: clamp(20px, 4vw, 34px);
+}
+.flow .flow__hero--demo h1 {
+  font-size: clamp(1.9rem, 5.5vw, 3rem);
+}
+.flow .flow__hero--demo .flow-object {
+  max-width: 400px;
+}
+
+/* Product imagery. A listing without a picture is a listing nobody reads, so the slot is reserved either way. */
+.flow .product__image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  background: var(--wash);
+  border-radius: var(--r-s);
+}
+.flow .product__image--none {
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+}
+.flow .product__image--none::after {
+  content: "No photo";
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.flow .product__was {
+  color: var(--text-3);
+  font-weight: 400;
+  font-size: 0.86em;
+  text-decoration: line-through;
+}
+.flow .text-link {
+  color: inherit;
+}
+
+/* A claim in the copy must correspond to a mark on the screen: the cheapest row and the monetizable row are both labelled. */
+.flow .offer__tag {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  vertical-align: 1px;
+}
+.flow .offer__tag--best {
+  color: var(--accent);
+  border-color: currentColor;
+}

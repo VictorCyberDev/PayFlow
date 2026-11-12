@@ -5,6 +5,7 @@ import "./commercial.css";
 import { Surfaces } from "./ui/surfaces";
 import "./company.css";
 import "./missions.css";
+import "./flow.css";
 import { BRAND } from "../lib/brand";
 
 export const metadata: Metadata = {
@@ -12,19 +13,20 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
-    title: "PayFlow — Financial authority for autonomous systems",
-    description: "Any agent. Any rail. One authority truth.",
+    title: "PayFlow — Make it happen",
+    description:
+      "Your AI business partner. Tell PayFlow what you need done; it brings you the decisions that are yours.",
     images: ["/brand/social-card.png"],
   },
   twitter: { card: "summary_large_image", images: ["/brand/social-card.png"] },
-  title: `${BRAND.name} — ${BRAND.category}`,
+  title: `${BRAND.name} — Make it happen`,
   description:
-    "Let agents execute financial work without surrendering financial control.",
+    "Your AI business partner. Tell PayFlow what you need done; it plans the work, explains the trade-offs and brings you the decisions that are yours.",
 };
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#F2EFE6",
+  themeColor: "#FAF8F2",
 };
 
 export default function RootLayout({

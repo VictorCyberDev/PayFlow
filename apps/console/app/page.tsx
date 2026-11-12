@@ -1,4 +1,4 @@
-import { CompanyHome } from "./ui/company";
+import Landing from "./views/landing";
 export default function Page() {
-  return <CompanyHome />;
+  return <Landing />;
 }

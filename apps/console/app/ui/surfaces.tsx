@@ -3,6 +3,8 @@ import { usePathname } from "next/navigation";
 import { ConsoleProvider } from "./provider";
 import { AppShell } from "./shell";
 import { CompanyShell } from "./company";
+/** V4 consumer surfaces bring their own chrome (FlowShell), so neither legacy shell may wrap them. */
+const flowPaths = ["/", "/try", "/partner", "/explore"];
 const appPaths = [
   "/app",
   "/new",
@@ -18,6 +20,12 @@ const appPaths = [
 ];
 export function Surfaces({ children }: { children: React.ReactNode }) {
   const path = usePathname() ?? "/";
+  if (
+    flowPaths.some(
+      (p) => path === p || path === `${p}/` || path.startsWith(`${p}/`),
+    )
+  )
+    return <>{children}</>;
   return appPaths.some((p) => path === p || path.startsWith(`${p}/`)) ? (
     <ConsoleProvider>
       <AppShell>{children}</AppShell>

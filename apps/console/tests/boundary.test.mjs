@@ -56,10 +56,26 @@ test("customer-facing views carry no maintenance controls", () => {
   );
 });
 
-test("browser transport is limited to the accepted review and activation endpoints", () => {
+test("browser transport is limited to the accepted review, activation, partner and explore endpoints", () => {
   const client = read("lib/review-client.mjs");
   assert.match(client, /fetch\("\/api\/intent-review"/);
   assert.match(allApp(), /fetch\("\/api\/intent-review\/sample"/);
+  // The V4 consumer partner is the one addition. Every fetch in the browser graph must be one of the accepted paths:
+  // a new endpoint has to be listed here before it can ship.
+  const accepted = [
+    "/api/intent-review",
+    "/api/intent-review/sample",
+    "/api/activation/authority",
+    "/api/partner",
+    "/api/explore",
+  ];
+  for (const [, path] of (allApp() + client).matchAll(
+    /fetch\(\s*[`"']([^`"'$)]*)/g,
+  ))
+    assert.ok(
+      accepted.some((a) => path.startsWith(a)),
+      `unaccepted browser transport: ${path}`,
+    );
   assert.doesNotMatch(
     allApp() + client,
     /localStorage|sessionStorage|document\.cookie|confirmReviewedIntent|activateReviewedIntent|paypal\.com|api\.groq/,
@@ -85,6 +101,45 @@ test("the old generic design is gone: one stylesheet, one token set, no rounded-
   );
   assert.doesNotMatch(css, /border-radius:\s*(?!0|50%)\d/);
   assert.match(css, /prefers-reduced-motion: reduce/);
+});
+
+test("the V4 consumer identity is its own token set, and it degrades without motion", () => {
+  // BRAND-001's ink-and-paper system is deliberately superseded for the consumer surfaces (mandate section 5.1). The
+  // legacy assertions above still guard globals.css, which the console and marketing surfaces still use.
+  const css = read("app/flow.css");
+  for (const token of [
+    "--blue: #2457ff",
+    "--coral: #ff7049",
+    "--alert: #c43c17",
+    "--lime: #d5f779",
+    "--ivory: #faf8f2",
+    "--ink: #111a32",
+  ])
+    assert.ok(css.toLowerCase().includes(token), token);
+  // Nothing may be fetched from off-origin, so the CSP stays 'self'.
+  assert.doesNotMatch(css, /https?:\/\/|fonts\.googleapis|@import/);
+  // Every one of the eleven Flow states must be expressible, and motion must be removable.
+  for (const state of [
+    "ready",
+    "listening",
+    "planning",
+    "searching",
+    "comparing",
+    "negotiating",
+    "deciding",
+    "executing",
+    "confirmed",
+    "paused",
+    "unverified",
+  ])
+    assert.ok(css.includes(`data-state="${state}"`), state);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+  // The state that carries a warning must never be drawn in the ordinary accent colour, and must use the text-safe
+  // red rather than plain coral, which is 2.58:1 on ivory and fails WCAG 1.4.11 for a meaningful graphic.
+  assert.match(
+    css,
+    /data-state="deciding"\] \.flow-object__line \{\s*stroke: var\(--alert\)/,
+  );
 });
 
 test("fonts are self-hosted so the CSP stays 'self'", () => {
