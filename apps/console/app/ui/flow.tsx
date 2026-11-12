@@ -174,6 +174,7 @@ export function FlowShell({
             verified result afterwards.
           </p>
           <nav aria-label="More">
+            <Link href="/calendar/">Your week</Link>
             <Link href="/app/">Console</Link>
             <Link href="/developer/">Developers</Link>
             <Link href="/enterprise/">Enterprise</Link>

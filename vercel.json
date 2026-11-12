@@ -35,6 +35,9 @@
     },
     "api/talent.ts": {
       "maxDuration": 30
+    },
+    "api/calendar.ts": {
+      "maxDuration": 15
     }
   },
   "headers": [

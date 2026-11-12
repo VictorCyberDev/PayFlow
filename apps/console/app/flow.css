@@ -865,3 +865,101 @@ a.card .card__go {
   background: var(--wash);
   flex: none;
 }
+
+/* The month grid. Six rows always, so moving between months never makes the page jump. */
+.flow .cal__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.flow .cal__title {
+  font-size: clamp(1.2rem, 3vw, 1.6rem);
+  margin: 0;
+}
+.flow .cal {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.flow .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.flow .cal__head {
+  background: var(--panel);
+  padding: 8px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  text-align: center;
+}
+.flow .cal__day {
+  background: var(--panel);
+  height: 84px;
+  padding: 6px;
+  vertical-align: top;
+  text-align: left;
+}
+.flow .cal__day.is-outside {
+  background: var(--bg);
+}
+.flow .cal__day.is-outside .cal__num {
+  color: var(--text-3);
+}
+.flow .cal__day.is-today .cal__num {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 50%;
+}
+.flow .cal__num {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.flow .cal__pip {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--wash);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* An entry PayFlow put there because a provider confirmed something looks different from one somebody typed. */
+.flow .cal__pip--flight {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  font-weight: 600;
+}
+@media (max-width: 560px) {
+  .flow .cal__day {
+    height: 58px;
+  }
+  .flow .cal__pip {
+    font-size: 0;
+    height: 6px;
+    padding: 0;
+    border-radius: 3px;
+  }
+}

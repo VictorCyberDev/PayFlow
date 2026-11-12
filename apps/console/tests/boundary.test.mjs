@@ -71,6 +71,7 @@ test("browser transport is limited to the accepted review, activation, partner a
     "/api/account",
     "/api/flights",
     "/api/talent",
+    "/api/calendar",
   ];
   for (const [, path] of (allApp() + client).matchAll(
     /fetch\(\s*[`"']([^`"'$)]*)/g,

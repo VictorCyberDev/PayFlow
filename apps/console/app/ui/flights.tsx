@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { EvidenceChip, FlowObject, type FlowState } from "./flow";
 import { ExploreTabs } from "./explore-tabs";
+import { useAccount } from "./account";
 
 type Segment = {
   from: string;
@@ -115,6 +116,48 @@ const FALLBACK =
 
 export function Flights() {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  const { state: account } = useAccount();
+  const [diary, setDiary] = useState<
+    "none" | "adding" | "added" | "already" | "failed"
+  >("none");
+
+  /** Only a booking the provider confirmed becomes a diary entry, keyed by the airline's own reference. */
+  async function addToCalendar(booking: Booking, offer: Offer) {
+    if (account.kind !== "signed-in") return;
+    const leg = offer.legs[0];
+    const first = leg?.segments[0];
+    if (!leg || !first?.departingAt) return;
+    setDiary("adding");
+    try {
+      const res = await fetch("/api/calendar", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-payflow-csrf": account.identity.csrfToken,
+        },
+        body: JSON.stringify({
+          event: {
+            title: `Flight ${leg.from} \u2192 ${leg.to}`,
+            startsAt: new Date(first.departingAt).toISOString(),
+            ...(first.arrivingAt
+              ? { endsAt: new Date(first.arrivingAt).toISOString() }
+              : {}),
+            allDay: false,
+            location: leg.from,
+            notes: `With ${offer.airline ?? "the airline"}. Booking reference ${booking.bookingReference}.`,
+            source: "FLIGHT",
+            sourceRef: booking.bookingReference,
+          },
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        alreadyThere?: boolean;
+      } | null;
+      setDiary(res.ok ? (body?.alreadyThere ? "already" : "added") : "failed");
+    } catch {
+      setDiary("failed");
+    }
+  }
 
   const flow: FlowState =
     phase.kind === "searching"
@@ -593,13 +636,47 @@ export function Flights() {
               </p>
             </div>
             <div className="actions">
+              {account.kind === "signed-in" && (
+                <button
+                  className="btn"
+                  onClick={() => void addToCalendar(phase.booking, phase.offer)}
+                  disabled={
+                    diary === "adding" ||
+                    diary === "added" ||
+                    diary === "already"
+                  }
+                >
+                  {diary === "added"
+                    ? "In your calendar"
+                    : diary === "already"
+                      ? "Already in your calendar"
+                      : diary === "adding"
+                        ? "Adding…"
+                        : "Add to my calendar"}
+                </button>
+              )}
               <button
-                className="btn"
+                className="btn btn--ghost"
                 onClick={() => setPhase({ kind: "idle" })}
               >
                 Search again
               </button>
             </div>
+            {diary === "failed" && (
+              <p className="quiet-note">
+                PayFlow could not add it to your calendar just now. The booking
+                itself is unaffected — the reference above still stands.
+              </p>
+            )}
+            {account.kind === "signed-out" && (
+              <p className="quiet-note">
+                <Link className="text-link" href="/account/">
+                  Sign in
+                </Link>{" "}
+                and PayFlow can put this in your calendar with the reference on
+                it.
+              </p>
+            )}
           </section>
         )}
       </div>
