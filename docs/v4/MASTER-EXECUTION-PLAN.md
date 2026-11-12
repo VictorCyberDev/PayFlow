@@ -50,6 +50,7 @@ system on the public host (D3)**, or **a provider the owner has not
 authorized**. The audit's section 1 explains why: the public artifact was a
 static export with no request-time code at all. This session removed that
 constraint — there is now a function boundary, a tested pattern for adding
-another, and a design system to render it in. The next most valuable commit is
-`/api/explore` (D9), because the key is already there and the connector is
-already written.
+another, and a design system to render it in. `/api/explore` (D9) followed in the same session, which is the proof that the
+pattern generalises: a second provider, a second surface, no new
+infrastructure. The next most valuable commit is **D3, accounts on the public
+host**, because almost everything still missing is waiting on it.

@@ -144,7 +144,7 @@ export function FlowShell({
 }) {
   return (
     <div className="flow">
-      <a className="skip-link" href="#flow-main">
+      <a className="skip-link" href="#main">
         Skip to content
       </a>
       <header className="flow__bar">
@@ -163,7 +163,7 @@ export function FlowShell({
           ))}
         </nav>
       </header>
-      <main id="flow-main" className="flow__main" tabIndex={-1}>
+      <main id="main" className="flow__main" tabIndex={-1}>
         {children}
       </main>
       <footer className="flow__foot">

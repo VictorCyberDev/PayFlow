@@ -4,7 +4,7 @@ Evidence recorded against the mandate's journeys (§28). A journey is
 **ACCEPTED** only where the stated evidence exists. Anything else is named for
 what it is.
 
-Commit under test: `96ab0fa`. Local verification: `apps/console/out` served
+Commit under test: the branch head at the time of writing. Local verification: `apps/console/out` served
 over HTTP and driven with the pre-installed Chromium.
 
 ## Evidence that exists
@@ -40,10 +40,16 @@ over HTTP and driven with the pre-installed Chromium.
 
 ## The honest summary
 
-Five of twelve journeys are accepted. One more is accepted everywhere it can
-be tested without a production deploy. Six are not delivered, and three of
-those are blocked on provider access that no amount of engineering here would
-produce.
+Five of twelve journeys are accepted and two are partial. Five are not
+delivered, and three of those are blocked on provider access that no amount of
+engineering here would produce.
+
+Two defects were found by looking at the rendered pages rather than by a test,
+and both were honesty defects rather than layout ones: the product card's copy
+referred to a "highlighted row" and to "sellers marked here" when nothing on
+screen was marked. A claim in the copy now corresponds to a mark on the
+screen. The keyboard gate caught a third: the new routes' skip link pointed at
+`#flow-main` while every check and every other surface expects `#main`.
 
 What changed is the foundation the rest depends on: the public app now has a
 face a founder can read and a backend that can run code. Before this commit,
