@@ -4,7 +4,7 @@ import { ConsoleProvider } from "./provider";
 import { AppShell } from "./shell";
 import { CompanyShell } from "./company";
 /** V4 consumer surfaces bring their own chrome (FlowShell), so neither legacy shell may wrap them. */
-const flowPaths = ["/", "/try", "/partner", "/explore", "/account"];
+const flowPaths = ["/", "/try", "/partner", "/explore", "/account", "/flights"];
 const appPaths = [
   "/app",
   "/new",

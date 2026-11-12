@@ -69,6 +69,9 @@ test("browser transport is limited to the accepted review, activation, partner a
     "/api/partner",
     "/api/explore",
     "/api/account",
+    "/api/flights",
+    "/api/talent",
+    "/api/calendar",
   ];
   for (const [, path] of (allApp() + client).matchAll(
     /fetch\(\s*[`"']([^`"'$)]*)/g,
@@ -135,6 +138,21 @@ test("the V4 consumer identity is its own token set, and it degrades without mot
   ])
     assert.ok(css.includes(`data-state="${state}"`), state);
   assert.match(css, /prefers-reduced-motion: reduce/);
+  // Only the states where PayFlow is actually working may animate. A line still drawing itself under a finished list
+  // of options tells a founder work is happening when it is not.
+  for (const settled of [
+    "comparing",
+    "negotiating",
+    "confirmed",
+    "paused",
+    "unverified",
+    "deciding",
+  ])
+    assert.match(
+      css,
+      new RegExp(`data-state="${settled}"[^{]*\\{[^}]*animation: none`, "s"),
+      `${settled} must not animate`,
+    );
   // The state that carries a warning must never be drawn in the ordinary accent colour, and must use the text-safe
   // red rather than plain coral, which is 2.58:1 on ivory and fails WCAG 1.4.11 for a meaningful graphic.
   assert.match(

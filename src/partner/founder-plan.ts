@@ -170,11 +170,12 @@ export type PartnerResult =
 
 export interface PartnerModel {
   /** Returns the model's raw JSON text (untrusted) or a failure. */
-  complete(
-    userText: string,
-    signal: AbortSignal,
-  ): Promise<{ status: "OK"; text: string } | { status: PartnerFailure }>;
+  complete(userText: string, signal: AbortSignal): Promise<ModelCompletion>;
 }
+
+/** The model's raw JSON text (untrusted), or a named failure. */
+export type ModelCompletion =
+  { status: "OK"; text: string } | { status: PartnerFailure };
 
 export interface PartnerRequest {
   readonly goal: string;
@@ -326,6 +327,84 @@ export function logProviderFault(status: number, code: string): void {
   );
 }
 
+/**
+ * What a failed attempt says about trying again. `undefined` means a retry would be pointless or wrong.
+ *
+ * Retrying is only defensible because this call has no side effects: the model proposes, `governPlan` re-derives every
+ * total and stamps authorization NONE, and nothing is started or paid for. A second attempt cannot double anything.
+ */
+type RetryHint = { readonly waitMs: number } | undefined;
+
+export const RETRY_POLICY = {
+  /** Two attempts total: one retry. A founder waiting on a plan will not wait through a third. */
+  attempts: 2,
+  /**
+   * Never wait out more than half the request's whole budget.
+   *
+   * Tied to `FOUNDER_PLAN_LIMITS.timeoutMs` rather than written as a figure of its own so the two cannot drift apart.
+   * A plan measurably takes 2-3 seconds against the deployed site, so half the budget leaves room for both attempts
+   * with margin; `sleepUnlessAborted` enforces the real deadline regardless, and a provider asking for longer than
+   * this is told so immediately instead of being waited out into a timeout.
+   */
+  maxWaitMs: FOUNDER_PLAN_LIMITS.timeoutMs / 2,
+  /** A provider 5xx or a dropped connection gets a short fixed pause rather than a figure it never sent. */
+  serverFaultWaitMs: 1_000,
+  /** The provider rate-limited us but sent no usable figure. */
+  defaultRateLimitWaitMs: 2_000,
+} as const;
+
+/**
+ * How long the provider asked us to wait, in milliseconds.
+ *
+ * Groq documents `retry-after` in seconds on a 429, and always reports when the token window reopens in
+ * `x-ratelimit-reset-tokens` (durations like "7.66s" or "2m59.56s"). Prefer what it actually said over a guess.
+ */
+export function retryDelayMs(headers: {
+  get(name: string): string | null;
+}): number {
+  // Number("") is 0, which would read a missing header as "retry immediately" and skip the figure that is always sent.
+  const raw = (headers.get("retry-after") ?? "").trim();
+  const after = raw === "" ? Number.NaN : Number(raw);
+  if (Number.isFinite(after) && after >= 0) return Math.ceil(after * 1000);
+  const reset = parseDuration(headers.get("x-ratelimit-reset-tokens"));
+  return reset ?? RETRY_POLICY.defaultRateLimitWaitMs;
+}
+
+/** "7.66s", "2m59.56s", "150ms" -> milliseconds. Anything else -> undefined, so the caller falls back to its own figure. */
+function parseDuration(raw: string | null): number | undefined {
+  const text = (raw ?? "").trim().toLowerCase();
+  if (!text) return undefined;
+  const parts = [...text.matchAll(/([0-9]+(?:\.[0-9]+)?)(ms|s|m|h)/gu)];
+  if (!parts.length) return undefined;
+  const unit = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 } as const;
+  let total = 0;
+  for (const [, value, u] of parts)
+    total += Number(value) * unit[u as keyof typeof unit];
+  const consumed = parts.reduce((n, m) => n + m[0].length, 0);
+  return consumed === text.length && Number.isFinite(total) && total >= 0
+    ? Math.ceil(total)
+    : undefined;
+}
+
+/** Waits, unless the request's own deadline passes first. False means the caller must stop, not retry. */
+export function sleepUnlessAborted(
+  ms: number,
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false);
+  if (ms <= 0) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const done = (value: boolean) => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve(value);
+    };
+    const onAbort = () => done(false);
+    const timer = setTimeout(() => done(true), ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 /** Groq (OpenAI-compatible) chat completions with strict JSON-schema output. Server-side only; the key never leaves this process. */
 export class GroqPartnerModel implements PartnerModel {
   readonly #key: string;
@@ -342,8 +421,35 @@ export class GroqPartnerModel implements PartnerModel {
     const key = env["GROQ_API_KEY"];
     return key ? new GroqPartnerModel(key) : undefined;
   }
-  async complete(userText: string, signal: AbortSignal) {
+  /**
+   * One plan, with one retry when the provider says the failure is temporary.
+   *
+   * Measured against production: the same goal text succeeds 8/8 when the requests are 20s apart and fails in a
+   * concurrent burst of 8. That is the provider's token-per-minute window (gpt-oss-20b: 30 RPM, 8K TPM), not anything
+   * about the goal — so the honest fix is to wait the interval it names and ask again, not to tell a founder their
+   * perfectly good goal was a problem.
+   */
+  async complete(
+    userText: string,
+    signal: AbortSignal,
+  ): Promise<ModelCompletion> {
     if (!this.#key) return { status: "MODEL_NOT_CONFIGURED" as const };
+    for (let attempt = 1; ; attempt++) {
+      const { result, retry } = await this.#attempt(userText, signal);
+      if (
+        !retry ||
+        attempt >= RETRY_POLICY.attempts ||
+        retry.waitMs > RETRY_POLICY.maxWaitMs ||
+        !(await sleepUnlessAborted(retry.waitMs, signal))
+      )
+        return result;
+    }
+  }
+
+  async #attempt(
+    userText: string,
+    signal: AbortSignal,
+  ): Promise<{ result: ModelCompletion; retry: RetryHint }> {
     let res: Response;
     try {
       res = await this.transport(GROQ_ENDPOINT, {
@@ -375,21 +481,36 @@ export class GroqPartnerModel implements PartnerModel {
         }),
       });
     } catch {
-      return {
-        status: signal.aborted
-          ? ("MODEL_TIMEOUT" as const)
-          : ("MODEL_UNAVAILABLE" as const),
-      };
+      // A dropped connection started nothing, so one more try is safe. A passed deadline is not retryable by definition.
+      return signal.aborted
+        ? { result: { status: "MODEL_TIMEOUT" as const }, retry: undefined }
+        : {
+            result: { status: "MODEL_UNAVAILABLE" as const },
+            retry: { waitMs: RETRY_POLICY.serverFaultWaitMs },
+          };
     }
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) {
         await res.body?.cancel().catch(() => undefined);
-        return { status: "MODEL_NOT_CONFIGURED" as const };
+        // A bad key will still be bad in two seconds.
+        return {
+          result: { status: "MODEL_NOT_CONFIGURED" as const },
+          retry: undefined,
+        };
       }
       if (res.status >= 500 || res.status === 429) {
         const detail = await res.text().catch(() => "");
         logProviderFault(res.status, providerFaultCode(detail));
-        return { status: "MODEL_UNAVAILABLE" as const };
+        // On a 429 the provider names the interval; on a 5xx it names nothing and a short pause is the honest guess.
+        return {
+          result: { status: "MODEL_UNAVAILABLE" as const },
+          retry: {
+            waitMs:
+              res.status === 429
+                ? retryDelayMs(res.headers)
+                : RETRY_POLICY.serverFaultWaitMs,
+          },
+        };
       }
       // A 400 is not always "it refused you". The provider also answers 400 when the model's own generation failed to
       // satisfy the requested JSON schema, which is a transient fault on an identical request — telling a founder to
@@ -397,11 +518,13 @@ export class GroqPartnerModel implements PartnerModel {
       const detail = await res.text().catch(() => "");
       const code = providerFaultCode(detail);
       logProviderFault(res.status, code);
-      return {
-        status: transientGenerationFault(detail)
-          ? ("MODEL_UNAVAILABLE" as const)
-          : ("MODEL_REJECTED" as const),
-      };
+      // A generation that missed its own schema is a dice roll, so the retry is immediate: no window has to reopen.
+      return transientGenerationFault(detail)
+        ? {
+            result: { status: "MODEL_UNAVAILABLE" as const },
+            retry: { waitMs: 0 },
+          }
+        : { result: { status: "MODEL_REJECTED" as const }, retry: undefined };
     }
     try {
       const raw = (await res.text()).slice(0, 65_536);
@@ -428,16 +551,29 @@ export class GroqPartnerModel implements PartnerModel {
         .parse(JSON.parse(raw));
       const c = body.choices[0]!;
       if (c.message.refusal || c.finish_reason === "content_filter")
-        return { status: "MODEL_REJECTED" as const };
+        return {
+          result: { status: "MODEL_REJECTED" as const },
+          retry: undefined,
+        };
+      // Truncated or tool-calling output is the model losing the format, which a second pass can recover.
       if (
         c.finish_reason !== "stop" ||
         c.message.tool_calls?.length ||
         !c.message.content
       )
-        return { status: "INVALID_MODEL_OUTPUT" as const };
-      return { status: "OK" as const, text: c.message.content };
+        return {
+          result: { status: "INVALID_MODEL_OUTPUT" as const },
+          retry: { waitMs: 0 },
+        };
+      return {
+        result: { status: "OK" as const, text: c.message.content },
+        retry: undefined,
+      };
     } catch {
-      return { status: "INVALID_MODEL_OUTPUT" as const };
+      return {
+        result: { status: "INVALID_MODEL_OUTPUT" as const },
+        retry: { waitMs: 0 },
+      };
     }
   }
 }

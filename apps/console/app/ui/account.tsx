@@ -231,6 +231,9 @@ export function Account() {
               <Link className="btn" href="/partner/">
                 Get something done
               </Link>
+              <Link className="btn btn--ghost" href="/calendar/">
+                See your week
+              </Link>
               <button
                 className="btn btn--ghost"
                 type="button"

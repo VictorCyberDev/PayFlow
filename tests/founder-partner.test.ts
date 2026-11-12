@@ -6,6 +6,8 @@ import {
   GroqPartnerModel,
   planForFounder,
   providerFaultCode,
+  RETRY_POLICY,
+  retryDelayMs,
   transientGenerationFault,
   type PartnerFailure,
   type PartnerModel,
@@ -502,7 +504,7 @@ describe("what a provider fault records", () => {
       const call = async (status: number, body: string) => {
         const transport = (() =>
           Promise.resolve(
-            new Response(body, { status }),
+            new Response(body, { status, headers: { "retry-after": "0" } }),
           )) as unknown as typeof fetch;
         await new GroqPartnerModel("k", transport).complete(
           "a goal",
@@ -512,13 +514,155 @@ describe("what a provider fault records", () => {
       await call(429, '{"error":{"code":"rate_limit_exceeded"}}');
       await call(503, "upstream down");
       await call(400, '{"error":{"code":"json_validate_failed"}}');
+      // Each cause is still named, and each appears twice because the retry really did try again and really did fail.
+      // A fault logged once would now be the surprising reading: it would mean the second attempt never happened.
       expect(seen).toEqual([
         { status: 429, code: "rate_limit_exceeded" },
+        { status: 429, code: "rate_limit_exceeded" },
         { status: 503, code: "other" },
+        { status: 503, code: "other" },
+        { status: 400, code: "json_validate_failed" },
         { status: 400, code: "json_validate_failed" },
       ]);
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+/**
+ * The intermittent planning failure, and why a retry is the honest fix.
+ *
+ * Measured against the deployed site: the same goal text succeeded 8/8 when the requests were 20 seconds apart, and a
+ * burst of 8 concurrent requests failed on the last one. Identical input, different outcome purely as a function of
+ * request rate — so the cause is the provider's per-minute window (Groq documents gpt-oss-20b at 30 RPM / 8K TPM and
+ * sends `retry-after` on a 429), not anything about what the founder asked for.
+ */
+describe("the planner waits when the provider says to wait", () => {
+  const ok = () =>
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            finish_reason: "stop",
+            message: { content: '{"ok":true}', refusal: null },
+          },
+        ],
+      }),
+      { status: 200 },
+    );
+  const limited = (headers: Record<string, string>) =>
+    new Response(JSON.stringify({ error: { code: "rate_limit_exceeded" } }), {
+      status: 429,
+      headers,
+    });
+
+  it("reads the interval the provider names rather than guessing one", () => {
+    const h = (o: Record<string, string>) => new Headers(o);
+    expect(retryDelayMs(h({ "retry-after": "2" }))).toBe(2000);
+    expect(retryDelayMs(h({ "retry-after": "0.5" }))).toBe(500);
+    // Always present, even on a success, so it is there when retry-after is not.
+    expect(retryDelayMs(h({ "x-ratelimit-reset-tokens": "7.66s" }))).toBe(7660);
+    expect(retryDelayMs(h({ "x-ratelimit-reset-tokens": "2m59.56s" }))).toBe(
+      179560,
+    );
+    // Nothing usable: a figure of our own, not a crash and not an unbounded wait.
+    expect(retryDelayMs(h({}))).toBe(RETRY_POLICY.defaultRateLimitWaitMs);
+    expect(retryDelayMs(h({ "retry-after": "soon" }))).toBe(
+      RETRY_POLICY.defaultRateLimitWaitMs,
+    );
+  });
+
+  it("turns a rate-limited first attempt into a plan", async () => {
+    const seen: number[] = [];
+    let n = 0;
+    const model = new GroqPartnerModel("k", async () => {
+      seen.push(Date.now());
+      return ++n === 1 ? limited({ "retry-after": "0.05" }) : ok();
+    });
+    const out = await model.complete("x", new AbortController().signal);
+    expect(out).toEqual({ status: "OK", text: '{"ok":true}' });
+    expect(n).toBe(2);
+    expect(seen[1]! - seen[0]!).toBeGreaterThanOrEqual(45);
+  });
+
+  it("retries once and no more, so a founder is never left hanging", async () => {
+    let n = 0;
+    const model = new GroqPartnerModel("k", async () => {
+      n++;
+      return limited({ "retry-after": "0" });
+    });
+    const out = await model.complete("x", new AbortController().signal);
+    expect(out.status).toBe("MODEL_UNAVAILABLE");
+    expect(n).toBe(RETRY_POLICY.attempts);
+  });
+
+  it("does not wait out a window longer than the request's own budget", async () => {
+    let n = 0;
+    const started = Date.now();
+    const model = new GroqPartnerModel("k", async () => {
+      n++;
+      return limited({ "retry-after": "600" });
+    });
+    const out = await model.complete("x", new AbortController().signal);
+    expect(out.status).toBe("MODEL_UNAVAILABLE");
+    expect(n).toBe(1); // said so immediately rather than sleeping ten minutes
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("never retries a bad key or a refusal, which a second attempt cannot change", async () => {
+    let keyTries = 0;
+    const badKey = new GroqPartnerModel("k", async () => {
+      keyTries++;
+      return new Response("{}", { status: 401 });
+    });
+    expect(
+      (await badKey.complete("x", new AbortController().signal)).status,
+    ).toBe("MODEL_NOT_CONFIGURED");
+    expect(keyTries).toBe(1);
+
+    let refusals = 0;
+    const refused = new GroqPartnerModel("k", async () => {
+      refusals++;
+      return new Response(
+        JSON.stringify({ error: { code: "invalid_request_error" } }),
+        { status: 400 },
+      );
+    });
+    expect(
+      (await refused.complete("x", new AbortController().signal)).status,
+    ).toBe("MODEL_REJECTED");
+    expect(refusals).toBe(1);
+  });
+
+  it("retries a generation that missed its own schema, with no wait to serve", async () => {
+    let n = 0;
+    const started = Date.now();
+    const model = new GroqPartnerModel("k", async () =>
+      ++n === 1
+        ? new Response(
+            JSON.stringify({ error: { code: "json_validate_failed" } }),
+            { status: 400 },
+          )
+        : ok(),
+    );
+    const out = await model.complete("x", new AbortController().signal);
+    expect(out).toEqual({ status: "OK", text: '{"ok":true}' });
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it("stops at once when the request's deadline passes mid-wait", async () => {
+    const c = new AbortController();
+    let n = 0;
+    const model = new GroqPartnerModel("k", async () => {
+      n++;
+      setTimeout(() => c.abort(), 10);
+      return limited({ "retry-after": "5" });
+    });
+    const started = Date.now();
+    const out = await model.complete("x", c.signal);
+    expect(out.status).toBe("MODEL_UNAVAILABLE");
+    expect(n).toBe(1);
+    expect(Date.now() - started).toBeLessThan(2000); // not the full five seconds
   });
 });
