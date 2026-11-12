@@ -8,6 +8,10 @@ import { spawn } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import postgres from "postgres";
+import {
+  assertDisposableDatabase,
+  assertScratchName,
+} from "./lib/disposable-db.mjs";
 
 const ADMIN =
   process.env.ACCEPT_ADMIN_URL ??
@@ -30,6 +34,8 @@ const record = (n, name, ok, detail = {}) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+assertDisposableDatabase(ADMIN);
+assertScratchName(DB);
 const admin = postgres(ADMIN, { max: 1, onnotice: () => undefined });
 await admin.unsafe(`drop database if exists ${DB} with (force)`);
 await admin.unsafe(`create database ${DB}`);
@@ -57,7 +63,6 @@ const start = async () => {
       PAYFLOW_M5_BOOTSTRAP_KEY: "b".repeat(40),
       PAYFLOW_M5_ORIGIN: ORIGIN,
       CRON_SECRET: CRON,
-      PAYFLOW_M6_DEMO_AGENT: "true",
       PAYFLOW_M6_SIGNING_KEY: SIGNING,
     },
   });

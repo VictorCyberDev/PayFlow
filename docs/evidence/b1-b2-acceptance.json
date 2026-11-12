@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-10T15:21:34.102Z",
+  "at": "2026-11-12T10:37:47.383Z",
   "what": "compiled host (separate process) + real HTTP + PostgreSQL; provider is a local stand-in, not Resend",
   "ok": true,
   "results": [
@@ -74,7 +74,7 @@
       "n": 14,
       "name": "a provider that never answers leaves the message UNKNOWN after the sender timeout; a later run does not send it again",
       "ok": true,
-      "ms": 8017
+      "ms": 8014
     },
     {
       "n": 14.1,

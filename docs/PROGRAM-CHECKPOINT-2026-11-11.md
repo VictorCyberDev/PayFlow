@@ -16,7 +16,7 @@ Also: **M55 launch runs** (migration 064, `docs/M55-LAUNCH-RUNS.md`): a durable,
 
 ## Findings that change the plan
 
-- **The whole hosted Gateway, including the customer app, exists only when `PAYFLOW_M6_DEMO_AGENT=true` with a `PAYFLOW_M6_SIGNING_KEY`.** Earlier guidance to delete that variable was wrong and is corrected. Leave the PayPal variables unset: the agent then has no payment provider and no payment can execute.
+- **The hosted Gateway (customer app, Proof, operator routes) mounts on `PAYFLOW_M6_SIGNING_KEY` alone** (owner's R6 change). `PAYFLOW_M6_DEMO_AGENT` is only financial mode and is not needed; the acceptance scripts no longer set it. Leave the PayPal variables unset: no payment provider is then reachable and every economic request is refused.
 - The reset request used to hang when a database write failed; `payflow_readonly` could read recovery links and password digests; auth limits failed open. All fixed in #75.
 - The mutation checks found tests that proved nothing (an HTTP race that never exercised a lock; a `sed` that silently did not apply). Both were corrected; a mutant that "passes" is treated as a gap.
 

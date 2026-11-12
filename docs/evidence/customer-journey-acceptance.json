@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-11T12:33:08.763Z",
+  "at": "2026-11-12T10:37:35.764Z",
   "what": "compiled host (separate process, killed and restarted mid-journey) + real HTTP + PostgreSQL; sources are fictional sandbox fixtures; no email sender; no payment provider",
   "ok": true,
   "results": [
@@ -45,7 +45,7 @@
           "refusal": null,
           "summary": {
             "found": 4,
-            "searchId": "wsq_726ac1f4dea75dc56d678b10",
+            "searchId": "wsq_0b1cdb8a2e4779cd96c0ad9e",
             "qualified": 1,
             "truncated": false,
             "rejectedBySource": 0
@@ -97,7 +97,7 @@
       "n": 11,
       "name": "the ledger exports as CSV for a bookkeeper",
       "ok": true,
-      "filename": "payflow-ledger-msn_01d9274e234e898ae6bd8d3d.csv"
+      "filename": "payflow-ledger-msn_347c40c9ce5a6363c2024afd.csv"
     },
     {
       "n": 12,

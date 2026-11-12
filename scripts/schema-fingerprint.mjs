@@ -6,6 +6,10 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import postgres from "postgres";
 import {
+  assertDisposableDatabase,
+  assertScratchName,
+} from "./lib/disposable-db.mjs";
+import {
   FINGERPRINT_SELECT,
   comparisonSql,
   compactComparisonSql,
@@ -20,13 +24,15 @@ if (!["snapshot", "sql", "check"].includes(cmd) || !Number.isInteger(through)) {
   process.exit(2);
 }
 if (cmd === "snapshot") {
-  const admin = postgres(
+  const adminUrl =
     target ??
-      process.env.ACCEPT_ADMIN_URL ??
-      "postgres://payflow:payflow_test@localhost:5432/payflow_test",
-    { max: 1, onnotice: () => undefined },
+    process.env.ACCEPT_ADMIN_URL ??
+    "postgres://payflow:payflow_test@localhost:5432/payflow_test";
+  assertDisposableDatabase(adminUrl);
+  const admin = postgres(adminUrl, { max: 1, onnotice: () => undefined });
+  const db = assertScratchName(
+    "fp_" + Math.random().toString(36).slice(2, 8).padEnd(6, "0"),
   );
-  const db = "fp_" + Math.random().toString(36).slice(2, 8);
   await admin.unsafe(`create database ${db}`);
   const u = new URL(
     target ??
