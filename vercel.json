@@ -20,6 +20,9 @@
   "functions": {
     "api/paypal.ts": {
       "maxDuration": 10
+    },
+    "api/partner.ts": {
+      "maxDuration": 30
     }
   },
   "headers": [
