@@ -57,18 +57,16 @@ try {
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,
     );
-    await page
-      .getByRole("button", { name: "Unconfirmed", exact: true })
-      .click();
-    if (
-      !(await page
-        .getByText("We haven't confirmed whether money moved.", { exact: true })
-        .isVisible())
-    )
-      throw new Error("UNKNOWN copy missing");
-    await page.getByRole("button", { name: "Over limit", exact: true }).click();
-    if (!(await page.getByText("$0 moved", { exact: true }).isVisible()))
-      throw new Error("denial missing");
+    // V4: `/` is the consumer landing page. The Gate demonstration these two clicks drive moved with the
+    // infrastructure homepage it belonged to and is asserted on /sandbox/ below. What `/` must still prove is
+    // that a visitor is told plainly what is real, so assert that here and keep the sweep otherwise identical.
+    for (const copy of [
+      "Make it",
+      "What is real here today",
+      "never shows a simulated result as a real one",
+    ])
+      if (!(await page.getByText(copy, { exact: false }).first().isVisible()))
+        throw new Error(`homepage copy missing: ${copy}`);
     await page.addScriptTag({
       content: readFileSync(
         require.resolve("../apps/console/node_modules/axe-core/axe.min.js"),
@@ -98,6 +96,19 @@ try {
       });
   }
   await page.setViewportSize({ width: 1280, height: 900 });
+  // The Gate demonstration: UNKNOWN is never rounded to success, and an over-limit action moves nothing.
+  await page.goto(origin + "/sandbox/");
+  await page.waitForSelector("h1");
+  await page.getByRole("button", { name: "Unconfirmed", exact: true }).click();
+  if (
+    !(await page
+      .getByText("We haven't confirmed whether money moved.", { exact: true })
+      .isVisible())
+  )
+    throw new Error("UNKNOWN copy missing");
+  await page.getByRole("button", { name: "Over limit", exact: true }).click();
+  if (!(await page.getByText("$0 moved", { exact: true }).isVisible()))
+    throw new Error("denial missing");
   for (const path of [
     "/product/",
     "/solutions/agent-builders/",

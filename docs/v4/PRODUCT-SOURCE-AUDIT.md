@@ -41,14 +41,40 @@ coexist — and resolves which is which:
 `CUSTOMER_APP_URL = null`, so the site's "Sign in" link points at `/preview/`,
 a private-preview page, rather than at an application.
 
-### 1.2 Only one serverless function exists
+### 1.2 Only one serverless function exists on the site that serves the public
 
-`api/paypal.ts` is the only function in the deployed project (confirmed by
-`find . -name "*.ts" -path "*api*"`, and by `vercel.json`'s `functions` block).
-It is a read-only payer-return status page, and it reads
-`PAYFLOW_STATUS_DATABASE_URL` — **a variable that is not set on the project**
-(verified against the project's environment variables). So even that one
-function falls back to `STATUS_STORE_UNCONFIGURED`.
+**Corrected after deploying to both projects.** The first version of this
+section read the root `vercel.json` and assumed it governed `payflow-public`.
+It does not, and the difference matters:
+
+| Project          | Root directory  | Config that governs it   | Serves                                               |
+| ---------------- | --------------- | ------------------------ | ---------------------------------------------------- |
+| `payflow`        | repository root | root `vercel.json`       | `payflow-one-kappa.vercel.app` — **the public site** |
+| `payflow-public` | `hosting/m6`    | `hosting/m6/vercel.json` | nothing reachable; SSO-gated                         |
+
+Proved by headers rather than inference. A preview on `payflow-public` returns
+the CSP from `hosting/m6/vercel.json` verbatim, plus
+`access-control-allow-origin: https://payflow-m6-acceptance.vercel.app`, which
+appears in that file and nowhere else. The live public site returns the root
+`vercel.json` CSP, the one that names the PayPal hosts.
+
+Two consequences:
+
+1. **On `payflow-public`, no root-level `api/*` function can ever be reached.**
+   `hosting/m6/vercel.json` rewrites `/api/(.*)` to `/api/host`, so every API
+   path is swallowed by the M6 acceptance host. That host currently answers
+   `503 {"status":"UNAVAILABLE"}` — `hosting/m6/api/host.ts:24`, the branch
+   taken when `parseHostedConfig` throws. It is misconfigured on that project.
+2. **On `payflow`, `api/paypal.ts` is the only function**, it is a read-only
+   payer-return page, and it reads `PAYFLOW_STATUS_DATABASE_URL` — a variable
+   that is not set. So it falls back to `STATUS_STORE_UNCONFIGURED`. Verified
+   live: `payflow-one-kappa.vercel.app/paypal/status` returns that function's
+   own "Payment status unavailable" JSON, which also proves `api/*.ts` really
+   is routed and executed in this configuration.
+
+The V4 endpoints target the root `vercel.json`, so they land on the project
+that actually serves the public. They are unreachable on `payflow-public`, by
+that project's own rewrite.
 
 ### 1.3 The provider credentials are configured but nothing reads them
 
