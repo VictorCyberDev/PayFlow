@@ -5,7 +5,6 @@ import {
   decimalToMinor,
   DuffelProvider,
   isoDurationToMinutes,
-  normalizeOffer,
   searchFlights,
   validPassenger,
   type FlightFailure,

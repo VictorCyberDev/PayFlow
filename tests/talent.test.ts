@@ -143,9 +143,16 @@ describe("what a candidate card may claim", () => {
     expect(
       toCandidate(profile({ blog: "http://insecure.example" }))!.portfolioUrl,
     ).toBeNull();
+    // Checked by code point rather than by a regex holding literal control characters, which reads as a mistake.
+    const scrubbed: string | null = toCandidate(
+      profile({ name: "Amelia\u0000\u001b[31m Earhart" }),
+    )!.name;
+    // Asserted non-null first, so a dropped name cannot pass this vacuously.
+    expect(scrubbed).not.toBeNull();
     expect(
-      toCandidate(profile({ name: "Amelia\u0000\u001b[31m Earhart" }))!.name,
-    ).not.toMatch(/[\u0000-\u001f]/u);
+      Array.from(scrubbed!).every((ch) => (ch.codePointAt(0) ?? 0) >= 0x20),
+    ).toBe(true);
+    expect(scrubbed).toContain("Earhart");
     // A profile url the provider did not give falls back to the canonical one rather than being omitted.
     expect(toCandidate(profile({ html_url: null }))!.profileUrl).toBe(
       "https://github.com/amelia-dev",
