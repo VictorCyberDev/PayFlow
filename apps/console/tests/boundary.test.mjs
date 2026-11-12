@@ -56,7 +56,7 @@ test("customer-facing views carry no maintenance controls", () => {
   );
 });
 
-test("browser transport is limited to the accepted review, activation and partner endpoints", () => {
+test("browser transport is limited to the accepted review, activation, partner and explore endpoints", () => {
   const client = read("lib/review-client.mjs");
   assert.match(client, /fetch\("\/api\/intent-review"/);
   assert.match(allApp(), /fetch\("\/api\/intent-review\/sample"/);
@@ -67,6 +67,7 @@ test("browser transport is limited to the accepted review, activation and partne
     "/api/intent-review/sample",
     "/api/activation/authority",
     "/api/partner",
+    "/api/explore",
   ];
   for (const [, path] of (allApp() + client).matchAll(
     /fetch\(\s*[`"']([^`"'$)]*)/g,

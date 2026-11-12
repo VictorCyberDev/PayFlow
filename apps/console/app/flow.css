@@ -476,11 +476,13 @@ a.card .card__go {
   font-size: 1.12rem;
   letter-spacing: -0.02em;
   margin-right: auto;
+  min-width: 0;
 }
 .flow__nav {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  min-width: 0;
 }
 .flow__nav a {
   display: inline-flex;
@@ -501,11 +503,12 @@ a.card .card__go {
 }
 @media (max-width: 420px) {
   .flow__nav a {
-    padding: 0 8px;
-    font-size: 0.88rem;
+    padding: 0 6px;
+    font-size: 0.85rem;
   }
-  .flow__brand span {
+  .flow__brand {
     font-size: 1rem;
+    gap: 7px;
   }
 }
 .flow__nav .flow__nav-more {
@@ -698,4 +701,54 @@ a.card .card__go {
 }
 .flow .flow__hero--demo .flow-object {
   max-width: 400px;
+}
+
+/* Product imagery. A listing without a picture is a listing nobody reads, so the slot is reserved either way. */
+.flow .product__image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  background: var(--wash);
+  border-radius: var(--r-s);
+}
+.flow .product__image--none {
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+}
+.flow .product__image--none::after {
+  content: "No photo";
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.flow .product__was {
+  color: var(--text-3);
+  font-weight: 400;
+  font-size: 0.86em;
+  text-decoration: line-through;
+}
+.flow .text-link {
+  color: inherit;
+}
+
+/* A claim in the copy must correspond to a mark on the screen: the cheapest row and the monetizable row are both labelled. */
+.flow .offer__tag {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  vertical-align: 1px;
+}
+.flow .offer__tag--best {
+  color: var(--accent);
+  border-color: currentColor;
 }

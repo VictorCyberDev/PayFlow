@@ -153,9 +153,9 @@ export function Demo() {
           <span className="chip chip--simulated">Simulated</span>
           <h1>See PayFlow work.</h1>
           <p className="lede">
-            A two-minute walk through one founder's six weeks: the plan, the
-            options, the decision that stops at you, and what happens when the
-            answer is no — or when nobody can honestly say yet.
+            A two-minute walk through one founder&rsquo;s six weeks: the plan,
+            the options, the decision that stops at you, and what happens when
+            the answer is no — or when nobody can honestly say yet.
           </p>
           <p className="quiet-note">
             Step {index + 1} of {ORDER.length}. Nothing here leaves your
@@ -227,7 +227,7 @@ export function Demo() {
                   Answer and continue
                 </button>
                 <button className="btn btn--ghost" onClick={() => go("plan")}>
-                  Skip — I don't know yet
+                  Skip — I don&rsquo;t know yet
                 </button>
               </div>
             </>
@@ -465,7 +465,7 @@ export function Demo() {
               <h2>&ldquo;We could not confirm this.&rdquo;</h2>
               <div className="card" style={{ maxWidth: "44rem" }}>
                 <span className="chip">Unconfirmed</span>
-                <h3>Designer's first milestone — $1,500</h3>
+                <h3>Designer&rsquo;s first milestone — $1,500</h3>
                 <p>
                   PayFlow submitted the payment and the connection dropped
                   before an answer came back. It does not know whether the money

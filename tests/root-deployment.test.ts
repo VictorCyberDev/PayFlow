@@ -49,6 +49,11 @@ describe("the founder partner function", () => {
       25,
     );
   });
+  it("gives product search room too", () => {
+    expect(vj.functions["api/explore.ts"]?.maxDuration).toBeGreaterThanOrEqual(
+      15,
+    );
+  });
   it("is reachable under the site's own content security policy", () => {
     const csp = vj.headers
       .flatMap((h) => h.headers)
@@ -56,5 +61,12 @@ describe("the founder partner function", () => {
     // The browser only ever calls same-origin /api/partner, so 'self' must be in connect-src and no provider host is needed.
     expect(csp).toContain("connect-src 'self'");
     expect(csp).not.toContain("api.groq.com");
+    expect(csp).not.toContain("trychannel3.com");
+    // Product photographs are hosted on merchant and catalogue CDNs, so img-src has to admit https. Images are passive
+    // content and Referrer-Policy is no-referrer site-wide, so a merchant CDN learns that an image was fetched and
+    // nothing about the page. Script, connect and form targets stay closed.
+    expect(csp).toContain("img-src 'self' data: https:");
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("default-src 'self'");
   });
 });

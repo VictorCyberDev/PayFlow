@@ -129,8 +129,9 @@ export function EvidenceChip({ kind }: { kind: EvidenceClass }) {
 }
 
 const NAV = [
-  { href: "/try/", label: "Try PayFlow" },
-  { href: "/partner/", label: "Your partner" },
+  { href: "/try/", label: "Try" },
+  { href: "/explore/", label: "Explore" },
+  { href: "/partner/", label: "Partner" },
 ] as const;
 
 /** The consumer chrome. Developer and enterprise destinations live in the footer, not in a founder's way (§6.5). */

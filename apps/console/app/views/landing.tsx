@@ -6,12 +6,12 @@ import {
   type EvidenceClass,
 } from "../ui/flow";
 
-const GOALS = [
-  "Find my first ten customers",
-  "Kit out a two-person studio",
-  "Get paid for work I've delivered",
-  "Plan a trip around one meeting",
-] as const;
+const GOALS: ReadonlyArray<{ label: string; href: string }> = [
+  { label: "Find my first ten customers", href: "/partner/?goal=" },
+  { label: "Kit out a two-person studio", href: "/explore/?q=" },
+  { label: "Get paid for work I've delivered", href: "/partner/?goal=" },
+  { label: "Plan a trip around one meeting", href: "/partner/?goal=" },
+];
 
 /**
  * What a visitor can actually do today, stated plainly. This section is the opposite of a feature grid: it is the honest
@@ -34,6 +34,12 @@ const TRUTH: ReadonlyArray<{
     detail:
       "Every step that would spend money is marked as needing your approval — by PayFlow's own code, never by the model that wrote the plan.",
     kind: "MODEL_PROPOSED",
+  },
+  {
+    what: "Search real products and compare sellers",
+    detail:
+      "Live catalogue search. PayFlow shows what each seller listed, in that seller's currency, and says plainly that delivery and tax are not in the number.",
+    kind: "PROVIDER_OBSERVED",
   },
   {
     what: "Walk a whole founder journey",
@@ -104,11 +110,15 @@ export default function Landing() {
             {GOALS.map((goal) => (
               <Link
                 className="card"
-                key={goal}
-                href={`/partner/?goal=${encodeURIComponent(goal)}`}
+                key={goal.label}
+                href={`${goal.href}${encodeURIComponent(goal.label)}`}
               >
-                <h3>{goal}</h3>
-                <span className="card__go">Ask PayFlow →</span>
+                <h3>{goal.label}</h3>
+                <span className="card__go">
+                  {goal.href.startsWith("/explore")
+                    ? "Search real products →"
+                    : "Ask PayFlow →"}
+                </span>
               </Link>
             ))}
           </div>

@@ -5,6 +5,7 @@ import Landing from "../app/views/landing";
 import { Demo } from "../app/ui/demo";
 import { FlowObject, flowStateLabel, type FlowState } from "../app/ui/flow";
 import { readPlan } from "../app/ui/partner";
+import { readDiscovery } from "../app/ui/explore";
 
 const home = () => renderToStaticMarkup(<Landing />);
 const demo = () => renderToStaticMarkup(<Demo />);
@@ -121,4 +122,47 @@ test("the browser refuses a plan that does not carry authorization NONE", () => 
   assert.equal(readPlan({ ...valid, workstreams: [] }), null);
   assert.equal(readPlan(null), null);
   assert.equal(readPlan("a string"), null);
+});
+
+test("the browser will not render a search result that claims a stronger evidence class", () => {
+  const observed = {
+    query: "monitor",
+    observedAt: "2026-11-12T00:00:00.000Z",
+    evidence: "PROVIDER_OBSERVED",
+    excludes: ["delivery"],
+    products: [
+      {
+        id: "p",
+        title: "A monitor",
+        brand: null,
+        summary: null,
+        imageUrl: null,
+        imageAlt: "a",
+        bestOfferIndex: 0,
+        offers: [
+          {
+            merchant: "m.example.com",
+            url: "https://m.example.com/1",
+            priceMinor: 100,
+            currency: "USD",
+            wasPriceMinor: null,
+            inStock: true,
+            condition: null,
+            earnsCommission: false,
+          },
+        ],
+      },
+    ],
+  };
+  assert.ok(readDiscovery(observed));
+  // The ladder in docs/v4/WILLIE-EXPERIENCE-TRANSFER.md: the interface may never promote a weaker class.
+  assert.equal(
+    readDiscovery({ ...observed, evidence: "PROVIDER_CONFIRMED" }),
+    null,
+  );
+  assert.equal(
+    readDiscovery({ ...observed, products: [] })?.products.length,
+    0,
+  );
+  assert.equal(readDiscovery(null), null);
 });
