@@ -318,7 +318,12 @@ export function Demo() {
               </div>
               <p className="quiet-note">
                 Tax is marked estimated because it is. PayFlow does not present
-                a guess as a confirmed charge.
+                a guess as a confirmed charge. These three products are invented
+                for the demo —{" "}
+                <Link className="text-link" href="/explore/">
+                  Explore
+                </Link>{" "}
+                searches a real catalogue.
               </p>
               <div className="actions">
                 <button className="btn" onClick={() => go("approval")}>
@@ -489,6 +494,9 @@ export function Demo() {
                 </button>
                 <Link className="btn btn--ghost" href="/partner/">
                   Try it with your own goal
+                </Link>
+                <Link className="btn btn--ghost" href="/explore/">
+                  Search real products
                 </Link>
               </div>
             </>
