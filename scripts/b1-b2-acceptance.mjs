@@ -10,6 +10,10 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { writeFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import postgres from "postgres";
+import {
+  assertDisposableDatabase,
+  assertScratchName,
+} from "./lib/disposable-db.mjs";
 import { generateKeyPairSync } from "node:crypto";
 const SIGNING = generateKeyPairSync("ed25519").privateKey.export({
   type: "pkcs8",
@@ -67,6 +71,8 @@ const fake = createServer((req, res) => {
 await new Promise((r) => fake.listen(FAKE, "127.0.0.1", r));
 
 // ---- database
+assertDisposableDatabase(ADMIN);
+assertScratchName(DB);
 const admin = postgres(ADMIN, { max: 1, onnotice: () => undefined });
 await admin.unsafe(`drop database if exists ${DB} with (force)`);
 await admin.unsafe(`create database ${DB}`);
@@ -96,7 +102,6 @@ const startHost = async (extra = {}) => {
       PAYFLOW_M5_BOOTSTRAP_KEY: "b".repeat(40),
       PAYFLOW_M5_ORIGIN: ORIGIN,
       // required for the Gateway (and so the customer app) to exist; no PayPal variables are set, so no payment can execute
-      PAYFLOW_M6_DEMO_AGENT: "true",
       PAYFLOW_M6_SIGNING_KEY: SIGNING,
       PAYFLOW_GATEWAY_ADMIN_TOKEN: ADMIN_TOKEN,
       CRON_SECRET: CRON,

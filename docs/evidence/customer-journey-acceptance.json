@@ -1,0 +1,116 @@
+{
+  "at": "2026-11-12T10:37:35.764Z",
+  "what": "compiled host (separate process, killed and restarted mid-journey) + real HTTP + PostgreSQL; sources are fictional sandbox fixtures; no email sender; no payment provider",
+  "ok": true,
+  "results": [
+    {
+      "n": 1,
+      "name": "an account is created and signed in; no email sender is configured and the app says so",
+      "ok": true
+    },
+    {
+      "n": 2,
+      "name": "the person drafts a mission",
+      "ok": true,
+      "status": 201
+    },
+    {
+      "n": 3,
+      "name": "the person approves it (the only owner, no approval rule set)",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "n": 4,
+      "name": "a launch run is queued: nothing has searched yet",
+      "ok": true,
+      "status": 201
+    },
+    {
+      "n": 5,
+      "name": "after the host is killed and restarted the run is still queued (durable)",
+      "ok": true
+    },
+    {
+      "n": 6,
+      "name": "the authorized worker runs it on the new process: READY, both steps done, honest counts",
+      "ok": true,
+      "ran": 1,
+      "state": "READY",
+      "steps": [
+        {
+          "position": 0,
+          "area": "WORKSPACE",
+          "state": "DONE",
+          "refusal": null,
+          "summary": {
+            "found": 4,
+            "searchId": "wsq_0b1cdb8a2e4779cd96c0ad9e",
+            "qualified": 1,
+            "truncated": false,
+            "rejectedBySource": 0
+          },
+          "attempts": 1
+        },
+        {
+          "position": 1,
+          "area": "SERVICES",
+          "state": "DONE",
+          "refusal": null,
+          "summary": {
+            "found": 4,
+            "qualified": 1,
+            "truncated": false,
+            "rejectedBySource": 0
+          },
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "n": 7,
+      "name": "the run spent and booked nothing",
+      "ok": true,
+      "ledger": 0,
+      "bookings": 0
+    },
+    {
+      "n": 8,
+      "name": "the search the run recorded is stored with its listings",
+      "ok": true,
+      "listings": 4
+    },
+    {
+      "n": 9,
+      "name": "the person proposes a booking from the run's own search; nothing is held yet",
+      "ok": true,
+      "status": 201
+    },
+    {
+      "n": 10,
+      "name": "approving the booking holds budget in the ledger; nothing is claimed as reserved or paid",
+      "ok": true,
+      "status": 200,
+      "exposure": 136500
+    },
+    {
+      "n": 11,
+      "name": "the ledger exports as CSV for a bookkeeper",
+      "ok": true,
+      "filename": "payflow-ledger-msn_347c40c9ce5a6363c2024afd.csv"
+    },
+    {
+      "n": 12,
+      "name": "the audit trail holds the mission, the approval and the booking, and no address or token",
+      "ok": true,
+      "actions": [
+        "MISSION_CREATED",
+        "MISSION_VERSION_APPROVED",
+        "WORKSPACE_SEARCHED",
+        "BOOKING_PROPOSED",
+        "BOOKING_APPROVED",
+        "MISSION_LEDGER_ITEM_CREATED"
+      ]
+    }
+  ]
+}
