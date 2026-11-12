@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { EvidenceChip, FlowObject, type FlowState } from "./flow";
+import { ExploreTabs } from "./explore-tabs";
 
 type Offer = {
   merchant: string;
@@ -131,6 +132,7 @@ export function Explore() {
         <div className="stack">
           <p className="eyebrow">Explore</p>
           <h1>What do you need to buy?</h1>
+          <ExploreTabs />
           <form className="stack" onSubmit={(e) => void submit(e)}>
             <div className="field">
               <label htmlFor="q">Describe the item</label>

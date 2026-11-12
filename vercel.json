@@ -29,6 +29,12 @@
     },
     "api/account.ts": {
       "maxDuration": 15
+    },
+    "api/flights.ts": {
+      "maxDuration": 60
+    },
+    "api/talent.ts": {
+      "maxDuration": 30
     }
   },
   "headers": [

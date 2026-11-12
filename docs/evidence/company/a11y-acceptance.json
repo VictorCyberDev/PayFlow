@@ -1,6 +1,6 @@
 {
   "environment": "local static production export served on 127.0.0.1; Chromium headless; no deployed host",
-  "routes": 49,
+  "routes": 50,
   "widths": [
     320,
     375,
@@ -23,6 +23,6 @@
     "no focus trap",
     "keyboard-only verifier"
   ],
-  "pagesChecked": 294,
+  "pagesChecked": 300,
   "failures": []
 }

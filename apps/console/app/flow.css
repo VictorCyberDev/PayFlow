@@ -392,14 +392,23 @@ a.card .card__go {
   stroke-width: 2;
   opacity: 0.6;
 }
-/* listening / planning / searching / comparing / negotiating — the line is drawing itself */
+/*
+ * listening / planning / searching / executing — PayFlow is working, so the line is drawing itself.
+ * comparing and negotiating are deliberately NOT here: by then the work is done and the next move is the founder's.
+ * A line that keeps animating under a finished list of options says "still working", which is a lie, and it also
+ * leaves the mark looking half-drawn in any still image of the page.
+ */
 .flow-object[data-state="listening"] .flow-object__line,
 .flow-object[data-state="planning"] .flow-object__line,
 .flow-object[data-state="searching"] .flow-object__line,
-.flow-object[data-state="comparing"] .flow-object__line,
-.flow-object[data-state="negotiating"] .flow-object__line,
 .flow-object[data-state="executing"] .flow-object__line {
   animation: flow-draw 2.4s var(--ease) infinite;
+}
+/* comparing / negotiating — complete, at rest, and visibly weightier than idle: there is something to look at. */
+.flow-object[data-state="comparing"] .flow-object__line,
+.flow-object[data-state="negotiating"] .flow-object__line {
+  stroke-width: 3.5;
+  animation: none;
 }
 .flow-object[data-state="listening"] .flow-object__halo,
 .flow-object[data-state="planning"] .flow-object__halo,
@@ -780,4 +789,79 @@ a.card .card__go {
     clip-path: inset(50%);
     white-space: nowrap;
   }
+}
+
+/* Explore's own tab bar: one nav item at the top, several kinds of thing underneath. */
+.flow .tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.flow .tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--text-2);
+  text-decoration: none;
+  font-weight: 550;
+}
+.flow .tabs__tab.is-active {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-text);
+}
+
+/* A flight itinerary reads as a timeline, not a table. */
+.flow .leg {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+.flow .leg:first-of-type {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+.flow .leg__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  font-weight: 650;
+}
+.flow .leg__meta {
+  color: var(--text-3);
+  font-weight: 400;
+  font-size: 0.9rem;
+}
+.flow .leg__seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 0.92rem;
+  color: var(--text-2);
+  margin-top: 6px;
+}
+.flow .leg__carrier {
+  font-weight: 600;
+  color: var(--text);
+}
+.flow .offer__price {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+/* A candidate's own photograph, at a size that reads as a person rather than a favicon. */
+.flow .avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--wash);
+  flex: none;
 }
