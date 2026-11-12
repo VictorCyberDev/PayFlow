@@ -50,6 +50,13 @@ jobs:
         run: python3 -m unittest discover -s packages/sdk-python/tests -v
       - run: npm test -- --reporter=default --reporter=json --outputFile=/tmp/payflow-tests.json
       - run: npm run test:integration -- --reporter=default --reporter=json --outputFile=/tmp/payflow-integration.json
+      # Prove both a clean install and the deployed-baseline (001–023) upgrade against
+      # disposable localhost PostgreSQL. Never hand production credentials to this job.
+      - name: Rehearse public database upgrade and least-privilege grants
+        run: node --import tsx scripts/migration-rehearsal.mjs
+        env:
+          PGBASE: postgres://payflow:payflow_test@localhost:5432
+          PAYFLOW_ALLOW_DESTRUCTIVE_TEST_DB: "1"
       - run: npm run test:coverage
       - name: Export bounded test counts
         run: |
