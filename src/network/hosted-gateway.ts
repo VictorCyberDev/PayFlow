@@ -1309,7 +1309,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       )) !== null,
   });
   const connectorRegistry: ConnectorRegistry =
-    options.connectors ?? builtinRegistry(iso);
+    options.connectors ?? builtinRegistry(iso, process.env["CHANNEL3_API_KEY"]);
   const connectorService = new ConnectorService({
     sql,
     audit,
