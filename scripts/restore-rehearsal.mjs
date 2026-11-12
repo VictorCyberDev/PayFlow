@@ -12,6 +12,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import postgres from "postgres";
+import { assertDisposableDatabase, assertScratchName } from "./lib/disposable-db.mjs";
 
 const source = process.env.SOURCE_URL;
 const admin = process.env.ADMIN_URL;
@@ -25,6 +26,12 @@ const withDb = (url, db) => {
   return u.toString();
 };
 const target = `rehearsal_${Date.now()}`;
+// The source may be remote but is read-only; the CREATE/DROP administrator must
+// be an explicitly opted-in disposable database on the local machine.
+const scratchAdmin = new URL(admin);
+scratchAdmin.pathname = "/scratch_test";
+assertDisposableDatabase(scratchAdmin.toString());
+assertScratchName(target);
 const dir = mkdtempSync(join(tmpdir(), "restore-"));
 const dump = join(dir, "backup.dump");
 const report = { startedAt: new Date().toISOString(), steps: [], ok: false };

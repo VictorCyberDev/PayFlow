@@ -17,6 +17,7 @@
 // invariant holds. The expected fresh-only objects are the merchant-only migration's tables.
 import { readFile, readdir } from "node:fs/promises";
 import postgres from "postgres";
+import { assertDisposableDatabase, assertScratchName } from "./lib/disposable-db.mjs";
 
 /** The public application baseline that is actually deployed today. */
 const BASELINE_MAX = 23;
@@ -30,6 +31,22 @@ if (!base) {
 }
 const FRESH_DB = process.env.FRESH_DB ?? "pf_rehearse_fresh";
 const UPGRADE_DB = process.env.UPGRADE_DB ?? "pf_rehearse_upgrade";
+
+/*
+ * The rehearsal DROP/CREATE calls MUST NEVER touch the deployed Neon database.
+ * Require an explicit destructive-test opt-in, verified loopback host, and
+ * exactly the project's owned disposable database names before connecting.
+ */
+const baseUrl = new URL(base);
+if (baseUrl.pathname !== "/" && baseUrl.pathname !== "")
+  throw new Error("PGBASE_MUST_BE_SERVER_ONLY");
+const guardUrl = new URL(base);
+guardUrl.pathname = "/scratch_test";
+assertDisposableDatabase(guardUrl.toString());
+assertScratchName(FRESH_DB);
+assertScratchName(UPGRADE_DB);
+if (FRESH_DB === UPGRADE_DB)
+  throw new Error("REHEARSAL_DATABASES_MUST_DIFFER");
 
 const files = (await readdir("db/migrations"))
   .filter((f) => f.endsWith(".sql"))

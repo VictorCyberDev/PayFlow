@@ -13,7 +13,7 @@ const LOCAL = new Set(["localhost", "127.0.0.1", "::1"]);
 const DISPOSABLE_NAME =
   /(^|[_-])(test|scratch|accept|acceptance|tmp)($|[_-])/iu;
 const SCRATCH_NAME =
-  /^(b1b2_acceptance|journey_acceptance|fp_[a-z0-9]{6}|fp_test_[a-z0-9]{6}|fpx_[a-z0-9]{5})$/u;
+  /^(b1b2_acceptance|journey_acceptance|pf_rehearse_(?:fresh|upgrade)|rehearsal_[0-9]{13}|fp_[a-z0-9]{6}|fp_test_[a-z0-9]{6}|fpx_[a-z0-9]{5})$/u;
 
 export function assertDisposableDatabase(rawUrl, env = process.env) {
   const refuse = (why) => {
