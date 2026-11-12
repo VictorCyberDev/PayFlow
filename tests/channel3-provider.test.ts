@@ -14,9 +14,6 @@ describe("Channel3 real read-only adapter contract", () => {
         "operator-secret",
       );
       expect(init?.body).toBe('{"query":"desk lamp","limit":5}');
-        query: "desk lamp",
-        limit: 5,
-      });
       return Promise.resolve(
         new Response(
           JSON.stringify({
