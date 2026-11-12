@@ -1,0 +1,25 @@
+name: Temporary formatting review
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  format-preview:
+    if: github.head_ref == 'claude/payflow-v3-m1-m90-6rh3ha'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Render formatted source for review
+        run: |
+          npx prettier --write src/missions/channel3-provider.ts src/missions/connectors.ts tests/channel3-provider.test.ts
+          for file in src/missions/channel3-provider.ts src/missions/connectors.ts tests/channel3-provider.test.ts; do
+            printf 'FORMATTED_START:%s\n' "$file"
+            base64 -w0 "$file"
+            printf '\nFORMATTED_END:%s\n' "$file"
+          done
