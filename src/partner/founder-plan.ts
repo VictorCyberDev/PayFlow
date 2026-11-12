@@ -321,9 +321,23 @@ export function transientGenerationFault(body: string): boolean {
  * rate hide behind a correct-sounding message. Only an HTTP status and an allowlisted code are recorded: never a key,
  * never the provider's prose, never the founder's words.
  */
-export function logProviderFault(status: number, code: string): void {
+export function logProviderFault(
+  status: number,
+  code: string,
+  /**
+   * The wait the provider asked for, in milliseconds, when it named one.
+   *
+   * This is the field that distinguishes limits a retry can absorb from limits only a plan change can. A few seconds is
+   * a per-minute window reopening; thousands of seconds is a daily quota, and no client-side waiting will help. It is a
+   * duration the provider computed, so it carries none of the founder's words and none of the provider's prose.
+   */
+  waitMs?: number,
+): void {
   console.error(
-    "PAYFLOW_MODEL_PROVIDER_FAULT " + JSON.stringify({ status, code }),
+    "PAYFLOW_MODEL_PROVIDER_FAULT " +
+      JSON.stringify(
+        waitMs === undefined ? { status, code } : { status, code, waitMs },
+      ),
   );
 }
 
@@ -522,16 +536,15 @@ export class GroqPartnerModel implements PartnerModel {
       }
       if (res.status >= 500 || res.status === 429) {
         const detail = await res.text().catch(() => "");
-        logProviderFault(res.status, providerFaultCode(detail));
         // On a 429 the provider names the interval; on a 5xx it names nothing and a short pause is the honest guess.
+        const waitMs =
+          res.status === 429
+            ? retryDelayMs(res.headers)
+            : RETRY_POLICY.serverFaultWaitMs;
+        logProviderFault(res.status, providerFaultCode(detail), waitMs);
         return {
           result: { status: "MODEL_UNAVAILABLE" as const },
-          retry: {
-            waitMs:
-              res.status === 429
-                ? retryDelayMs(res.headers)
-                : RETRY_POLICY.serverFaultWaitMs,
-          },
+          retry: { waitMs },
         };
       }
       // A 400 is not always "it refused you". The provider also answers 400 when the model's own generation failed to

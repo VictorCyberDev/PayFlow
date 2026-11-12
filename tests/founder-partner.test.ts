@@ -496,10 +496,17 @@ describe("what a provider fault records", () => {
   });
 
   it("rate limiting and an outage stay distinguishable in the log while looking the same to a founder", async () => {
-    const seen: Array<{ status: number; code: string }> = [];
+    const seen: Array<{ status: number; code: string; waitMs?: number }> = [];
     const spy = vi.spyOn(console, "error").mockImplementation((...args) => {
       const m = /PAYFLOW_MODEL_PROVIDER_FAULT (\{.*\})/u.exec(String(args[0]));
-      if (m) seen.push(JSON.parse(m[1]!) as { status: number; code: string });
+      if (m)
+        seen.push(
+          JSON.parse(m[1]!) as {
+            status: number;
+            code: string;
+            waitMs?: number;
+          },
+        );
     });
     try {
       const call = async (status: number, body: string) => {
@@ -516,12 +523,17 @@ describe("what a provider fault records", () => {
       await call(503, "upstream down");
       await call(400, '{"error":{"code":"json_validate_failed"}}');
       // Each cause is still named, and each appears twice because the retry really did try again and really did fail.
-      // A fault logged once would now be the surprising reading: it would mean the second attempt never happened.
+      // A fault logged once would mean the second attempt never happened -- which is exactly how production reads when
+      // the provider asks for longer than the cap, so the count carries real information.
+      //
+      // waitMs is recorded for a 429 and a 5xx because it is the field that says whether waiting could ever help: a few
+      // seconds is a per-minute window reopening, thousands of seconds is a daily quota no retry can outlast. A 400 that
+      // missed its own schema has no window to wait for, so it carries none.
       expect(seen).toEqual([
-        { status: 429, code: "rate_limit_exceeded" },
-        { status: 429, code: "rate_limit_exceeded" },
-        { status: 503, code: "other" },
-        { status: 503, code: "other" },
+        { status: 429, code: "rate_limit_exceeded", waitMs: 0 },
+        { status: 429, code: "rate_limit_exceeded", waitMs: 0 },
+        { status: 503, code: "other", waitMs: RETRY_POLICY.serverFaultWaitMs },
+        { status: 503, code: "other", waitMs: RETRY_POLICY.serverFaultWaitMs },
         { status: 400, code: "json_validate_failed" },
         { status: 400, code: "json_validate_failed" },
       ]);

@@ -109,12 +109,30 @@ documentation does not support it: a 4K reservation per request would have broke
 concurrent burst on the 2nd request, not the 8th. The guess was dropped rather than
 shipped, and the reservation is unchanged.
 
-### The observability hole behind all of this
+### What the diagnostic says
 
-Every cause above reaches the browser as the same 503 and the same sentence, which
-is correct for a founder and useless for diagnosis. The diagnostic that distinguishes
-them (`PAYFLOW_MODEL_PROVIDER_FAULT`, merged in #91) writes to Vercel's runtime logs,
-and this session's token is refused by both `get_runtime_logs` and
-`get_runtime_errors` with 403. So the one instrument built for this question cannot
-be read from here, which is why the account's real limits are still unknown. Either
-granting log access or reading the limits page directly would close it.
+Read from Vercel's runtime logs for the production deployment, every failure during
+the measurements above:
+
+```
+PAYFLOW_MODEL_PROVIDER_FAULT {"status":429,"code":"rate_limit_exceeded"}
+```
+
+Not an outage, not a missing key, not a generation that missed its schema. The
+provider is rate limiting us, which settles the cause beyond inference.
+
+The logs carry a second fact worth as much as the first: **one fault line per failed
+request, not two.** The retry never fired, which can only happen when the interval
+the provider named exceeded the cap. So on this account Groq is not saying "try again
+in a moment" -- it is asking for a wait longer than any request can sit through.
+
+A correction on how this was found. An earlier version of this entry recorded Vercel
+log access as blocked by a 403 and listed granting it as an owner action. That was
+wrong: the 403 came from passing a team id that does not exist. With the correct team
+the logs read normally and needed no new permission. The owner action was removed.
+
+What is still not known from the log line alone is _which_ limit: a per-minute window
+would reopen in seconds, a daily quota in hours, and both answer 429. So the fault
+record now also carries `waitMs`, the interval the provider itself named -- a
+duration it computed, carrying none of the founder's words and none of the provider's
+prose. The next failure in production will say which limit this is.
