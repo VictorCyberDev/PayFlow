@@ -13,7 +13,7 @@ describe("Channel3 real read-only adapter contract", () => {
       expect(new Headers(init?.headers).get("x-api-key")).toBe(
         "operator-secret",
       );
-      expect(JSON.parse(String(init?.body))).toEqual({
+      expect(init?.body).toBe('{"query":"desk lamp","limit":5}');
         query: "desk lamp",
         limit: 5,
       });
