@@ -18,7 +18,13 @@ export const FOUNDER_PLAN_LIMITS = Object.freeze({
   inputCharacters: 1200,
   outputBytes: 12_288,
   timeoutMs: 20_000,
-  maxOutputTokens: 1200,
+  /**
+   * Generous on purpose. The default model reasons before it answers, and reasoning tokens come out of this same budget,
+   * so a tight ceiling truncates the JSON mid-object and the provider rejects its own output with a 400. That was
+   * observed in production: the identical goal planned on one attempt and failed on the next. The answer itself is
+   * bounded separately by outputBytes and by the schema, so a larger ceiling costs nothing in safety.
+   */
+  maxOutputTokens: 4000,
   /** A single workstream estimate beyond $1,000,000 is a model fault, not a plan. */
   amountCeilingMinor: 100_000_000,
   maxWorkstreams: 6,
@@ -273,6 +279,19 @@ export async function planForFounder(
 // ------------------------------------------------------------------------------------------- provider
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 
+/**
+ * True when a provider 400 describes the model failing to produce valid output rather than refusing the request.
+ * Matched on the error body, bounded, and failing closed: anything unrecognised is treated as a real rejection.
+ */
+export function transientGenerationFault(body: string): boolean {
+  const text = body.slice(0, 4096).toLowerCase();
+  return (
+    text.includes("json_validate_failed") ||
+    text.includes("tool_use_failed") ||
+    text.includes("failed to generate json")
+  );
+}
+
 /** Groq (OpenAI-compatible) chat completions with strict JSON-schema output. Server-side only; the key never leaves this process. */
 export class GroqPartnerModel implements PartnerModel {
   readonly #key: string;
@@ -329,14 +348,22 @@ export class GroqPartnerModel implements PartnerModel {
       };
     }
     if (!res.ok) {
-      await res.body?.cancel().catch(() => undefined);
+      if (res.status === 401 || res.status === 403) {
+        await res.body?.cancel().catch(() => undefined);
+        return { status: "MODEL_NOT_CONFIGURED" as const };
+      }
+      if (res.status >= 500 || res.status === 429) {
+        await res.body?.cancel().catch(() => undefined);
+        return { status: "MODEL_UNAVAILABLE" as const };
+      }
+      // A 400 is not always "it refused you". The provider also answers 400 when the model's own generation failed to
+      // satisfy the requested JSON schema, which is a transient fault on an identical request — telling a founder to
+      // reword a perfectly good goal would be wrong. Distinguish the two by the provider's error code.
+      const detail = await res.text().catch(() => "");
       return {
-        status:
-          res.status === 401 || res.status === 403
-            ? ("MODEL_NOT_CONFIGURED" as const)
-            : res.status >= 500 || res.status === 429
-              ? ("MODEL_UNAVAILABLE" as const)
-              : ("MODEL_REJECTED" as const),
+        status: transientGenerationFault(detail)
+          ? ("MODEL_UNAVAILABLE" as const)
+          : ("MODEL_REJECTED" as const),
       };
     }
     try {

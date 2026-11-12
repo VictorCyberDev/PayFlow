@@ -3,7 +3,9 @@ import { handlePartnerRequest } from "../api/partner.js";
 import {
   FOUNDER_PLAN_LIMITS,
   governPlan,
+  GroqPartnerModel,
   planForFounder,
+  transientGenerationFault,
   type PartnerFailure,
   type PartnerModel,
 } from "../src/partner/founder-plan.js";
@@ -383,5 +385,71 @@ describe("the same-origin check behind a reverse proxy", () => {
       freshWindow(),
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("a provider 400", () => {
+  /** Drives the real Groq transport with a stubbed fetch, so the classification is tested, not mocked away. */
+  async function statusFor(httpStatus: number, body: string) {
+    const transport = (() =>
+      Promise.resolve(
+        new Response(body, {
+          status: httpStatus,
+          headers: { "content-type": "application/json" },
+        }),
+      )) as unknown as typeof fetch;
+    const model = new GroqPartnerModel("test-key", transport);
+    const r = await model.complete("a goal", new AbortController().signal);
+    return r.status;
+  }
+
+  it("is a transient fault, not a refusal, when the model failed to produce valid JSON", async () => {
+    // Observed in production: the identical goal planned on one attempt and 400'd on the next.
+    expect(
+      await statusFor(
+        400,
+        JSON.stringify({
+          error: {
+            code: "json_validate_failed",
+            message: "Failed to generate JSON.",
+          },
+        }),
+      ),
+    ).toBe("MODEL_UNAVAILABLE");
+    expect(
+      await statusFor(
+        400,
+        JSON.stringify({ error: { code: "tool_use_failed" } }),
+      ),
+    ).toBe("MODEL_UNAVAILABLE");
+  });
+
+  it("is still a refusal when the provider says anything else", async () => {
+    expect(
+      await statusFor(
+        400,
+        JSON.stringify({ error: { code: "invalid_request_error" } }),
+      ),
+    ).toBe("MODEL_REJECTED");
+    // Fails closed: an unreadable body is not assumed to be transient.
+    expect(await statusFor(400, "")).toBe("MODEL_REJECTED");
+  });
+
+  it("keeps the other provider statuses unchanged", async () => {
+    expect(await statusFor(401, "{}")).toBe("MODEL_NOT_CONFIGURED");
+    expect(await statusFor(403, "{}")).toBe("MODEL_NOT_CONFIGURED");
+    expect(await statusFor(429, "{}")).toBe("MODEL_UNAVAILABLE");
+    expect(await statusFor(503, "{}")).toBe("MODEL_UNAVAILABLE");
+  });
+
+  it("classifies the body itself, failing closed on anything unrecognised", () => {
+    expect(
+      transientGenerationFault('{"error":{"code":"json_validate_failed"}}'),
+    ).toBe(true);
+    expect(transientGenerationFault("Failed to generate JSON.")).toBe(true);
+    expect(
+      transientGenerationFault('{"error":{"code":"context_length_exceeded"}}'),
+    ).toBe(false);
+    expect(transientGenerationFault("")).toBe(false);
   });
 });
