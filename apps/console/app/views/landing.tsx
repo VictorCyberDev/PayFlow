@@ -26,7 +26,7 @@ const TRUTH: ReadonlyArray<{
   {
     what: "Turn a goal into a plan",
     detail:
-      "Describe the goal in your own words. PayFlow works out the workstreams, what it still needs to ask, and what each step would cost. Live, on this site.",
+      "Describe the goal in your own words. A language model drafts the workstreams; PayFlow's own code re-does every sum, so a total you read is one it worked out rather than one it was handed.",
     kind: "MODEL_PROPOSED",
   },
   {
@@ -38,7 +38,7 @@ const TRUTH: ReadonlyArray<{
   {
     what: "Search real products and compare sellers",
     detail:
-      "Live catalogue search. PayFlow shows what each seller listed, in that seller's currency, and says plainly that delivery and tax are not in the number.",
+      "A real catalogue, searched when you ask. PayFlow shows what each seller listed, in that seller's currency, and says plainly that delivery and tax are not in the number.",
     kind: "PROVIDER_OBSERVED",
   },
   {
@@ -217,7 +217,9 @@ export default function Landing() {
           </div>
           <p className="quiet-note">
             PayFlow never shows a simulated result as a real one, and never
-            calls a prepared action a completed one.
+            calls a prepared action a completed one. If a provider is not
+            switched on for this deployment, the page tells you so instead of
+            showing you a canned answer.
           </p>
         </div>
       </section>
