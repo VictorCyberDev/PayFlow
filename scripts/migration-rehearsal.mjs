@@ -17,7 +17,10 @@
 // invariant holds. The expected fresh-only objects are the merchant-only migration's tables.
 import { readFile, readdir } from "node:fs/promises";
 import postgres from "postgres";
-import { assertDisposableDatabase, assertScratchName } from "./lib/disposable-db.mjs";
+import {
+  assertDisposableDatabase,
+  assertScratchName,
+} from "./lib/disposable-db.mjs";
 
 /** The public application baseline that is actually deployed today. */
 const BASELINE_MAX = 23;
@@ -45,8 +48,7 @@ guardUrl.pathname = "/scratch_test";
 assertDisposableDatabase(guardUrl.toString());
 assertScratchName(FRESH_DB);
 assertScratchName(UPGRADE_DB);
-if (FRESH_DB === UPGRADE_DB)
-  throw new Error("REHEARSAL_DATABASES_MUST_DIFFER");
+if (FRESH_DB === UPGRADE_DB) throw new Error("REHEARSAL_DATABASES_MUST_DIFFER");
 
 const files = (await readdir("db/migrations"))
   .filter((f) => f.endsWith(".sql"))

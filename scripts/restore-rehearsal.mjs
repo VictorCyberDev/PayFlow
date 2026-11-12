@@ -12,7 +12,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import postgres from "postgres";
-import { assertDisposableDatabase, assertScratchName } from "./lib/disposable-db.mjs";
+import {
+  assertDisposableDatabase,
+  assertScratchName,
+} from "./lib/disposable-db.mjs";
 
 const source = process.env.SOURCE_URL;
 const admin = process.env.ADMIN_URL;

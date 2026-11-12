@@ -45,7 +45,14 @@ describe("destructive test-database guard", () => {
       expect(() => assertDisposableDatabase(u, ON), u).toThrow(/REFUSED/u);
   });
   it("only creates or drops this repository's own scratch names", () => {
-    for (const ok of ["b1b2_acceptance", "journey_acceptance", "fp_abc123", "pf_rehearse_fresh", "pf_rehearse_upgrade", "rehearsal_1762900000000"])
+    for (const ok of [
+      "b1b2_acceptance",
+      "journey_acceptance",
+      "fp_abc123",
+      "pf_rehearse_fresh",
+      "pf_rehearse_upgrade",
+      "rehearsal_1762900000000",
+    ])
       expect(assertScratchName(ok)).toBe(ok);
     for (const bad of [
       "payflow_test",
