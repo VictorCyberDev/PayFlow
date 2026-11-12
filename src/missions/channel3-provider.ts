@@ -32,15 +32,22 @@ export function channel3ProductConnector(
     if (!raw || typeof raw !== "object" || Array.isArray(raw))
       throw new Error("CHANNEL3_INVALID_PRODUCT");
     const p = raw as Record<string, unknown>;
-    if (typeof p.id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(p.id))
+    if (
+      typeof p.id !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(p.id)
+    )
       throw new Error("CHANNEL3_INVALID_ID");
     const name = typeof p.title === "string" ? p.title : p.name;
-    if (typeof name !== "string" || name.trim().length === 0 || name.length > 200)
+    if (
+      typeof name !== "string" ||
+      name.trim().length === 0 ||
+      name.length > 200
+    )
       throw new Error("CHANNEL3_INVALID_TITLE");
     const offers = Array.isArray(p.offers) ? p.offers : [];
-    const first = offers.find((v) => v && typeof v === "object" && !Array.isArray(v)) as
-      | Record<string, unknown>
-      | undefined;
+    const first = offers.find(
+      (v) => v && typeof v === "object" && !Array.isArray(v),
+    ) as Record<string, unknown> | undefined;
     const claims: Record<string, string | number | boolean | null> = {
       provider: "Channel3",
       offerCount: Math.min(offers.length, 1000000),
@@ -72,9 +79,20 @@ export function channel3ProductConnector(
     credential: "NONE", // Operator-managed API key; never customer-supplied or exposed.
     dataUse:
       "Product searches are sent to Channel3 using PayFlow's operator-managed API access. Results and merchant offers are untrusted observations, not verified quotes or purchase commitments.",
-    limits: { maxRecords: 20, maxResultBytes: 131072, timeoutMs: 12000, callsPerHour: 20 },
+    limits: {
+      maxRecords: 20,
+      maxResultBytes: 131072,
+      timeoutMs: 12000,
+      callsPerHour: 20,
+    },
     adapter: {
-      async observe(request: { capability: "SEARCH" | "READ" | "COMPARE" | "STATUS" | "VERIFY"; query: ConnectorQuery }, signal: AbortSignal) {
+      async observe(
+        request: {
+          capability: "SEARCH" | "READ" | "COMPARE" | "STATUS" | "VERIFY";
+          query: ConnectorQuery;
+        },
+        signal: AbortSignal,
+      ) {
         if (request.capability !== "SEARCH" || !request.query.text)
           throw new Error("CHANNEL3_SEARCH_QUERY_REQUIRED");
         const res = await transport(endpoint, {
@@ -85,7 +103,10 @@ export function channel3ProductConnector(
           },
           redirect: "error",
           signal,
-          body: JSON.stringify({ query: request.query.text, limit: Math.min(request.query.limit, 20) }),
+          body: JSON.stringify({
+            query: request.query.text,
+            limit: Math.min(request.query.limit, 20),
+          }),
         });
         if (!res.ok) {
           await res.body?.cancel().catch(() => undefined);
@@ -113,7 +134,11 @@ export function channel3ProductConnector(
               ? data.items
               : null;
         if (!records) throw new Error("CHANNEL3_INVALID_RESPONSE");
-        return { records: records.slice(0, Math.min(request.query.limit, 20)).map(mapProduct) };
+        return {
+          records: records
+            .slice(0, Math.min(request.query.limit, 20))
+            .map(mapProduct),
+        };
       },
     },
   };

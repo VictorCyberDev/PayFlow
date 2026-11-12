@@ -232,6 +232,7 @@ export function builtinRegistry(
   const registry = new ConnectorRegistry().register(demoCatalogConnector(now));
   // The operator's own API key is never sent to a browser or stored as a customer credential.
   // Installing a connector still requires the organization's explicit acknowledgement of data use.
-  if (channel3ApiKey) registry.register(channel3ProductConnector(channel3ApiKey, now));
+  if (channel3ApiKey)
+    registry.register(channel3ProductConnector(channel3ApiKey, now));
   return registry;
 }
