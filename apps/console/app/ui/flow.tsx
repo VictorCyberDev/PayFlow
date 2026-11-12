@@ -132,6 +132,7 @@ const NAV = [
   { href: "/try/", label: "Try" },
   { href: "/explore/", label: "Explore" },
   { href: "/partner/", label: "Partner" },
+  { href: "/account/", label: "Workspace" },
 ] as const;
 
 /** The consumer chrome. Developer and enterprise destinations live in the footer, not in a founder's way (§6.5). */

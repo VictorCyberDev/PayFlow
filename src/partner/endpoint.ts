@@ -22,12 +22,24 @@ type Bucket = { count: number; resetAt: number };
 
 export class RequestGuard {
   readonly #callers = new Map<string, Bucket>();
+  readonly #perCaller: number;
+  readonly #perInstance: number;
   #instance: Bucket = { count: 0, resetAt: 0 };
+
+  /**
+   * `perCaller` differs by endpoint because the right ceiling does. A model call is expensive, so five a minute is
+   * generous. Signing in, out and back in is three in a few seconds of ordinary use, and brute force is already answered
+   * by the account lockout rather than by this, so the account door gets more room.
+   */
+  constructor(limits: { perCaller?: number; perInstance?: number } = {}) {
+    this.#perCaller = limits.perCaller ?? GUARD_LIMITS.perCallerPerWindow;
+    this.#perInstance = limits.perInstance ?? GUARD_LIMITS.perInstancePerWindow;
+  }
 
   allow(caller: string, now: number): boolean {
     if (now >= this.#instance.resetAt)
       this.#instance = { count: 0, resetAt: now + GUARD_LIMITS.windowMs };
-    if (this.#instance.count >= GUARD_LIMITS.perInstancePerWindow) return false;
+    if (this.#instance.count >= this.#perInstance) return false;
     if (this.#callers.size > GUARD_LIMITS.maxTrackedCallers)
       this.#callers.clear();
     const existing = this.#callers.get(caller);
@@ -35,7 +47,7 @@ export class RequestGuard {
       !existing || now >= existing.resetAt
         ? { count: 0, resetAt: now + GUARD_LIMITS.windowMs }
         : existing;
-    if (bucket.count >= GUARD_LIMITS.perCallerPerWindow) {
+    if (bucket.count >= this.#perCaller) {
       this.#callers.set(caller, bucket);
       return false;
     }
