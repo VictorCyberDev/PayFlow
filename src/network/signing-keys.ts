@@ -132,10 +132,18 @@ export class SigningKeyRegistry {
    */
   async revoke(keyId: string, now: string): Promise<boolean> {
     return this.sql.begin(async (tx) => {
+      // Read issuer without taking a row lock first. All key lifecycle operations
+      // acquire the issuer lock before row locks; reversing this order deadlocks
+      // against activate()/announce() when both touch the same key.
+      const [candidate] =
+        await tx`select issuer from proof_signing_keys where key_id = ${keyId}`;
+      if (!candidate) return false;
+      await tx`select pg_advisory_xact_lock(hashtextextended(${"signing:" + String(candidate.issuer)}, 4))`;
       const [key] =
         await tx`select issuer, public_jwk from proof_signing_keys where key_id = ${keyId} for update`;
       if (!key) return false;
-      await tx`select pg_advisory_xact_lock(hashtextextended(${"signing:" + String(key.issuer)}, 4))`;
+      if (String(key.issuer) !== String(candidate.issuer))
+        throw new Error("KEY_ISSUER_CHANGED");
       const rows = await tx`
         update proof_signing_keys set status = 'REVOKED', revoked_at = ${now}
         where key_id = ${keyId} and status <> 'REVOKED' returning key_id`;
