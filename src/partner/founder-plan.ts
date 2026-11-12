@@ -280,15 +280,49 @@ export async function planForFounder(
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 
 /**
+ * The provider error codes this code recognises. Anything else is reported as "other": the point is to learn WHICH fault is
+ * happening without ever logging the provider's free text, which could echo the founder's own words back into a log.
+ */
+const KNOWN_FAULTS = [
+  "json_validate_failed",
+  "tool_use_failed",
+  "rate_limit_exceeded",
+  "context_length_exceeded",
+  "model_not_found",
+  "model_terms_required",
+  "insufficient_quota",
+] as const;
+
+/** A single allowlisted token, never free text. Safe to log. */
+export function providerFaultCode(body: string): string {
+  const text = body.slice(0, 4096).toLowerCase();
+  const hit = KNOWN_FAULTS.find((code) => text.includes(code));
+  if (hit) return hit;
+  return text.includes("failed to generate json")
+    ? "json_validate_failed"
+    : "other";
+}
+
+/**
  * True when a provider 400 describes the model failing to produce valid output rather than refusing the request.
  * Matched on the error body, bounded, and failing closed: anything unrecognised is treated as a real rejection.
  */
 export function transientGenerationFault(body: string): boolean {
-  const text = body.slice(0, 4096).toLowerCase();
-  return (
-    text.includes("json_validate_failed") ||
-    text.includes("tool_use_failed") ||
-    text.includes("failed to generate json")
+  const code = providerFaultCode(body);
+  return code === "json_validate_failed" || code === "tool_use_failed";
+}
+
+/**
+ * Observability for a fault a founder only ever sees as "busy, try again".
+ *
+ * Without it, three very different causes — the provider rate limiting us, the provider being down, and the model failing
+ * to satisfy its own schema — are indistinguishable from outside, which is exactly the hole that let a two-thirds failure
+ * rate hide behind a correct-sounding message. Only an HTTP status and an allowlisted code are recorded: never a key,
+ * never the provider's prose, never the founder's words.
+ */
+export function logProviderFault(status: number, code: string): void {
+  console.error(
+    "PAYFLOW_MODEL_PROVIDER_FAULT " + JSON.stringify({ status, code }),
   );
 }
 
@@ -353,13 +387,16 @@ export class GroqPartnerModel implements PartnerModel {
         return { status: "MODEL_NOT_CONFIGURED" as const };
       }
       if (res.status >= 500 || res.status === 429) {
-        await res.body?.cancel().catch(() => undefined);
+        const detail = await res.text().catch(() => "");
+        logProviderFault(res.status, providerFaultCode(detail));
         return { status: "MODEL_UNAVAILABLE" as const };
       }
       // A 400 is not always "it refused you". The provider also answers 400 when the model's own generation failed to
       // satisfy the requested JSON schema, which is a transient fault on an identical request — telling a founder to
       // reword a perfectly good goal would be wrong. Distinguish the two by the provider's error code.
       const detail = await res.text().catch(() => "");
+      const code = providerFaultCode(detail);
+      logProviderFault(res.status, code);
       return {
         status: transientGenerationFault(detail)
           ? ("MODEL_UNAVAILABLE" as const)

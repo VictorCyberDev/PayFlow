@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { handlePartnerRequest } from "../api/partner.js";
 import {
   FOUNDER_PLAN_LIMITS,
   governPlan,
   GroqPartnerModel,
   planForFounder,
+  providerFaultCode,
   transientGenerationFault,
   type PartnerFailure,
   type PartnerModel,
@@ -451,5 +452,73 @@ describe("a provider 400", () => {
       transientGenerationFault('{"error":{"code":"context_length_exceeded"}}'),
     ).toBe(false);
     expect(transientGenerationFault("")).toBe(false);
+  });
+});
+
+describe("what a provider fault records", () => {
+  it("reduces the provider's answer to one allowlisted token", () => {
+    expect(
+      providerFaultCode(
+        '{"error":{"code":"json_validate_failed","message":"..."}}',
+      ),
+    ).toBe("json_validate_failed");
+    expect(providerFaultCode('{"error":{"code":"rate_limit_exceeded"}}')).toBe(
+      "rate_limit_exceeded",
+    );
+    expect(providerFaultCode("Failed to generate JSON.")).toBe(
+      "json_validate_failed",
+    );
+    expect(providerFaultCode('{"error":{"code":"something_new"}}')).toBe(
+      "other",
+    );
+    expect(providerFaultCode("")).toBe("other");
+  });
+
+  it("never carries the provider's prose or the founder's words into a log", () => {
+    // The whole reason the code is an allowlist: an error body can echo the request back.
+    const leaky = JSON.stringify({
+      error: {
+        code: "json_validate_failed",
+        message:
+          "failed on input: I am launching a creative studio, my email is founder@example.com",
+      },
+    });
+    const code = providerFaultCode(leaky);
+    expect(code).toBe("json_validate_failed");
+    expect(code).not.toMatch(/creative studio|example\.com|@/);
+    // An unrecognised body collapses to a constant rather than leaking anything.
+    expect(
+      providerFaultCode("sk-secret-looking-text founder@example.com"),
+    ).toBe("other");
+  });
+
+  it("rate limiting and an outage stay distinguishable in the log while looking the same to a founder", async () => {
+    const seen: Array<{ status: number; code: string }> = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args) => {
+      const m = /PAYFLOW_MODEL_PROVIDER_FAULT (\{.*\})/u.exec(String(args[0]));
+      if (m) seen.push(JSON.parse(m[1]!) as { status: number; code: string });
+    });
+    try {
+      const call = async (status: number, body: string) => {
+        const transport = (() =>
+          Promise.resolve(
+            new Response(body, { status }),
+          )) as unknown as typeof fetch;
+        await new GroqPartnerModel("k", transport).complete(
+          "a goal",
+          new AbortController().signal,
+        );
+      };
+      await call(429, '{"error":{"code":"rate_limit_exceeded"}}');
+      await call(503, "upstream down");
+      await call(400, '{"error":{"code":"json_validate_failed"}}');
+      expect(seen).toEqual([
+        { status: 429, code: "rate_limit_exceeded" },
+        { status: 503, code: "other" },
+        { status: 400, code: "json_validate_failed" },
+      ]);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

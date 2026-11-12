@@ -68,7 +68,7 @@ export function unavailable(status: number, message: string): Response {
  * Origin against it alone risks rejecting every legitimate request. The public host arrives in `x-forwarded-host` (and
  * `host`), so any of the three matching is accepted. A genuine cross-origin POST still fails all three.
  */
-function sameOrigin(request: Request): boolean {
+export function sameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (!origin) return true; // a same-origin fetch may omit it; the body shape still has to be right
   let originHost: string;
@@ -93,7 +93,7 @@ function sameOrigin(request: Request): boolean {
   return candidates.has(originHost);
 }
 
-function callerKey(request: Request): string {
+export function callerKey(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for") ?? "";
   return (forwarded.split(",")[0] ?? "").trim().slice(0, 64) || "unknown";
 }
@@ -150,4 +150,18 @@ export async function readGuardedBody(
       refusal: unavailable(400, "PayFlow could not read that request."),
     };
   return { body: parsed as Record<string, unknown> };
+}
+
+/** True when the browser reached this request over HTTPS, read through the proxy that terminated TLS. */
+export function isSecureRequest(request: Request): boolean {
+  const proto = (request.headers.get("x-forwarded-proto") ?? "")
+    .split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  if (proto) return proto === "https";
+  try {
+    return new URL(request.url).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
