@@ -1,4 +1,5 @@
 import type { JsonWebKey } from "node:crypto";
+import { appendKeyEntry } from "./key-transparency.js";
 import type { Sql } from "postgres";
 
 /**
@@ -53,14 +54,34 @@ export class SigningKeyRegistry {
         throw new Error("KEY_ID_REUSED_WITH_DIFFERENT_KEY");
       if (cur[0]?.status === "REVOKED") throw new Error("KEY_REVOKED");
       if (cur[0]?.status === "ACTIVE") return "ALREADY_ACTIVE";
+      // The outgoing key's retirement is a key change too, and a log that recorded only arrivals would let a key
+      // disappear without trace. Read it before the update so the entry names the key that was actually retired.
+      const outgoing =
+        await tx`select key_id, public_jwk from proof_signing_keys where issuer = ${issuer} and status = 'ACTIVE'`;
       await tx`update proof_signing_keys set status = 'RETIRED', retired_at = ${now}
         where issuer = ${issuer} and status = 'ACTIVE'`;
+      for (const o of outgoing)
+        await appendKeyEntry(tx, {
+          issuer,
+          keyId: String(o.key_id),
+          status: "RETIRED",
+          publicJwk: o.public_jwk,
+          now,
+        });
       if (cur[0])
         await tx`update proof_signing_keys set status = 'ACTIVE', activated_at = ${now}, retired_at = null
           where key_id = ${keyId}`;
       else
         await tx`insert into proof_signing_keys (key_id, issuer, public_jwk, status, created_at, activated_at)
           values (${keyId}, ${issuer}, ${tx.json(publicJwk as never)}, 'ACTIVE', ${now}, ${now})`;
+      // In the same transaction as the key change: a log that can fall behind what it attests attests nothing.
+      await appendKeyEntry(tx, {
+        issuer,
+        keyId,
+        status: "ACTIVE",
+        publicJwk,
+        now,
+      });
       return "ACTIVATED";
     });
   }
@@ -94,15 +115,48 @@ export class SigningKeyRegistry {
       }
       await tx`insert into proof_signing_keys (key_id, issuer, public_jwk, status, created_at)
         values (${keyId}, ${issuer}, ${tx.json(publicJwk as never)}, 'NEXT', ${now})`;
+      await appendKeyEntry(tx, {
+        issuer,
+        keyId,
+        status: "NEXT",
+        publicJwk,
+        now,
+      });
       return "ANNOUNCED";
     });
   }
 
+  /**
+   * Revocation is the entry a verifier most needs, so it is written in the same transaction under the issuer's lock,
+   * like every other key change. A revocation recorded only in the key row could be undone with no trace.
+   */
   async revoke(keyId: string, now: string): Promise<boolean> {
-    const rows = await this.sql`
-      update proof_signing_keys set status = 'REVOKED', revoked_at = ${now}
-      where key_id = ${keyId} and status <> 'REVOKED' returning key_id`;
-    return rows.length === 1;
+    return this.sql.begin(async (tx) => {
+      // Read issuer without taking a row lock first. All key lifecycle operations
+      // acquire the issuer lock before row locks; reversing this order deadlocks
+      // against activate()/announce() when both touch the same key.
+      const [candidate] =
+        await tx`select issuer from proof_signing_keys where key_id = ${keyId}`;
+      if (!candidate) return false;
+      await tx`select pg_advisory_xact_lock(hashtextextended(${"signing:" + String(candidate.issuer)}, 4))`;
+      const [key] =
+        await tx`select issuer, public_jwk from proof_signing_keys where key_id = ${keyId} for update`;
+      if (!key) return false;
+      if (String(key.issuer) !== String(candidate.issuer))
+        throw new Error("KEY_ISSUER_CHANGED");
+      const rows = await tx`
+        update proof_signing_keys set status = 'REVOKED', revoked_at = ${now}
+        where key_id = ${keyId} and status <> 'REVOKED' returning key_id`;
+      if (rows.length !== 1) return false;
+      await appendKeyEntry(tx, {
+        issuer: String(key.issuer),
+        keyId,
+        status: "REVOKED",
+        publicJwk: key.public_jwk,
+        now,
+      });
+      return true;
+    });
   }
 
   /**

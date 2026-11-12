@@ -35,6 +35,9 @@ import {
   LaunchRunService,
 } from "../missions/launch-run-service.js";
 import { createLaunchRunRoutes } from "./launch-run-routes.js";
+import { readKeyTransparencyLog } from "./key-transparency.js";
+import { PLAN_RUN_KIND, PlanRunService } from "../missions/plan-run-service.js";
+import { createPlanRunRoutes } from "./plan-run-routes.js";
 import { sandboxServiceSource } from "../missions/service-market-sources.js";
 import { WorkspaceService } from "../missions/workspace-service.js";
 import {
@@ -93,6 +96,7 @@ import {
   financeHome,
   pendingDecisions,
   securityHome,
+  usageHome,
   unknownOperations,
 } from "./org-views.js";
 import {
@@ -606,6 +610,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         keys: await registry.published(options.organizationId),
       };
     },
+    // Public, like /v1/keys: a transparency log only its issuer can read proves nothing to anyone who doubts it.
+    keyTransparencyLog: () => readKeyTransparencyLog(sql),
     authenticate: (authorization) => store.authenticate(authorization, iso()),
     readProof: (access, id) => proofs.read(access, id, iso()),
   });
@@ -1005,12 +1011,15 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
     unknown: "view:unknown",
     funnel: "view:funnel",
     audit: "view:audit",
+    // Usage and billing is finance information, so it rides the finance permission rather than inventing a new one
+    // that would have to be threaded correctly through every role.
+    usage: "view:finance",
   };
 
   /** Organization views, approvals, members, pauses. Tenant and environment come from the MEMBER. */
   async function orgRoute(request: RestRequest): Promise<RestResponse | null> {
     const m = request.path.match(
-      /^\/v1\/admin\/(org\/(?:agents|finance|security|audit|authorities|decisions|unknown|funnel)|decisions\/([A-Za-z0-9-]{1,64})\/(approve|reject))$/u,
+      /^\/v1\/admin\/(org\/(?:agents|finance|security|audit|authorities|decisions|unknown|funnel|usage)|decisions\/([A-Za-z0-9-]{1,64})\/(approve|reject))$/u,
     );
     if (!m) return null;
     const requestId = `req_${randomUUID()}`;
@@ -1033,6 +1042,8 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         return ok({ agents: await agentInventory(sql, org, env, now) });
       if (view === "finance")
         return ok({ finance: await financeHome(sql, org, env, now) });
+      if (view === "usage")
+        return ok({ usage: await usageHome(sql, org, env, now) });
       if (view === "security")
         return ok({ agents: await securityHome(sql, org, env, now) });
       if (view === "authorities")
@@ -1298,7 +1309,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       )) !== null,
   });
   const connectorRegistry: ConnectorRegistry =
-    options.connectors ?? builtinRegistry(iso);
+    options.connectors ?? builtinRegistry(iso, process.env["CHANNEL3_API_KEY"]);
   const connectorService = new ConnectorService({
     sql,
     audit,
@@ -1789,8 +1800,18 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
       },
     },
   });
+  // V3 M55: drives an ACTIVE plan's dependency graph. No specialists are connected, so every task it reaches becomes an
+  // honest handoff naming what is missing; it never approves, skips, buys, hires, books, pays or contacts anyone.
+  const planRunService = new PlanRunService({
+    sql,
+    now: iso,
+    missions: missionService,
+    plans: planService,
+    automation,
+  });
   const automationHandlers: Record<string, Handler> = {
     [LAUNCH_RUN_KIND]: launchRunService.handler(),
+    [PLAN_RUN_KIND]: planRunService.handler(),
     [RECURRING_KIND]: (job) => recurringService.runCheck(job),
     BOOKING_EXPIRE: async (job) => {
       const missionId = job.payload.missionId;
@@ -1883,6 +1904,17 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
   });
   const launchRunRoutes = createLaunchRunRoutes({
     service: launchRunService,
+    reply: (requestId, status, body) => reply(requestId, status, body),
+    authorize: async (requestId, request, permission) =>
+      requireMember(
+        requestId,
+        await resolveActor(request),
+        permission,
+        request.path,
+      ),
+  });
+  const planRunRoutes = createPlanRunRoutes({
+    service: planRunService,
     reply: (requestId, status, body) => reply(requestId, status, body),
     authorize: async (requestId, request, permission) =>
       requireMember(
@@ -4423,6 +4455,7 @@ export function createHostedGatewayHandler(options: HostedGatewayOptions) {
         (await safely(() => quorumRoutes.member(request))) ??
         (await safely(() => recurringRoutes.member(request))) ??
         (await safely(() => launchRunRoutes.member(request))) ??
+        (await safely(() => planRunRoutes.member(request))) ??
         (await safely(() => shortlistRoutes.member(request))) ??
         (await safely(() => talentOfferRoutes.member(request))) ??
         (await safely(() => contractorRoutes.member(request))) ??

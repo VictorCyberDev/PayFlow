@@ -187,6 +187,7 @@ function shell(active, ...content) {
     ["#/checking", "Needs checking"],
     ["#/agents", "Agents"],
     ["#/notifications", "Notifications"],
+    ["#/usage", "Usage"],
     ["#/settings", "Settings"],
     ["#/help", "Help"],
   ];
@@ -1005,9 +1006,13 @@ async function missionList() {
 }
 
 /**
- * Mission templates (M58), including a Founder Launch starter pack. A template only fills in the form; it is NOT the orchestrated Founder Launch mission (M55), which does not exist yet. It never creates, approves,
- * spends or contacts anyone: the owner still reads, edits and approves, and the server checks every field again. Amounts are
- * starting points the owner is expected to change, not estimates of what anything costs.
+ * Mission templates (M58), including a Founder Launch starter pack. A template only fills in the form: it never creates,
+ * approves, spends or contacts anyone. The owner still reads, edits and approves, and the server checks every field
+ * again. Amounts are starting points the owner is expected to change, not estimates of what anything costs.
+ *
+ * Once a templated mission is approved it can be planned and then driven by a plan run (M55), which advances the plan's
+ * dependency graph as far as it honestly can and writes down what is waiting for a person. The run still buys, hires,
+ * books and pays nothing.
  */
 const TEMPLATES = [
   {
@@ -3513,6 +3518,318 @@ const STEP_WORDS = {
   FAILED: "Failed",
 };
 const AREA_WORDS = { WORKSPACE: "Workspaces", SERVICES: "Services" };
+const TASK_STATE_WORDS = {
+  BLOCKED: "Waiting on something else",
+  READY: "Ready",
+  AWAITING_APPROVAL: "Waiting for your approval",
+  IN_PROGRESS: "Being worked on",
+  HANDED_OFF: "With you to do",
+  COMPLETED: "Done",
+  FAILED: "Failed",
+  SKIPPED: "Skipped",
+  INVALIDATED: "No longer applies",
+};
+const TASK_READINESS_WORDS = {
+  EXECUTABLE: "An agent can do this",
+  PREPARED_HANDOFF: "Prepared for you or a provider",
+  UNAVAILABLE: "No honest way to do this",
+};
+
+/**
+ * The plan (M27) with the controls a person needs to act on it (M55). The plan run writes down what is waiting for you;
+ * this is where you do it. Every button is an existing authorized member action: approving, confirming that a handoff was
+ * really done, or skipping. None of them moves money.
+ */
+async function planPage(id) {
+  const m = await api(`/v1/admin/org/missions/${id}`);
+  if (!m.ok)
+    return shell(
+      "#/missions",
+      h("h1", { text: "Mission not found" }),
+      notice("bad", "That mission doesn't exist, or you can't see it."),
+    );
+  const p = await api(`/v1/admin/org/missions/${id}/plans`);
+  if (!p.ok)
+    return shell(
+      "#/missions",
+      h("h1", { text: "Plan" }),
+      notice("bad", "The plan is not available to your role."),
+    );
+  const tasks = p.data.tasks ?? [];
+  const out = h("div");
+  const act = async (taskId, op, bodyObj, failWord) => {
+    const r = await api(`/v1/admin/org/tasks/${taskId}/${op}`, {
+      method: "POST",
+      body: bodyObj,
+    });
+    if (!r.ok)
+      return out.replaceChildren(
+        notice(
+          "bad",
+          r.data && r.data.reason === "MISSING_EVIDENCE"
+            ? "This step needs its evidence filled in before you can confirm it."
+            : failWord,
+        ),
+      );
+    await planPage(id);
+  };
+  const card = (t) => {
+    const refs = {};
+    const evidenceInputs = (t.requiredEvidence ?? []).map((kind) => {
+      const inputId = `ev-${t.taskId}-${kind}`.replace(/[^A-Za-z0-9-]/gu, "-");
+      refs[kind] = "";
+      return h(
+        "div",
+        {},
+        h("label", { for: inputId, text: `Evidence: ${kind}` }),
+        h("input", {
+          id: inputId,
+          type: "text",
+          oninput: (e) => {
+            refs[kind] = e.target.value;
+          },
+        }),
+      );
+    });
+    const buttons = [];
+    if (t.state === "AWAITING_APPROVAL")
+      buttons.push(
+        h("button", {
+          type: "button",
+          text: "Approve this step",
+          onclick: () =>
+            act(t.taskId, "approve", {}, "That step could not be approved."),
+        }),
+      );
+    if (["READY", "HANDED_OFF", "IN_PROGRESS"].includes(t.state))
+      buttons.push(
+        h("button", {
+          type: "button",
+          text: "I have done this",
+          onclick: () =>
+            act(
+              t.taskId,
+              "confirm-handoff",
+              {
+                summary: "Confirmed by the owner",
+                evidence: Object.entries(refs)
+                  .filter(([, v]) => v)
+                  .map(([kind, ref]) => ({ kind, ref })),
+              },
+              "That step could not be confirmed.",
+            ),
+        }),
+      );
+    if (!["COMPLETED", "FAILED", "SKIPPED", "INVALIDATED"].includes(t.state))
+      buttons.push(
+        h("button", {
+          type: "button",
+          class: "secondary",
+          text: "Skip it",
+          onclick: () =>
+            act(
+              t.taskId,
+              "skip",
+              { reason: "Skipped by the owner" },
+              "That step could not be skipped.",
+            ),
+        }),
+      );
+    return h(
+      "article",
+      { class: "card" },
+      h(
+        "div",
+        { class: "row" },
+        h("h2", { text: t.title }),
+        h(
+          "span",
+          { class: "badge" },
+          glyph("dot"),
+          TASK_STATE_WORDS[t.state] ?? t.state,
+        ),
+      ),
+      h("p", { text: t.intendedOutcome }),
+      h(
+        "dl",
+        {},
+        row("What this is for", t.explanation),
+        row(
+          "How it can be done",
+          TASK_READINESS_WORDS[t.readiness] ?? t.readiness,
+        ),
+        t.readinessReason ? row("Why", wordsOf(t.readinessReason)) : false,
+        t.blockReason ? row("Waiting on", wordsOf(t.blockReason)) : false,
+        t.result && t.result.handoffNote
+          ? row("What the run said", t.result.handoffNote)
+          : false,
+      ),
+      evidenceInputs.length && t.state !== "COMPLETED"
+        ? h(
+            "div",
+            {},
+            h("p", {
+              class: "hint",
+              text: "This step records evidence. Fill in a reference for each before confirming it.",
+            }),
+            ...evidenceInputs,
+          )
+        : false,
+      buttons.length ? h("div", { class: "row" }, ...buttons) : false,
+    );
+  };
+  shell(
+    "#/missions",
+    h(
+      "div",
+      { class: "row" },
+      h("h1", { text: "Plan" }),
+      h("a", {
+        class: "link",
+        href: `#/missions/${id}/launch`,
+        text: "Back to the launch board",
+      }),
+    ),
+    h("p", {
+      text: "Every step in this mission's plan, what it is waiting on, and what you can do about it. Approving or confirming a step never moves money.",
+    }),
+    out,
+    p.data.activePlanVersion === null
+      ? notice(
+          "info",
+          "This mission has no active plan yet. A plan is proposed through the API or by an agent, and you put it in force.",
+        )
+      : h("div", {}, ...tasks.map(card)),
+  );
+}
+const PLAN_RUN_STATE_WORDS = {
+  QUEUED: "Waiting to start",
+  RUNNING: "Working through the plan",
+  WAITING_ON_PEOPLE: "Waiting for you",
+  COMPLETE: "Every step finished",
+  CANCELLED: "Cancelled",
+  FAILED: "Could not finish",
+};
+/** What each thing in the worklist is asking of you, in words. */
+const PLAN_NEEDS_WORDS = {
+  CONFIRM_THE_HANDOFF_WHEN_IT_IS_DONE: "Confirm it once it is done",
+  DECIDE_WHETHER_TO_SKIP_OR_CHANGE_THE_PLAN: "Skip it or change the plan",
+  APPROVE_OR_REJECT_THIS_TASK: "Approve or reject it",
+  GRANT_WHAT_IS_MISSING_OR_CHANGE_THE_PLAN:
+    "Grant what is missing, or change the plan",
+  LOOK_AT_THE_FAILURE_AND_RETRY_OR_SKIP:
+    "Look at what failed, then retry or skip",
+};
+/**
+ * The plan run (M55): the run works along the plan's dependency graph, and this is what came back. It never approves
+ * anything and never buys, hires, books, pays or contacts anyone, so the only thing it can hand you is a list of
+ * decisions. Starting one is a real control here, not an API-only feature.
+ */
+function planRunCard(id, run) {
+  const out = h("div");
+  const startButton = () =>
+    h("button", {
+      type: "button",
+      text: run ? "Start another run" : "Work through the plan",
+      onclick: async () => {
+        const r = await api(`/v1/admin/org/missions/${id}/plan-runs`, {
+          method: "POST",
+          body: {},
+        });
+        if (!r.ok)
+          return out.replaceChildren(
+            notice(
+              "bad",
+              r.data && r.data.reason === "NO_ACTIVE_PLAN"
+                ? "This mission has no active plan yet. Make a plan first."
+                : r.data && r.data.reason === "RUN_ALREADY_OPEN"
+                  ? "A run is already going for this mission."
+                  : "That run could not be started. Nothing was changed.",
+            ),
+          );
+        await launchBoardPage(id);
+      },
+    });
+  if (!run)
+    return h(
+      "article",
+      { class: "card" },
+      h("h2", { text: "Plan run" }),
+      h("p", {
+        class: "hint",
+        text: "No plan run yet. A run moves the plan along as far as it honestly can and then tells you exactly what is waiting for you. It never approves anything and never buys, hires, books or pays.",
+      }),
+      startButton(),
+      out,
+    );
+  return h(
+    "article",
+    { class: "card" },
+    h(
+      "div",
+      { class: "row" },
+      h("h2", { text: "Plan run" }),
+      h(
+        "span",
+        { class: "badge" },
+        glyph("dot"),
+        PLAN_RUN_STATE_WORDS[run.state] ?? run.state,
+      ),
+    ),
+    h("p", { class: "hint", text: run.notice }),
+    run.note ? h("p", { text: run.note }) : false,
+    run.worklist.length
+      ? h(
+          "div",
+          {},
+          h("h3", { text: "What is waiting for you" }),
+          h(
+            "ul",
+            { class: "list" },
+            ...run.worklist.map((w) =>
+              h(
+                "li",
+                {},
+                h("strong", { text: w.taskKey }),
+                h("span", {
+                  text: ` — ${PLAN_NEEDS_WORDS[w.needs] ?? wordsOf(w.needs)}${w.detail ? `. ${w.detail}` : ""}`,
+                }),
+              ),
+            ),
+          ),
+        )
+      : h("p", {
+          class: "hint",
+          text:
+            run.state === "COMPLETE"
+              ? "Nothing is waiting for you. Every step in the plan has finished."
+              : "Nothing is waiting for you from this run.",
+        }),
+    h("a", {
+      class: "link",
+      href: `#/missions/${id}/plan`,
+      text: "Open the plan",
+    }),
+    run.state === "QUEUED" || run.state === "RUNNING"
+      ? h("button", {
+          type: "button",
+          text: "Cancel this run",
+          onclick: async () => {
+            const r = await api(`/v1/admin/org/plan-runs/${run.runId}/cancel`, {
+              method: "POST",
+              body: {},
+            });
+            if (!r.ok)
+              return out.replaceChildren(
+                notice("bad", "That run has already finished."),
+              );
+            await launchBoardPage(id);
+          },
+        })
+      : startButton(),
+    out,
+  );
+}
 /** The latest discovery run: what it looked at, what it found, and that it bought nothing. Runs are started through the API or an agent. */
 function launchRunCard(id, run) {
   if (!run)
@@ -3596,12 +3913,13 @@ async function launchBoardPage(id) {
   const c = m.data.mission.activeContract ?? m.data.mission.latestContract;
   const get = async (p) =>
     (await api(`/v1/admin/org/missions/${id}/${p}`)).data ?? {};
-  const [b, o, k, l, lr] = await Promise.all([
+  const [b, o, k, l, lr, pr] = await Promise.all([
     get("bookings"),
     get("orders"),
     get("contracts"),
     get("ledger"),
     get("launch-runs"),
+    get("plan-runs"),
   ]);
   const lines = launchLines({
     bookings: b.bookings,
@@ -3625,6 +3943,7 @@ async function launchBoardPage(id) {
     h("p", {
       text: "Where each part stands, from the records themselves. It shows what you need to do and what happens outside PayFlow.",
     }),
+    planRunCard(id, (pr.runs ?? [])[0]),
     launchRunCard(id, (lr.runs ?? [])[0]),
     lines.map((x) =>
       h(
@@ -3776,33 +4095,66 @@ async function recurringPage(id) {
               ),
               s.active ? row("Next check", when(s.nextCheck)) : null,
             ),
+            h("div", { class: "actions" }, [
+              h("button", {
+                type: "button",
+                text: s.active ? `Stop ${s.label}` : `Start ${s.label} again`,
+                onclick: async () => {
+                  const x = await api(
+                    `/v1/admin/org/missions/${id}/recurring/${s.scheduleId}/${s.active ? "stop" : "resume"}`,
+                    { method: "POST", body: {} },
+                  );
+                  if (!x.ok)
+                    return out.replaceChildren(
+                      notice(
+                        "bad",
+                        x.data?.reason === "MISSION_NOT_ACTIVE"
+                          ? "Only an active mission can check recurring items."
+                          : reasonText(x.data?.reason),
+                      ),
+                    );
+                  await recurringPage(id);
+                },
+              }),
+            ]),
             s.active
-              ? h("div", { class: "actions" }, [
-                  h("button", {
-                    type: "button",
-                    text: `Stop ${s.label}`,
-                    onclick: async () => {
-                      const x = await api(
-                        `/v1/admin/org/missions/${id}/recurring/${s.scheduleId}/stop`,
-                        { method: "POST", body: {} },
-                      );
-                      if (!x.ok)
-                        return out.replaceChildren(
-                          notice("bad", reasonText(x.data?.reason)),
-                        );
-                      await recurringPage(id);
-                    },
-                  }),
-                ])
-              : null,
+              ? null
+              : h("p", {
+                  class: "hint",
+                  text: "Starting it again checks from now on. The time it was stopped for is not caught up.",
+                }),
           ),
         ),
     form,
     h("h2", { text: "What was checked" }),
+    d.awaitingYouCount
+      ? notice(
+          "info",
+          `${d.awaitingYouCount} renewal${d.awaitingYouCount === 1 ? "" : "s"} ${d.awaitingYouCount === 1 ? "is" : "are"} waiting for your answer. Nothing is bought until you say so, and saying yes does not buy it either — it goes through the normal approval.`,
+        )
+      : null,
     d.checks.length === 0
       ? h("p", { class: "hint", text: "Nothing has come due yet." })
-      : d.checks.map((k) =>
-          h(
+      : d.checks.map((k) => {
+          const answer = async (how) => {
+            const x = await api(
+              `/v1/admin/org/recurring-checks/${k.checkId}/${how}`,
+              { method: "POST", body: {} },
+            );
+            if (!x.ok)
+              return out.replaceChildren(
+                notice(
+                  "bad",
+                  x.data?.reason === "ALREADY_DECIDED"
+                    ? "That renewal has already been answered."
+                    : x.data?.reason === "MISSION_NOT_ACTIVE"
+                      ? "Only an active mission can have its renewals answered."
+                      : reasonText(x.data?.reason),
+                ),
+              );
+            await recurringPage(id);
+          };
+          return h(
             "article",
             { class: "card" },
             h("h3", {
@@ -3810,8 +4162,33 @@ async function recurringPage(id) {
             }),
             h("p", { text: RECURRING_WORDS[k.outcome] ?? "Checked." }),
             h("p", { class: "hint", text: `For ${when(k.slot)}` }),
-          ),
-        ),
+            k.decision
+              ? h("p", {
+                  text:
+                    k.decision === "APPROVED"
+                      ? "You said yes to this one. It was not bought here; it goes through the normal approval."
+                      : "You said no to this one. Nothing was bought.",
+                })
+              : null,
+            k.awaitingYou
+              ? h(
+                  "div",
+                  { class: "actions" },
+                  h("button", {
+                    class: "primary",
+                    type: "button",
+                    text: "Yes, renew it",
+                    onclick: () => answer("approve"),
+                  }),
+                  h("button", {
+                    type: "button",
+                    text: "No, skip it",
+                    onclick: () => answer("decline"),
+                  }),
+                )
+              : null,
+          );
+        }),
   );
 }
 /** Proof: the append-only record of every change to this mission's budget. It is read from the ledger's history, not summarised. */
@@ -4759,6 +5136,91 @@ async function settingsPage() {
     ),
   );
 }
+const METER_WORDS = {
+  GOVERNED_ACTION: "Actions PayFlow checked for you",
+  VERIFY_CALL: "Proof checks",
+  ACTIVE_AGENT: "Agents that did something",
+  ENTERPRISE_CONTROL: "Organization controls used",
+  BASE: "Being on a plan",
+};
+
+/**
+ * Usage and billing (M59). What PayFlow actually measured, and the plain statement that none of it has been charged.
+ * The amounts come from the DEVELOPER plan, whose coefficients are all zero, because no price sheet is published; a
+ * non-zero total built from placeholder numbers would read as a bill.
+ */
+async function usagePage() {
+  const r = await api("/v1/admin/org/usage");
+  if (!r.ok)
+    return shell(
+      "#/usage",
+      h("h1", { text: "Usage" }),
+      notice(
+        "bad",
+        r.status === 403
+          ? "Your role cannot see usage for this organization."
+          : "Usage is not available right now. Nothing was changed.",
+      ),
+    );
+  const u = r.data.usage;
+  const used = u.meters.filter((m) => m.lifetime > 0);
+  shell(
+    "#/usage",
+    h("h1", { text: "Usage" }),
+    h("p", { text: u.notice }),
+    notice("info", u.priceNotice),
+    h(
+      "article",
+      { class: "card" },
+      h("h2", { text: "This month" }),
+      h("p", {
+        class: "hint",
+        text: `${when(u.period.start)} to ${when(u.period.end)}`,
+      }),
+      used.length === 0
+        ? h("p", {
+            class: "hint",
+            text: "Nothing has been measured yet. Meters start counting when an agent does something PayFlow has to check.",
+          })
+        : h(
+            "dl",
+            {},
+            used.map((m) =>
+              row(
+                METER_WORDS[m.meter] ?? m.meter,
+                `${m.thisPeriod} this month · ${m.lifetime} in total`,
+              ),
+            ),
+          ),
+    ),
+    h(
+      "article",
+      { class: "card" },
+      h("h2", { text: "What it would be billed as" }),
+      h(
+        "dl",
+        {},
+        u.invoicePreview.lines.map((l) =>
+          row(
+            METER_WORDS[l.meter] ?? l.meter,
+            `${l.quantity} × ${money(l.unitAmountMinor, u.invoicePreview.currency)} = ${money(l.amountMinor, u.invoicePreview.currency)}`,
+          ),
+        ),
+        row(
+          "Total",
+          money(u.invoicePreview.totalMinor, u.invoicePreview.currency),
+        ),
+        row("Plan", u.planId),
+      ),
+      h("p", {
+        class: "hint",
+        text: "Nothing has been charged and no payment method is held. If PayFlow ever charges for this, it will say so before it does.",
+      }),
+    ),
+    h("a", { class: "link", href: "#/help", text: "Get help" }),
+  );
+}
+
 function helpPage() {
   const T = (term, text) =>
     h("div", { class: "row" }, h("dt", { text: term }), h("dd", { text }));
@@ -4849,11 +5311,13 @@ async function render() {
     if (hash === "#/checking") return await checkingPage();
     if (hash === "#/notifications") return await notificationsPage();
     if (hash === "#/settings") return await settingsPage();
+    if (hash === "#/usage") return await usagePage();
     if (hash === "#/help") return helpPage();
     const sec = /^#\/missions\/(msn_[a-f0-9]{24})\/([a-z]+)$/.exec(hash);
     if (sec && sec[2] === "proof") return await proofPage(sec[1]);
     if (sec && sec[2] === "recurring") return await recurringPage(sec[1]);
     if (sec && sec[2] === "launch") return await launchBoardPage(sec[1]);
+    if (sec && sec[2] === "plan") return await planPage(sec[1]);
     if (sec && sec[2] === "services") return await servicesPage(sec[1]);
     if (sec && SECTIONS[sec[2]]) return await recordsPage(sec[1], sec[2]);
     const w = /^#\/missions\/(msn_[a-f0-9]{24})\/workspaces$/.exec(hash);

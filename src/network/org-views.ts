@@ -1,5 +1,7 @@
 import type { Sql } from "postgres";
 import type { Environment } from "./ops-controls.js";
+import { buildUsageInvoice } from "./billing.js";
+import { PRICING_ARCHITECTURE } from "./metering.js";
 
 /**
  * Read-only organization projections. Every query is scoped by organization AND environment
@@ -399,5 +401,121 @@ export async function developerFunnel(
       "first verify",
       "partner inquiry",
     ],
+  };
+}
+
+/**
+ * V3 M59 — what this organization has actually used, and what that would be billed as.
+ *
+ * Two things this is careful about, because the alternative would be a lie told in money:
+ *
+ *  1. **Nothing here charges anyone, and no price has been agreed.** `docs/PRICING-METERING.md` is explicit that the
+ *     coefficients in the code are placeholders for testing arithmetic and invoice aggregation, not a published price
+ *     sheet. So the preview is built on the DEVELOPER plan, whose every coefficient is zero, and the response says in
+ *     words that the organization is not on a paid plan. Showing a non-zero total from a placeholder table would invite
+ *     a customer to believe it is what they owe.
+ *  2. **Only what is really measured is shown.** The meters are the rows in `usage_events`, which the Gateway writes as
+ *     governed actions happen. Nothing is estimated or extrapolated to fill a gap.
+ */
+export interface UsageMeterLine {
+  readonly meter: string;
+  readonly thisPeriod: number;
+  readonly lifetime: number;
+}
+export interface UsageHome {
+  readonly period: { readonly start: string; readonly end: string };
+  readonly meters: readonly UsageMeterLine[];
+  readonly totalThisPeriod: number;
+  readonly planId: string;
+  readonly charged: false;
+  readonly invoicePreview: {
+    readonly currency: string;
+    readonly totalMinor: number;
+    readonly lines: readonly {
+      readonly meter: string;
+      readonly quantity: number;
+      readonly unitAmountMinor: number;
+      readonly amountMinor: number;
+    }[];
+  };
+  readonly notice: string;
+  readonly priceNotice: string;
+}
+
+/** The UTC calendar month that `now` falls in. Billing periods are months everywhere else in the product. */
+export function usagePeriod(now: string): { start: string; end: string } {
+  const d = new Date(now);
+  const start = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0, 0),
+  );
+  const end = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, 0, 0, 0, 0),
+  );
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+export async function usageHome(
+  sql: Sql,
+  organizationId: string,
+  environment: Environment,
+  now: string,
+): Promise<UsageHome> {
+  const period = usagePeriod(now);
+  const rows = await sql`
+    select meter,
+      coalesce(sum(quantity) filter (where occurred_at >= ${period.start} and occurred_at < ${period.end}), 0)::bigint this_period,
+      coalesce(sum(quantity), 0)::bigint lifetime
+    from usage_events
+    where organization_id = ${organizationId} and environment = ${environment}
+    group by meter order by meter`;
+  const meters = rows.map((r) => ({
+    meter: String(r.meter),
+    thisPeriod: Number(r.this_period),
+    lifetime: Number(r.lifetime),
+  }));
+  const totalThisPeriod = meters.reduce((n, m) => n + m.thisPeriod, 0);
+  // The DEVELOPER plan: every coefficient is zero, which is the only total this product can state truthfully today.
+  // Built by the real invoice builder rather than by re-deriving the lines here, so there is one piece of code that
+  // knows how a PayFlow invoice is shaped. (Writing it twice is exactly what scripts/orphan-scan.mjs caught.)
+  const developer = PRICING_ARCHITECTURE.find((p) => p.id === "DEVELOPER")!;
+  const events = await sql`
+    select id, meter, quantity, occurred_at, idempotency_key
+    from usage_events
+    where organization_id = ${organizationId} and environment = ${environment}
+      and occurred_at >= ${period.start} and occurred_at < ${period.end}`;
+  const invoice = buildUsageInvoice(
+    {
+      invoiceId: `preview-${organizationId}-${period.start}`,
+      organizationId,
+      environment,
+      periodStart: period.start,
+      periodEnd: period.end,
+    },
+    developer,
+    events.map((e) => ({
+      id: String(e.id),
+      organizationId,
+      environment,
+      meter: String(e.meter) as "GOVERNED_ACTION",
+      quantity: Number(e.quantity),
+      occurredAt: new Date(e.occurred_at as string).toISOString(),
+      idempotencyKey: String(e.idempotency_key),
+    })),
+  );
+  return {
+    period,
+    meters,
+    totalThisPeriod,
+    planId: "DEVELOPER",
+    charged: false,
+    invoicePreview: {
+      currency: invoice.currency,
+      totalMinor: invoice.totalMinor,
+      lines: invoice.lines,
+    },
+    notice:
+      "This is what PayFlow has actually measured for you. Nothing here is estimated, and nothing here has been charged.",
+    priceNotice:
+      "You are not on a paid plan and no price has been agreed. PayFlow has not published a price sheet, so this shows what was used rather than what it would cost.",
   };
 }

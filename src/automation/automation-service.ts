@@ -279,6 +279,38 @@ export class AutomationService {
     return rows.length === 1;
   }
   /**
+   * Resume a paused schedule from NOW, not from where it stopped.
+   *
+   * `setScheduleActive(true)` alone would leave `next_slot` where it was when the schedule was paused, so the next tick
+   * would create jobs for slots that are already in the past — for a renewal check, that means telling someone a
+   * subscription was "due" on a date that has gone. Pausing something and starting it again means "start checking from
+   * now", so the slot is rolled forward by whole periods until it is in the future. The cadence's phase is preserved, so
+   * a monthly check resumed mid-month still lands on its own day of the month.
+   *
+   * Returns the slot it will next check, or null if there is no such schedule for this tenant.
+   */
+  async resumeSchedule(
+    t: JobTenant,
+    scheduleId: string,
+  ): Promise<{ nextSlot: string } | null> {
+    const now = this.deps.now();
+    return this.deps.sql.begin(async (tx) => {
+      const [s] =
+        await tx`select * from automation_schedules where schedule_id = ${scheduleId}
+          and organization_id = ${t.organizationId} and environment = ${t.environment} for update`;
+      if (!s) return null;
+      const step = Number(s.every_seconds) * 1000;
+      const nowMs = Date.parse(now);
+      let slot = Date.parse(iso(s.next_slot));
+      // whole periods only, so the schedule keeps the day/time it was set up with
+      if (slot <= nowMs) slot += Math.ceil((nowMs - slot + 1) / step) * step;
+      const next = new Date(slot).toISOString();
+      await tx`update automation_schedules set active = true, next_slot = ${next} where schedule_id = ${scheduleId}`;
+      return { nextSlot: next };
+    });
+  }
+
+  /**
    * Turn every due slot into one job. A slot is identified by its time, so a second ticker, a restart or a replay creates nothing new.
    * After a long outage only the most recent MAX_CATCH_UP slots are created, so a restart cannot unleash a flood.
    */

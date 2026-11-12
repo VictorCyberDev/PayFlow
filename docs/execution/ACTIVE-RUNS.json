@@ -1,0 +1,244 @@
+{
+  "note": "Live process registry for the session that owns branch claude/payflow-v3-m1-m90-6rh3ha. Every entry is a process this session actually started or actually observed. A run is never moved to PASSED/FAILED from an inference: only from an observed terminal result. Historical merge evidence lives in docs/V3-EXECUTION-LEDGER.md, not here.",
+  "session": {
+    "branch": "claude/payflow-v3-m1-m90-6rh3ha",
+    "base_sha_at_start": "5cb1461d08fc82de13c7583f0d74cb954cd24f4e",
+    "main_sha_at_start": "5cb1461d08fc82de13c7583f0d74cb954cd24f4e",
+    "opened_at": "2026-11-11T14:08:00Z"
+  },
+  "runs": [
+    {
+      "run_id": "local-npm-ci",
+      "kind": "build",
+      "branch": "claude/payflow-v3-m1-m90-6rh3ha",
+      "commit_sha": "5cb1461d08fc82de13c7583f0d74cb954cd24f4e",
+      "command_or_workflow": "npm ci",
+      "started_at": "2026-11-11T14:06:00Z",
+      "status": "PASSED",
+      "monitor_method": "Bash run_in_background, exit code read from log",
+      "dependent_tasks": ["local-vitest-unit", "local-vitest-full"],
+      "independent_tasks_available": ["read ledgers", "PR reconciliation"],
+      "last_observed_at": "2026-11-11T14:08:00Z",
+      "next_check": null,
+      "exit_code": 0,
+      "evidence_location": "scratchpad npm-ci.log",
+      "recovery_action": null
+    },
+    {
+      "run_id": "local-vitest-unit",
+      "kind": "test",
+      "branch": "claude/payflow-v3-m1-m90-6rh3ha",
+      "commit_sha": "5cb1461d08fc82de13c7583f0d74cb954cd24f4e",
+      "command_or_workflow": "npm test (no TEST_DATABASE_URL: integration suites skip)",
+      "started_at": "2026-11-11T14:08:10Z",
+      "status": "PASSED",
+      "monitor_method": "Bash run_in_background, exit code + vitest summary",
+      "dependent_tasks": [],
+      "independent_tasks_available": [],
+      "last_observed_at": "2026-11-11T14:09:17Z",
+      "next_check": null,
+      "exit_code": 0,
+      "evidence_location": "105 files passed, 67 skipped; 1380 tests passed, 1401 skipped; 66.35s",
+      "recovery_action": null,
+      "finding": "1401 skipped tests means the unit run is NOT the acceptance gate. TEST_DATABASE_URL gates every integration suite."
+    },
+    {
+      "run_id": "local-vitest-full",
+      "kind": "test",
+      "branch": "claude/payflow-v3-m1-m90-6rh3ha",
+      "commit_sha": "5cb1461d08fc82de13c7583f0d74cb954cd24f4e",
+      "command_or_workflow": "TEST_DATABASE_URL=postgres://payflow:payflow_test@localhost:5432/payflow_test npm test",
+      "started_at": "2026-11-11T14:12:00Z",
+      "status": "PASSED",
+      "monitor_method": "Bash run_in_background bld/boge; grep for 'Test Files' and EXIT= in the log",
+      "dependent_tasks": ["m55-executor-slice", "journey-audit"],
+      "independent_tasks_available": [
+        "docs/execution registry",
+        "PR #84/#85 reconciliation",
+        "M55 gap design"
+      ],
+      "last_observed_at": "2026-11-11T14:28:00Z",
+      "next_check": null,
+      "exit_code": 0,
+      "evidence_location": "166 files passed, 6 skipped; 2750 tests passed, 31 skipped; 609.83s; exit 0",
+      "recovery_action": "One vitest process at a time in this environment. Do not start a second.",
+      "constraint": "PostgreSQL 16 local; role payflow created this session (it did not survive from an earlier one).",
+      "finding": "Main at 5cb1461 is genuinely green against PostgreSQL: 2750 tests pass. The 31 still-skipped tests are the live-provider suites (PayPal sandbox, PayPal commerce sandbox, Groq smoke), which skip themselves without credentials rather than passing vacuously."
+    },
+    {
+      "run_id": "local-browser-r1-on-main",
+      "kind": "test",
+      "branch": "claude/payflow-v3-m1-m90-6rh3ha",
+      "commit_sha": "5cb1461d08fc82de13c7583f0d74cb954cd24f4e",
+      "command_or_workflow": "TEST_DATABASE_URL=... REQUIRE_BROWSER=1 npx vitest run tests/r1-customer-app.browser.test.ts",
+      "started_at": "2026-11-11T14:29:00Z",
+      "status": "PASSED",
+      "monitor_method": "Bash run_in_background ba43j9xga; grep the log for 'Test Files' and EXIT=",
+      "dependent_tasks": ["decide what to do about PR #84"],
+      "independent_tasks_available": ["registry updates", "M55 design"],
+      "last_observed_at": "2026-11-11T14:40:00Z",
+      "next_check": null,
+      "exit_code": 0,
+      "evidence_location": "19 passed, 1 skipped, exit 0; the Launch board test passed in 1009ms",
+      "recovery_action": null,
+      "purpose": "Decide whether PR #84's console-e2e failure is a defect on main or is specific to #84's base c85f7b2. #84's diff does not touch app-ui or the Launch board, so it cannot be the cause.",
+      "finding": "The PR #84 console-e2e failure does NOT reproduce on main. In CI it was a 30s timeout waiting for the Launch board h1; on main the same test passes in about a second. #84's base is main's parent, before #80 changed src/console-hosted.ts so the Gateway and the customer app mount on PAYFLOW_M6_SIGNING_KEY rather than requiring PAYFLOW_M6_DEMO_AGENT. Conclusion: #84 needs its base updated, not a code fix."
+    },
+    {
+      "run_id": "local-journey-b-on-main",
+      "kind": "test",
+      "branch": "claude/payflow-v3-m1-m90-6rh3ha",
+      "commit_sha": "5cb1461d08fc82de13c7583f0d74cb954cd24f4e",
+      "command_or_workflow": "npx vitest run tests/journey-b-negotiation.integration.test.ts (file from origin/claude/focused-brown-dv9991)",
+      "started_at": "2026-11-11T14:36:00Z",
+      "status": "PASSED",
+      "monitor_method": "Bash run_in_background bm46zzunu",
+      "dependent_tasks": [],
+      "independent_tasks_available": [],
+      "last_observed_at": "2026-11-11T14:38:00Z",
+      "next_check": null,
+      "exit_code": 0,
+      "evidence_location": "4 passed, exit 0, 3113ms",
+      "recovery_action": null,
+      "finding": "PR #85 independently confirmed against current main, not merely trusted on its CI. The borrowed test file was then removed from this branch so it does not duplicate #85's own deliverable."
+    },
+    {
+      "run_id": "local-m55-plan-run",
+      "kind": "test",
+      "branch": "claude/payflow-v3-m1-m90-6rh3ha",
+      "commit_sha": "9bbddbe (M55 executor)",
+      "command_or_workflow": "npx vitest run tests/m55-plan-run.integration.test.ts",
+      "status": "PASSED",
+      "exit_code": 0,
+      "evidence_location": "8 passed, exit 0 (re-run after the passes-guard fix)",
+      "monitor_method": "Bash run_in_background",
+      "last_observed_at": "2026-11-11T16:05:00Z",
+      "next_check": null,
+      "dependent_tasks": [],
+      "independent_tasks_available": [],
+      "recovery_action": null
+    },
+    {
+      "run_id": "local-browser-m55-screens",
+      "kind": "test",
+      "branch": "claude/payflow-v3-m1-m90-6rh3ha",
+      "commit_sha": "8c808a2 (after the axe fix)",
+      "command_or_workflow": "REQUIRE_BROWSER=1 npx vitest run tests/r1-customer-app.browser.test.ts",
+      "status": "PASSED",
+      "exit_code": 0,
+      "evidence_location": "19 passed, 1 skipped, exit 0; plan screen rendered, controls present, axe clean",
+      "monitor_method": "Bash run_in_background + Monitor on the log",
+      "last_observed_at": "2026-11-11T16:40:00Z",
+      "next_check": null,
+      "dependent_tasks": [],
+      "independent_tasks_available": [],
+      "recovery_action": null,
+      "finding": "Caught two defects the unit suite could not: a dead route, and invalid <dl> markup reported by axe."
+    },
+    {
+      "run_id": "local-mutation-m55",
+      "kind": "test",
+      "branch": "claude/payflow-v3-m1-m90-6rh3ha",
+      "commit_sha": "9bbddbe",
+      "command_or_workflow": "two deliberate mutants, each run against the M55 suite",
+      "status": "PASSED",
+      "exit_code": 0,
+      "evidence_location": "both mutants killed; see docs/M55-PLAN-RUNS.md",
+      "monitor_method": "Bash run_in_background",
+      "last_observed_at": "2026-11-11T15:30:00Z",
+      "next_check": null,
+      "dependent_tasks": [],
+      "independent_tasks_available": [],
+      "recovery_action": null,
+      "finding": "Removing the executor's own approval gate did not let it act: PlanService.claim refused the task because it was not READY. The authority boundary is enforced at the authorized-transition layer, not only in the executor."
+    },
+    {
+      "run_id": "local-migration-065-standalone",
+      "kind": "build",
+      "branch": "claude/payflow-v3-m1-m90-6rh3ha",
+      "commit_sha": "9bbddbe",
+      "command_or_workflow": "all 65 migrations applied in order into an empty database, then each DB guarantee attacked with raw SQL",
+      "status": "PASSED",
+      "exit_code": 0,
+      "evidence_location": "clean apply; 6 guarantees each failed with its own intended message",
+      "monitor_method": "psql ON_ERROR_STOP=1",
+      "last_observed_at": "2026-11-11T16:20:00Z",
+      "next_check": null,
+      "dependent_tasks": [],
+      "independent_tasks_available": [],
+      "recovery_action": null
+    }
+  ],
+  "observed_remote_runs": [
+    {
+      "run_id": "43025766351",
+      "kind": "ci",
+      "pr": 85,
+      "branch": "claude/focused-brown-dv9991",
+      "commit_sha": "00813abd30454e81395c220a33422f44111822b2",
+      "command_or_workflow": ".github/workflows/ci.yml",
+      "status": "PASSED",
+      "checks": {
+        "verify": "success",
+        "console": "success",
+        "console-e2e": "success"
+      },
+      "last_observed_at": "2026-11-11T14:15:00Z",
+      "exit_code": 0,
+      "evidence_location": "https://github.com/VictorCyberDev/PayFlow/actions/runs/43025766351",
+      "sha_reconciled": "yes: origin/claude/focused-brown-dv9991 read back as 00813ab, equal to the CI head",
+      "recovery_action": null
+    },
+    {
+      "run_id": "43021599690",
+      "kind": "ci",
+      "pr": 84,
+      "branch": "claude/audit-journeys",
+      "commit_sha": "2496c32508a2dc81af68d02284cb8906b45a2a8e",
+      "command_or_workflow": ".github/workflows/ci.yml",
+      "status": "FAILED",
+      "checks": {
+        "verify": "success",
+        "console": "success",
+        "console-e2e": "failure"
+      },
+      "last_observed_at": "2026-11-11T14:16:00Z",
+      "exit_code": 1,
+      "evidence_location": "job 130525876060; tests/r1-customer-app.browser.test.ts:1391 TimeoutError waiting for getByRole('heading', {name:'Launch board', level:1}); 18 passed, 1 failed",
+      "recovery_action": "Reproduce tests/r1-customer-app.browser.test.ts on current main before touching PR #84. #84's own diff is docs + scripts/customer-journey-acceptance.mjs only and does not touch app-ui or the Launch board, so the failure is not caused by #84's changes. Either main carries the defect, or the test is order/timing dependent.",
+      "diff_scope_checked": "docs/PROGRAM-CHECKPOINT-2026-11-11.md, docs/V3-EXECUTION-LEDGER.md, docs/evidence/customer-journey-acceptance.json, scripts/customer-journey-acceptance.mjs (4 files, +497/-5)"
+    }
+  ],
+  "verified_infrastructure_2026_11_11": {
+    "neon_project": "withered-rice-68056451 (payflow-public-sandbox)",
+    "public_tables": 73,
+    "missions_table_present": false,
+    "migration_030_creates_missions": true,
+    "consequence": "The public database stops before the V3 product begins. No milestone from M26 onward has a database behind it in the public sandbox.",
+    "svc_public_app": {
+      "login": true,
+      "superuser": false,
+      "member_of": "neon_superuser"
+    },
+    "svc_public_rt": {
+      "login": true,
+      "superuser": false,
+      "member_of": "payflow_runtime"
+    },
+    "vercel_projects_present": [
+      "payflow",
+      "payflow-public",
+      "payflow-m5-acceptance",
+      "payflow-m6-acceptance"
+    ]
+  },
+  "pr_actions_attempted": [
+    {
+      "pr": 84,
+      "action": "mcp__github__update_pull_request_branch with expectedHeadSha 2496c32",
+      "result": "REFUSED: merge conflict between base and head",
+      "cause": "Both #84 and #80 edit docs/V3-EXECUTION-LEDGER.md.",
+      "resolution": "A docs merge; no code change. Not performed here: this session is confined to claude/payflow-v3-m1-m90-6rh3ha and must not push to another branch."
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "note": "What blocks what, at the level that decides the order of work. Milestone-level status is in docs/M1-M90-AUDIT-MATRIX.md; this file holds only edges, so the two cannot drift into disagreement.",
+  "as_of": "2026-11-11",
+  "pinned_to_sha": "5cb1461d08fc82de13c7583f0d74cb954cd24f4e",
+  "nodes": [
+    {
+      "id": "db-commission",
+      "title": "Apply migrations 024-064 to the public database",
+      "state": "BLOCKED_OWNER_APPROVAL",
+      "blocker": "B-3",
+      "blocks": [
+        "hosted-deploy",
+        "hosted-acceptance",
+        "journeys-A-H-hosted",
+        "M59-billing",
+        "M60-acceptance"
+      ],
+      "note": "The public database has no `missions` table, so it predates the entire V3 product. Nothing from M26 onward can be hosted-accepted until this runs."
+    },
+    {
+      "id": "least-privilege",
+      "title": "Stop svc_public_app being usable; run as svc_public_rt",
+      "state": "BLOCKED_OWNER_APPROVAL",
+      "blocker": "B-4",
+      "blocks": ["hosted-deploy"],
+      "note": "svc_public_rt already exists and is already scoped to payflow_runtime. The remaining step is removal of the privileged role, which is irreversible."
+    },
+    {
+      "id": "hosted-deploy",
+      "title": "Deploy the customer application to payflow-public",
+      "state": "BLOCKED_OWNER_APPROVAL",
+      "blocker": "B-2",
+      "blocked_by": ["db-commission", "least-privilege"],
+      "blocks": ["hosted-acceptance", "journeys-A-H-hosted", "email-delivery"],
+      "note": "Needs Root Directory hosting/m6 and the secrets listed in EXTERNAL-BLOCKERS.md B-2."
+    },
+    {
+      "id": "email-delivery",
+      "title": "Prove a real message is delivered",
+      "state": "BLOCKED_OWNER_APPROVAL",
+      "blocker": "B-1",
+      "blocked_by": ["hosted-deploy"],
+      "blocks": ["M59-support"],
+      "note": "The durable outbox, send leases, crash recovery and the fail-closed limiter are built and proven against a stand-in. Only delivery is unproven."
+    },
+    {
+      "id": "provider-acceptance",
+      "title": "Sandbox acceptance per provider (PayPal, Channel3, Groq, talent/workspace/services)",
+      "state": "BLOCKED_EXTERNAL",
+      "blocker": "B-5",
+      "blocks": [
+        "M60-acceptance",
+        "M31-M35-real-sourcing",
+        "M36-M40-purchasing"
+      ],
+      "note": "Adapter contracts, the refusal taxonomy and the UNKNOWN path are built and tested against fictional sandbox sources. The three live suites skip themselves without credentials rather than passing vacuously."
+    },
+    {
+      "id": "M55-executor",
+      "title": "M55 \u2014 execute a mission plan as a dependency-ordered run",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "blocks": [
+        "M57-recurring-on-top",
+        "M58-templates-end-to-end",
+        "M60-acceptance"
+      ],
+      "note": "DELIVERED on claude/payflow-v3-m1-m90-6rh3ha: migration 065, src/missions/plan-run-service.ts, src/network/plan-run-routes.ts, wired into the hosted Gateway as the PLAN_RUN automation handler, a plan-run card with real start/cancel controls on the Launch board, and tests/m55-plan-run.integration.test.ts (8 tests, PostgreSQL + real HTTP, 2 mutants killed). See docs/M55-PLAN-RUNS.md. Still NOT provider-accepted (no specialist is connected, so every task it reaches becomes an honest handoff) and NOT hosted-accepted (nothing is deployed)."
+    },
+    {
+      "id": "pr-84-rebase",
+      "title": "PR #84 \u2014 update onto main",
+      "state": "READY_ON_ANOTHER_BRANCH",
+      "blocked_by": [],
+      "note": "Its console-e2e failure does not exist on main (verified: the test passes in ~1s where CI timed out at 30s). Its base is main's parent, before #80 fixed the customer-app mounting the test depends on. The automatic branch update is refused with a merge conflict, because both #84 and #80 edit docs/V3-EXECUTION-LEDGER.md. Resolution is a docs merge, no code change. Not done here: this session is confined to claude/payflow-v3-m1-m90-6rh3ha."
+    },
+    {
+      "id": "pr-85-merge",
+      "title": "PR #85 \u2014 Journey B negotiation",
+      "state": "VERIFIED_READY",
+      "blocked_by": [],
+      "note": "Green on its exact head, head read back and matched, and independently re-run against main here: 4/4 pass. Test-only. Merging writes to main, which is outside this session's branch directive, so it is reported ready rather than merged."
+    },
+    {
+      "id": "M57-recurring-on-top",
+      "title": "M57 \u2014 the owner's answer to a due renewal, pause and resume",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "DELIVERED: migration 066, decide/resume, AutomationService.resumeSchedule, routes, screen controls. 24 tests across M56/M57, 2 mutants killed. docs/M57-RECURRING-DECISIONS.md. Provider-sourced price-change detection remains blocked on B-5."
+    },
+    {
+      "id": "M58-templates-end-to-end",
+      "title": "M58 \u2014 each of the five templates leads to a working mission",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "DELIVERED, and it found a real defect: three of the five templates (workspace, brand, bookkeeping) produced a plan of clarify-requirements -> owner-decision, asking the owner to review a shortlist no task was planned to produce. templatePlan now plans workspace and professional-services discovery. 7 tests, one per template plus a drift guard against the shipped app-ui, plus an end-to-end run; mutant killed (disabling the new branches fails exactly those three). docs/M58-TEMPLATES.md."
+    },
+    {
+      "id": "M59-usage-billing",
+      "title": "M59 \u2014 usage and billing visible to a customer",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "DELIVERED: usageHome + usagePeriod in org-views, GET /v1/admin/org/usage on view:finance, a #/usage screen in the main navigation. 5 tests, exit 0, 1 mutant killed (removing organization scoping leaked another tenant's usage). Totals are zero on the DEVELOPER plan because no price sheet is published and no plan assignment exists in the schema; the response says so in words. docs/M59-USAGE-AND-BILLING.md. M59 support correspondence remains blocked on B-1 (no email has ever been delivered)."
+    },
+    {
+      "id": "M74-privacy-enforcement",
+      "title": "M74 \u2014 retention policy governs account closure",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "DELIVERED: account closure declares each deleted table's data class and checks it against deletionDecision before the transaction opens; privacy.ts is no longer unreachable from shipping code. 4 tests, 1 mutant killed by three tests independently. The policy and the closure code previously agreed by luck."
+    },
+    {
+      "id": "forward-traceability",
+      "title": "Forward traceability scan (mandate section 20)",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "scripts/orphan-scan.mjs. Found 1 unreachable module, 1 deliberate (parked with a reason) and 22 test-only, the last reframing M65/M69/M70/M74/M77-M81/M85/M86/M89 as built-and-unwired rather than merely PARTIAL. Caught one duplication of my own (billing.ts). Not in CI yet because it exits non-zero on demo-projection.ts, which needs an owner decision; that omission is stated in the doc. docs/execution/FORWARD-TRACEABILITY.md."
+    },
+    {
+      "id": "M86-key-transparency",
+      "title": "M86 \u2014 operational key transparency",
+      "state": "DELIVERED",
+      "blocked_by": [],
+      "note": "DELIVERED: migration 067 (an ALTER - the table existed since 017 and nothing ever wrote to it), appendKeyEntry wired into SigningKeyRegistry.activate/announce/revoke in the same transaction as the key change, readKeyTransparencyLog verifying the chain on the way out. 5 tests, 1 mutant killed by two tests. One global chain across issuers, not per-issuer: a per-issuer chain lets an issuer be the only witness to its own history. Still missing a public HTTP surface and a monitor for a chain that stops verifying. docs/M86-KEY-TRANSPARENCY.md."
+    }
+  ],
+  "m55_gap": {
+    "statement": "The M55 gap is not a missing dependency graph. It is a missing bridge to the graph that already exists.",
+    "what_exists": {
+      "M27_plan_layer": "mission_plans / mission_tasks / mission_task_deps / mission_task_events, migration 031",
+      "dependency_kinds": [
+        "HARD (dependency must be COMPLETED)",
+        "CONDITIONAL (COMPLETED or SKIPPED)"
+      ],
+      "task_states": [
+        "BLOCKED",
+        "READY",
+        "AWAITING_APPROVAL",
+        "IN_PROGRESS",
+        "HANDED_OFF",
+        "COMPLETED",
+        "FAILED",
+        "SKIPPED",
+        "INVALIDATED"
+      ],
+      "readiness": ["EXECUTABLE", "PREPARED_HANDOFF", "UNAVAILABLE"],
+      "reconcile": "PlanService.reconcile already computes BLOCKED / AWAITING_APPROVAL / READY from the graph and invalidates tasks whose granted capabilities or approved provider types changed",
+      "authorized_transitions": "claim / complete / fail / handoff, each gated on caller.kind === AGENT, assignment, and a live capability check against the mission contract",
+      "durable_worker": "AutomationService with leases, SKIP LOCKED, effect NONE re-queued and effect EXTERNAL left UNKNOWN for a person to settle"
+    },
+    "what_is_missing": "Nothing drives that machine automatically. The only executor, LaunchRunService (migration 064), runs a flat list of at most 8 read-only searches over 2 areas (WORKSPACE, SERVICES) and never touches mission_tasks, the dependency graph, approval gates or handoffs.",
+    "shape_of_the_work": "A durable PLAN_RUN job, effect NONE, that walks the ACTIVE plan to a fixpoint: PREPARED_HANDOFF and OWNER_DECISION tasks are claimed and handed off with an honest note naming what is missing; AWAITING_APPROVAL pauses and reports who must act; UNAVAILABLE is left for a member to skip or invalidate; consequential actions are never performed. It must drive the existing authorized transitions rather than write mission_tasks directly, so that no new authority path is created.",
+    "why_not_done_here": "It is a service plus routes plus tests on a slow verification cycle (the full suite is ~10 minutes locally). Starting it without finishing and verifying it would have produced exactly the half-delivered work this programme is trying to stop.",
+    "status": "CLOSED for the orchestrator itself. The bridge now exists. What remains is per-domain specialists, each of which needs a commissioned provider (blocker B-5), and a deployment (B-2)."
+  }
+}

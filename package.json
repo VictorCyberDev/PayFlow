@@ -21,6 +21,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "secret:scan": "node scripts/secret-scan.mjs",
+    "orphan:scan": "node scripts/orphan-scan.mjs",
     "test:groq:smoke": "vitest run tests/groq.smoke.test.ts",
     "test:paypal:commerce:sandbox": "vitest run tests/paypal-commerce.sandbox.test.ts",
     "evidence:generate": "node --import tsx scripts/generate-evidence.ts",

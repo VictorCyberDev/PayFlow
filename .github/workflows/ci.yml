@@ -41,6 +41,10 @@ jobs:
       - run: npm run typecheck
       - run: npm run secret:scan
       - run: npm run embed:app:check
+      # Forward traceability: fail if any module becomes unreachable from shipping code, tests included.
+      # A passing test suite cannot catch this, because the test is itself the importer. Modules deliberately
+      # unreached are listed with a reason inside the script; anything else is a new orphan and fails here.
+      - run: npm run orphan:scan
       - run: npm run evidence:check
       - name: Python SDK tests
         run: python3 -m unittest discover -s packages/sdk-python/tests -v

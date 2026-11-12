@@ -1335,6 +1335,44 @@ const chromePath = [
                 : [],
             }),
           );
+        if (path.endsWith("/plans"))
+          return r.fulfill(
+            ok({
+              activePlanVersion: 1,
+              plans: [{ planVersion: 1, status: "ACTIVE" }],
+              tasks: [
+                {
+                  taskId: "tsk_" + "5".repeat(24),
+                  key: "draft-brief",
+                  title: "Draft the brief",
+                  intendedOutcome: "A brief the owner can approve",
+                  explanation: "the owner wants to see it first",
+                  taskType: "DRAFTING",
+                  state: "AWAITING_APPROVAL",
+                  readiness: "EXECUTABLE",
+                  readinessReason: null,
+                  blockReason: null,
+                  requiredEvidence: [],
+                  result: null,
+                },
+                {
+                  taskId: "tsk_" + "6".repeat(24),
+                  key: "source-offers",
+                  title: "Find suppliers",
+                  intendedOutcome: "Three comparable offers",
+                  explanation: "we need offers to compare",
+                  taskType: "SOURCING",
+                  state: "BLOCKED",
+                  readiness: "PREPARED_HANDOFF",
+                  readinessReason: "NO_CONNECTOR_COMMISSIONED",
+                  blockReason: "WAITING_FOR:draft-brief:AWAITING_APPROVAL",
+                  requiredEvidence: ["supplier-list"],
+                  result: null,
+                },
+              ],
+              progress: {},
+            }),
+          );
         if (path.endsWith("/launch-runs"))
           return r.fulfill(
             ok({
@@ -1390,6 +1428,16 @@ const chromePath = [
         .getByRole("heading", { name: "Launch board", level: 1 })
         .waitFor();
       let text = await page.locator("main").innerText();
+      // M55: the plan-run card renders on the real page. /plan-runs is not stubbed here, so it is the empty
+      // state, which is the honest read-out when a mission has no run yet.
+      expect(text).toContain("Plan run");
+      expect(text).toContain("No plan run yet");
+      expect(text).toContain("never approves anything");
+      expect(
+        await page
+          .getByRole("button", { name: "Work through the plan" })
+          .count(),
+      ).toBe(1);
       expect(text).toContain("Needs checking");
       expect(text).toContain("Checking what happened. Don't book again yet.");
       expect(text).toContain("Outside PayFlow");
@@ -1415,6 +1463,31 @@ const chromePath = [
       expect(text.match(/Not started/gu)?.length).toBe(3);
       expect(text).toContain("No discovery run yet");
       expect(text).not.toContain("Confirmed");
+
+      // M55: the plan screen is where the run's worklist is actually acted on. Without it the run would
+      // tell a person what to do and give them nowhere to do it.
+      await page.goto(`${h.origin}/workspace#/missions/${mid}/plan`);
+      await page.getByRole("heading", { name: "Plan", level: 1 }).waitFor();
+      text = await page.locator("main").innerText();
+      expect(text).toContain("Draft the brief");
+      expect(text).toContain("Waiting for your approval");
+      expect(text).toContain("An agent can do this");
+      // The blocked task says what it is waiting on, and why it cannot be automated, in words.
+      expect(text).toContain("Find suppliers");
+      expect(text).toContain("Waiting on something else");
+      expect(text).toContain("Prepared for you or a provider");
+      // The controls a person needs are really there.
+      expect(
+        await page.getByRole("button", { name: "Approve this step" }).count(),
+      ).toBe(1);
+      expect(await page.getByRole("button", { name: "Skip it" }).count()).toBe(
+        2,
+      );
+      // A task that records evidence asks for it before it can be confirmed.
+      expect(text).toContain("Evidence: supplier-list");
+      expect(text).not.toMatch(/undefined|\[object|NaN/u);
+      expect(await axe(page)).toEqual([]);
+
       await page.goto("about:blank");
       await ctx.close();
     }, 60_000);

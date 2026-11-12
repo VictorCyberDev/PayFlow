@@ -4,7 +4,11 @@ export interface TransparencyEntry {
   readonly sequence: number;
   readonly issuer: string;
   readonly keyId: string;
-  readonly status: "ACTIVE" | "ROTATING" | "REVOKED";
+  /**
+   * The key's state at this entry. ROTATING is kept because it predates the proof_signing_keys vocabulary and an older
+   * chain may contain it; new entries use that table's words, so the log and the keys cannot drift apart in meaning.
+   */
+  readonly status: "ACTIVE" | "ROTATING" | "REVOKED" | "RETIRED" | "NEXT";
   readonly publicKeyDigest: string;
   readonly recordedAt: string;
   readonly previousHash: string | null;

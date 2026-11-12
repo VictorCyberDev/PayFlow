@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { channel3ProductConnector } from "./channel3-provider.js";
 import { demoCommerceCatalog } from "../demo-commerce-catalog.js";
 import { PROVIDER_TYPES, type ProviderType } from "./contract.js";
 
@@ -224,6 +225,14 @@ export function demoCatalogConnector(now: () => string): ConnectorDefinition {
   };
 }
 
-export function builtinRegistry(now: () => string): ConnectorRegistry {
-  return new ConnectorRegistry().register(demoCatalogConnector(now));
+export function builtinRegistry(
+  now: () => string,
+  channel3ApiKey?: string,
+): ConnectorRegistry {
+  const registry = new ConnectorRegistry().register(demoCatalogConnector(now));
+  // The operator's own API key is never sent to a browser or stored as a customer credential.
+  // Installing a connector still requires the organization's explicit acknowledgement of data use.
+  if (channel3ApiKey)
+    registry.register(channel3ProductConnector(channel3ApiKey, now));
+  return registry;
 }
