@@ -65,6 +65,9 @@ export async function appendKeyEntry(
   // ONE chain across all issuers, each entry naming its issuer. That is how migration 017 built the table and what
   // the contiguous `sequence` in verifyTransparencyLog requires; it is also how transparency logs are normally built,
   // because a per-issuer chain lets an issuer be the only witness to its own history.
+  // All issuers share ONE contiguous sequence. An issuer-scoped lock cannot serialize
+  // simultaneous updates by different issuers, so lock the global log before reading its tail.
+  await tx`select pg_advisory_xact_lock(hashtextextended(${"payflow:key-transparency:global"}, 4))`;
   const [tail] =
     await tx`select * from key_transparency_log order by sequence desc limit 1`;
   const entry = appendTransparencyEntry(tail ? toEntry(tail) : null, {
