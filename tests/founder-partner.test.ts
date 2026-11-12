@@ -6,6 +6,7 @@ import {
   GroqPartnerModel,
   planForFounder,
   providerFaultCode,
+  jitter,
   RETRY_POLICY,
   retryDelayMs,
   transientGenerationFault,
@@ -664,5 +665,36 @@ describe("the planner waits when the provider says to wait", () => {
     expect(out.status).toBe("MODEL_UNAVAILABLE");
     expect(n).toBe(1);
     expect(Date.now() - started).toBeLessThan(2000); // not the full five seconds
+  });
+});
+
+describe("simultaneous retries do not wake in lockstep", () => {
+  it("adds to the provider's interval and never subtracts from it", () => {
+    // Waiting less than the provider asked for would be worse than not waiting at all.
+    for (const r of [0, 0.25, 0.5, 0.99]) {
+      const out = jitter(2000, () => r, RETRY_POLICY.maxWaitMs);
+      expect(out).toBeGreaterThanOrEqual(2000);
+      expect(out).toBeLessThanOrEqual(RETRY_POLICY.maxWaitMs);
+    }
+  });
+
+  it("spreads identical waits across different instants", () => {
+    const spread = new Set(
+      [0, 0.2, 0.4, 0.6, 0.8].map((r) =>
+        jitter(2000, () => r, RETRY_POLICY.maxWaitMs),
+      ),
+    );
+    expect(spread.size).toBeGreaterThan(1);
+  });
+
+  it("never pushes the wait past the cap, even at the cap", () => {
+    expect(
+      jitter(RETRY_POLICY.maxWaitMs, () => 0.99, RETRY_POLICY.maxWaitMs),
+    ).toBe(RETRY_POLICY.maxWaitMs);
+  });
+
+  it("leaves an immediate retry immediate", () => {
+    // A generation that missed its own schema has no window to wait for.
+    expect(jitter(0, () => 0.99, RETRY_POLICY.maxWaitMs)).toBe(0);
   });
 });

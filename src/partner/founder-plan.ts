@@ -386,6 +386,23 @@ function parseDuration(raw: string | null): number | undefined {
     : undefined;
 }
 
+/**
+ * Spreads a wait so simultaneous retries do not collide on the same instant.
+ *
+ * Everything rate-limited at the same moment is told to wait the same interval, so without this a burst sleeps in
+ * lockstep and wakes in lockstep, hitting a window that has only just reopened and failing together a second time.
+ * The jitter is added, never subtracted: waiting less than the provider asked would be worse than not waiting.
+ */
+export function jitter(
+  waitMs: number,
+  random: () => number,
+  capMs: number,
+): number {
+  if (waitMs <= 0) return 0;
+  const spread = Math.min(waitMs / 2 + 250, Math.max(0, capMs - waitMs));
+  return Math.min(capMs, waitMs + Math.floor(random() * spread));
+}
+
 /** Waits, unless the request's own deadline passes first. False means the caller must stop, not retry. */
 export function sleepUnlessAborted(
   ms: number,
@@ -412,6 +429,8 @@ export class GroqPartnerModel implements PartnerModel {
     apiKey: string | undefined,
     private readonly transport: typeof fetch = fetch,
     private readonly model = "openai/gpt-oss-20b",
+    /** Injectable so the jitter below is deterministic under test. */
+    private readonly random: () => number = Math.random,
   ) {
     this.#key = apiKey && !/[\r\n\s]/u.test(apiKey) ? apiKey : "";
   }
@@ -440,7 +459,10 @@ export class GroqPartnerModel implements PartnerModel {
         !retry ||
         attempt >= RETRY_POLICY.attempts ||
         retry.waitMs > RETRY_POLICY.maxWaitMs ||
-        !(await sleepUnlessAborted(retry.waitMs, signal))
+        !(await sleepUnlessAborted(
+          jitter(retry.waitMs, this.random, RETRY_POLICY.maxWaitMs),
+          signal,
+        ))
       )
         return result;
     }
