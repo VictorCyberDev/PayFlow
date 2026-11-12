@@ -61,14 +61,36 @@ export function unavailable(status: number, message: string): Response {
   return json(status, { status: "UNAVAILABLE", message });
 }
 
+/**
+ * Same-origin check that survives a reverse proxy.
+ *
+ * Behind Vercel the request URL a function sees is not guaranteed to carry the host the browser typed, so comparing the
+ * Origin against it alone risks rejecting every legitimate request. The public host arrives in `x-forwarded-host` (and
+ * `host`), so any of the three matching is accepted. A genuine cross-origin POST still fails all three.
+ */
 function sameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (!origin) return true; // a same-origin fetch may omit it; the body shape still has to be right
+  let originHost: string;
   try {
-    return new URL(origin).host === new URL(request.url).host;
+    originHost = new URL(origin).host.toLowerCase();
   } catch {
     return false;
   }
+  if (!originHost) return false;
+  const candidates = new Set<string>();
+  for (const header of ["x-forwarded-host", "host"]) {
+    const value = request.headers.get(header);
+    // A proxy may append; the first entry is the one the browser asked for.
+    const first = (value ?? "").split(",")[0]?.trim().toLowerCase();
+    if (first) candidates.add(first);
+  }
+  try {
+    candidates.add(new URL(request.url).host.toLowerCase());
+  } catch {
+    /* a relative or malformed request URL simply contributes no candidate */
+  }
+  return candidates.has(originHost);
 }
 
 function callerKey(request: Request): string {

@@ -306,3 +306,82 @@ describe("POST /api/partner", () => {
     }
   });
 });
+
+describe("the same-origin check behind a reverse proxy", () => {
+  /** On Vercel the function's own request URL need not carry the host the browser typed; the proxy headers do. */
+  function proxied(headers: Record<string, string>) {
+    return new Request("https://internal-runtime.local/api/partner", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify({ goal: GOAL }),
+    });
+  }
+  const model = () => modelReturning(GOOD);
+
+  it("accepts the browser's own origin when only the forwarded host matches", async () => {
+    const res = await handlePartnerRequest(
+      proxied({
+        origin: "https://payflow.example",
+        "x-forwarded-host": "payflow.example",
+        host: "internal-runtime.local",
+        "x-forwarded-for": "203.0.113.21",
+      }),
+      model(),
+      freshWindow(),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("accepts it when only the Host header matches", async () => {
+    const res = await handlePartnerRequest(
+      proxied({
+        origin: "https://payflow.example",
+        host: "payflow.example",
+        "x-forwarded-for": "203.0.113.22",
+      }),
+      model(),
+      freshWindow(),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("takes the first entry when a proxy appends to the forwarded host", async () => {
+    const res = await handlePartnerRequest(
+      proxied({
+        origin: "https://payflow.example",
+        "x-forwarded-host": "payflow.example, inner.local",
+        "x-forwarded-for": "203.0.113.23",
+      }),
+      model(),
+      freshWindow(),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("still refuses a genuinely foreign origin, whatever the proxy says", async () => {
+    const res = await handlePartnerRequest(
+      proxied({
+        origin: "https://evil.example",
+        "x-forwarded-host": "payflow.example",
+        host: "payflow.example",
+        "x-forwarded-for": "203.0.113.24",
+      }),
+      model(),
+      freshWindow(),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses an origin that is not a URL at all", async () => {
+    const res = await handlePartnerRequest(
+      proxied({
+        origin: "not a url",
+        "x-forwarded-host": "payflow.example",
+        "x-forwarded-for": "203.0.113.25",
+      }),
+      model(),
+      freshWindow(),
+    );
+    expect(res.status).toBe(403);
+  });
+});
