@@ -26,6 +26,9 @@
     },
     "api/explore.ts": {
       "maxDuration": 20
+    },
+    "api/account.ts": {
+      "maxDuration": 15
     }
   },
   "headers": [

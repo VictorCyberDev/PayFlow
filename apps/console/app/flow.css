@@ -221,10 +221,16 @@
   font-weight: 600;
   font-size: 0.95rem;
 }
+/*
+ * Every text-entry control, not a list of types. Listing them meant `email` and `password` fell back to the browser's
+ * default square box next to the styled ones, which is exactly how the sign-up form first rendered.
+ */
 .flow textarea,
-.flow input[type="text"],
-.flow input[type="number"],
-.flow select {
+.flow select,
+.flow
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(
+    [type="range"]
+  ):not([type="submit"]):not([type="button"]) {
   width: 100%;
   min-height: 52px;
   padding: 14px 16px;
@@ -751,4 +757,27 @@ a.card .card__go {
 .flow .offer__tag--best {
   color: var(--accent);
   border-color: currentColor;
+}
+
+/*
+ * With four destinations the wordmark is the first thing to give way on a narrow phone; the glyph still goes home.
+ * The link keeps a 44px target either way: hiding the text must not shrink what a thumb has to hit, which is exactly
+ * what the accessibility gate caught when this was first written.
+ */
+.flow__brand {
+  min-height: 44px;
+}
+@media (max-width: 460px) {
+  .flow__brand {
+    min-width: 44px;
+    justify-content: center;
+  }
+  .flow__brand span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
