@@ -116,6 +116,26 @@ const jwk = (x: string) => ({ kty: "OKP", crv: "Ed25519", x });
     expect(log.entries.filter((e) => e.issuer === other)).toHaveLength(1);
   });
 
+  it("concurrent changes by different issuers share one contiguous log without duplicate sequences", async () => {
+    await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        registry.announce(
+          `concurrent-issuer-${i}`,
+          `concurrent-key-${i}`,
+          jwk(`PUBLIC-${i}`),
+          NOW,
+        ),
+      ),
+    );
+    const log = await readKeyTransparencyLog(h.repo.sql);
+    expect(log.intact).toBe(true);
+    expect(log.entries).toHaveLength(12);
+    expect(log.entries.map((e) => e.sequence)).toEqual(
+      Array.from({ length: 12 }, (_, i) => i + 1),
+    );
+    expect(new Set(log.entries.map((e) => e.issuer)).size).toBe(12);
+  });
+
   it("the log is public: anyone can fetch it, unauthenticated, and check the chain themselves", async () => {
     await registry.activate(ISSUER, "k-one", jwk("BBB"), NOW);
     await registry.activate(ISSUER, "k-two", jwk("CCC"), NOW);
