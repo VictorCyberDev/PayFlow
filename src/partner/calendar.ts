@@ -49,6 +49,24 @@ const Instant = z
   .max(40)
   .refine((s) => !Number.isNaN(Date.parse(s)), "NOT_A_TIME");
 
+/**
+ * Records which operation failed and the database's own error code, and nothing else.
+ *
+ * A bare "WRITE_FAILED" cost real time: in production it could equally have meant a missing table, a role without
+ * permission, or an unreachable host, and the line said none of them. A PostgreSQL error code is five characters the
+ * database chose -- 42P01 undefined_table, 42501 insufficient_privilege -- so it carries no row, no credential and
+ * none of the caller's words, which is exactly why it can be logged where the driver's message cannot.
+ */
+function logStoreFault(operation: "READ" | "WRITE", cause: unknown): void {
+  const code =
+    cause && typeof cause === "object" && "code" in cause
+      ? String(cause.code).slice(0, 12)
+      : "unknown";
+  console.error(
+    `PAYFLOW_CALENDAR_${operation}_FAILED ` + JSON.stringify({ code }),
+  );
+}
+
 export const NewEventSchema = z
   .object({
     title: Text(CALENDAR_LIMITS.title),
@@ -80,7 +98,7 @@ export interface CalendarEvent {
 }
 
 export type CalendarFailure =
-  "INVALID_INPUT" | "WINDOW_TOO_WIDE" | "STORE_UNAVAILABLE";
+  "INVALID_INPUT" | "INVALID_RANGE" | "WINDOW_TOO_WIDE" | "STORE_UNAVAILABLE";
 
 type Row = {
   event_id: string;
@@ -123,11 +141,13 @@ export class WorkspaceCalendar {
   ): Promise<
     { status: "OK"; events: CalendarEvent[] } | { status: CalendarFailure }
   > {
+    // A bad window on a READ is not a bad event: it used to borrow the write's "needs a title" message, which told a
+    // caller to fix a field the request does not even have.
     const from = Instant.safeParse(fromIso);
     const to = Instant.safeParse(toIso);
-    if (!from.success || !to.success) return { status: "INVALID_INPUT" };
+    if (!from.success || !to.success) return { status: "INVALID_RANGE" };
     const span = Date.parse(to.data) - Date.parse(from.data);
-    if (span < 0) return { status: "INVALID_INPUT" };
+    if (span < 0) return { status: "INVALID_RANGE" };
     if (span > CALENDAR_LIMITS.maxWindowDays * 86_400_000)
       return { status: "WINDOW_TOO_WIDE" };
     try {
@@ -140,8 +160,8 @@ export class WorkspaceCalendar {
         limit ${CALENDAR_LIMITS.maxEvents}
       `) as unknown as Row[];
       return { status: "OK", events: rows.map(toEvent) };
-    } catch {
-      console.error("PAYFLOW_CALENDAR_READ_FAILED");
+    } catch (cause) {
+      logStoreFault("READ", cause);
       return { status: "STORE_UNAVAILABLE" };
     }
   }
@@ -187,8 +207,8 @@ export class WorkspaceCalendar {
       return existing.length > 0
         ? { status: "OK", event: toEvent(existing[0]!), alreadyThere: true }
         : { status: "INVALID_INPUT" };
-    } catch {
-      console.error("PAYFLOW_CALENDAR_WRITE_FAILED");
+    } catch (cause) {
+      logStoreFault("WRITE", cause);
       return { status: "STORE_UNAVAILABLE" };
     }
   }
@@ -207,8 +227,8 @@ export class WorkspaceCalendar {
         returning event_id
       `) as unknown as { event_id: string }[];
       return { status: "OK", removed: rows.length > 0 };
-    } catch {
-      console.error("PAYFLOW_CALENDAR_WRITE_FAILED");
+    } catch (cause) {
+      logStoreFault("WRITE", cause);
       return { status: "STORE_UNAVAILABLE" };
     }
   }

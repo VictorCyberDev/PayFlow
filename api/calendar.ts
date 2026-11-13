@@ -35,13 +35,19 @@ const NEEDS_SIGN_IN =
 const MESSAGES: Readonly<Record<CalendarFailure, string>> = Object.freeze({
   INVALID_INPUT:
     "Check the details: PayFlow needs a title and a start time it can read.",
+  INVALID_RANGE:
+    "PayFlow could not read those dates. Ask for a range like from=2026-11-01&to=2026-12-01.",
   WINDOW_TOO_WIDE:
     "That is too long a stretch to show at once. Ask for a year or less.",
   STORE_UNAVAILABLE:
     "PayFlow could not reach your calendar just now. Nothing was changed. Please try again in a moment.",
 });
+/** What "what is coming up" means when the caller does not say. */
+const DEFAULT_WINDOW_DAYS = 30;
+
 const STATUS: Readonly<Record<CalendarFailure, number>> = Object.freeze({
   INVALID_INPUT: 400,
+  INVALID_RANGE: 400,
   WINDOW_TOO_WIDE: 400,
   STORE_UNAVAILABLE: 503,
 });
@@ -105,10 +111,23 @@ export async function handleCalendarRead(
   const view = await workspace(request, deps.auth);
   if (view instanceof Response) return view;
   const url = new URL(request.url);
+  // The month view always names its own window. A caller that names none gets the next thirty days rather than a
+  // refusal: asking "what is coming up" is a reasonable request, and it was answered with a validation error.
+  const asked = {
+    from: url.searchParams.get("from"),
+    to: url.searchParams.get("to"),
+  };
+  const window =
+    asked.from === null && asked.to === null
+      ? {
+          from: new Date(now).toISOString(),
+          to: new Date(now + DEFAULT_WINDOW_DAYS * 86_400_000).toISOString(),
+        }
+      : asked;
   const result = await deps.calendar.list(
     view.member.organizationId,
-    url.searchParams.get("from"),
-    url.searchParams.get("to"),
+    window.from,
+    window.to,
   );
   if (result.status !== "OK")
     return unavailable(STATUS[result.status], MESSAGES[result.status]);
