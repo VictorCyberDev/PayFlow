@@ -283,3 +283,55 @@ describe.skipIf(!url)("a flight that was actually booked", () => {
     ).toBeNull();
   });
 });
+
+/**
+ * Both of these were found by driving the deployed site, not by a test.
+ *
+ * The browser journey passed because the month view always sends its own window, so no test ever asked the endpoint
+ * what it does when nobody names one. A bare read answered with the WRITE's validation message -- it told the caller
+ * to supply a title, for a request that has no title to supply.
+ */
+describe.skipIf(!url)("a read that names no window", () => {
+  it("answers with what is coming up instead of refusing", async () => {
+    const w = await workspace();
+    const res = await handleCalendarRead(
+      new Request(`${ORIGIN}/api/calendar`, {
+        method: "GET",
+        headers: headers({ cookie: w.cookie }),
+      }),
+      deps,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string; events: unknown[] };
+    expect(body.status).toBe("OK");
+    expect(Array.isArray(body.events)).toBe(true);
+  });
+
+  it("says the dates are the problem when the dates are the problem", async () => {
+    const w = await workspace();
+    const res = await handleCalendarRead(
+      new Request(`${ORIGIN}/api/calendar?from=not-a-date&to=also-not`, {
+        method: "GET",
+        headers: headers({ cookie: w.cookie }),
+      }),
+      deps,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { message: string };
+    // The defect was that this said "needs a title and a start time" on a read.
+    expect(body.message).toMatch(/dates|range/iu);
+    expect(body.message).not.toMatch(/title/iu);
+  });
+
+  it("still refuses a half-named window rather than guessing the other end", async () => {
+    const w = await workspace();
+    const res = await handleCalendarRead(
+      new Request(`${ORIGIN}/api/calendar?from=2026-11-01T00:00:00.000Z`, {
+        method: "GET",
+        headers: headers({ cookie: w.cookie }),
+      }),
+      deps,
+    );
+    expect(res.status).toBe(400);
+  });
+});
